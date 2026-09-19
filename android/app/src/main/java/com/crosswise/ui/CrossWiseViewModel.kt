@@ -10,6 +10,7 @@ import androidx.core.graphics.get
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.crosswise.R
+import com.crosswise.ai.GeminiService
 import com.crosswise.camera.CameraPipeline
 import com.crosswise.crossing.AssistMode
 import com.crosswise.crossing.CrossingEngine
@@ -20,6 +21,9 @@ import com.crosswise.feedback.FeedbackEngine
 import com.crosswise.feedback.Phrase
 import com.crosswise.feedback.Priority
 import com.crosswise.logging.SessionLogger
+import com.crosswise.nav.GuidanceManager
+import com.crosswise.nav.NavigationService
+import com.crosswise.nav.WalkingRoute
 import com.crosswise.perception.DetectorOptions
 import com.crosswise.perception.FrameAnalyzer
 import com.crosswise.perception.LiteRtDetector
@@ -81,6 +85,9 @@ class CrossWiseViewModel(application: Application) : AndroidViewModel(applicatio
     private val logger = SessionLogger(application)
     val logDirectory: String get() = logger.directoryPath
 
+    /** Where the readable settings file lives, shown in Settings so a key can be placed by hand. */
+    val configPath: String get() = settingsRepository.file.path
+
     private val modelState = MutableStateFlow<ModelState>(ModelState.Loading)
     val model: StateFlow<ModelState> = modelState.asStateFlow()
 
@@ -99,6 +106,14 @@ class CrossWiseViewModel(application: Application) : AndroidViewModel(applicatio
     private val noticeState = MutableStateFlow<String?>(null)
     private var lastFrameMs = 0L
     private var brightness = 0.5f
+    private val gemini = GeminiService()
+    private val navigation = NavigationService()
+    private val guidance = GuidanceManager()
+    private val routeState = MutableStateFlow<WalkingRoute?>(null)
+    private val navigatingState = MutableStateFlow(false)
+    @Volatile private var wantFrame = false
+    @Volatile private var latestFrame: Bitmap? = null
+    private val describingState = MutableStateFlow(false)
     private var lastPublishMs = 0L
 
     init {
@@ -142,6 +157,7 @@ class CrossWiseViewModel(application: Application) : AndroidViewModel(applicatio
     // ---- Camera frames (analysis thread) ---------------------------------------------------------
 
     fun onFrame(frame: Bitmap, timestampMs: Long) {
+        if (wantFrame) latestFrame = frame.copy(Bitmap.Config.ARGB_8888, false).also { wantFrame = false }
         val result = synchronized(detectorLock) { detector?.detect(frame, timestampMs) } ?: return
         brightness = 0.8f * brightness + 0.2f * meanLuminance(frame)
         val output = engine.onFrame(result, camera.geometry)
@@ -185,6 +201,162 @@ class CrossWiseViewModel(application: Application) : AndroidViewModel(applicatio
 
     /** Plays one cue on demand, for the Practice screen: the real sounds, with no traffic involved. */
     fun practice(cues: List<Cue>) = deliver(cues)
+
+    /** True while a scan is in flight, so the button can say so instead of looking broken. */
+    val describing: StateFlow<Boolean> get() = describingState.asStateFlow()
+
+    val route: StateFlow<WalkingRoute?> get() = routeState.asStateFlow()
+    val navigating: StateFlow<Boolean> get() = navigatingState.asStateFlow()
+
+    /**
+     * Finds a walking route and starts speaking it. Guidance is a separate job from crossing assistance: the two
+     * run together, and a route instruction never outranks a vehicle warning.
+     */
+    fun navigateTo(query: String) {
+        val key = settings.value.mapsApiKey
+        if (key.isBlank()) {
+            noticeState.value = app.getString(R.string.nav_no_key)
+            speakNow(app.getString(R.string.nav_no_key))
+            return
+        }
+        val here = lastLocation()
+        if (here == null) {
+            noticeState.value = app.getString(R.string.nav_no_location)
+            speakNow(app.getString(R.string.nav_no_location))
+            return
+        }
+        viewModelScope.launch {
+            speakNow(app.getString(R.string.nav_searching, query))
+            navigation.findRoute(query, here, key)
+                .onSuccess { found ->
+                    routeState.value = found
+                    guidance.start(found)
+                    navigatingState.value = true
+                    speakNow(
+                        app.getString(
+                            R.string.nav_started,
+                            found.destination,
+                            found.distanceMeters,
+                            found.durationSeconds / 60,
+                        ),
+                    )
+                    startGuidanceLoop()
+                }
+                .onFailure {
+                    val message = app.getString(R.string.nav_failed, query)
+                    noticeState.value = message
+                    speakNow(message)
+                }
+        }
+    }
+
+    fun stopNavigation() {
+        guidance.stop()
+        navigatingState.value = false
+        routeState.value = null
+        locationManager?.removeUpdates(locationListener)
+        speakNow(app.getString(R.string.nav_stopped))
+    }
+
+    /** True when the app may use GPS; the Navigate screen asks for it, and guidance is refused without it. */
+    fun hasLocationPermission(): Boolean =
+        androidx.core.content.ContextCompat.checkSelfPermission(
+            app, android.Manifest.permission.ACCESS_FINE_LOCATION,
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+
+    private fun startGuidanceLoop() {
+        val manager = locationManager ?: return
+        // Checked inline rather than through the helper so the lint analysis can follow it.
+        if (androidx.core.content.ContextCompat.checkSelfPermission(
+                app, android.Manifest.permission.ACCESS_FINE_LOCATION,
+            ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            noticeState.value = app.getString(R.string.nav_permission)
+            return
+        }
+        runCatching {
+            manager.requestLocationUpdates(
+                android.location.LocationManager.GPS_PROVIDER, 2_000L, 2f, locationListener,
+            )
+        }.onFailure { Log.w(TAG, "No GPS updates", it) }
+    }
+
+    private val locationListener = android.location.LocationListener { location ->
+        if (!navigatingState.value) return@LocationListener
+        val heading = uiState.value.snapshot.aimBearingDeg ?: 0f
+        guidance.update(location, heading)?.let { instruction ->
+            // NORMAL, never HIGH: a route step must not talk over a vehicle warning.
+            deliver(listOf(Cue.SpeakText(instruction, Priority.NORMAL)))
+        }
+        if (guidance.arrived) stopNavigation()
+    }
+
+    private val locationManager: android.location.LocationManager? by lazy {
+        app.getSystemService(android.content.Context.LOCATION_SERVICE) as? android.location.LocationManager
+    }
+
+    private fun lastLocation(): android.location.Location? = runCatching {
+        if (androidx.core.content.ContextCompat.checkSelfPermission(
+                app, android.Manifest.permission.ACCESS_FINE_LOCATION,
+            ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            return null
+        }
+        val manager = locationManager ?: return null
+        manager.getLastKnownLocation(android.location.LocationManager.GPS_PROVIDER)
+            ?: manager.getLastKnownLocation(android.location.LocationManager.NETWORK_PROVIDER)
+    }.getOrNull()
+
+    /**
+     * The three-view scan from AN-S3: the traveler is asked to point left, ahead and right, one frame is taken at
+     * each, and Gemini answers in a sentence or two. Spoken, because the person who needs it is not reading.
+     */
+    fun describeSurroundings() {
+        if (describingState.value) return
+        val key = settings.value.geminiApiKey
+        if (key.isBlank()) {
+            noticeState.value = app.getString(R.string.gemini_no_key)
+            speakNow(app.getString(R.string.gemini_no_key))
+            return
+        }
+        describingState.launchScan(key)
+    }
+
+    private fun MutableStateFlow<Boolean>.launchScan(key: String) {
+        value = true
+        viewModelScope.launch {
+            val views = ArrayList<Pair<String, Bitmap>>(3)
+            try {
+                for ((label, phrase) in SCAN_STEPS) {
+                    speakNow(app.getString(phrase))
+                    delay(2_200)
+                    captureFrame()?.let { views += label to it }
+                }
+                speakNow(app.getString(R.string.gemini_thinking))
+                val answer = gemini.describeSurroundings(views, key)
+                val text = answer.getOrElse { app.getString(R.string.gemini_failed) }
+                noticeState.value = text
+                speakNow(text)
+            } finally {
+                views.forEach { it.second.recycle() }
+                value = false
+            }
+        }
+    }
+
+    private suspend fun captureFrame(): Bitmap? {
+        wantFrame = true
+        repeat(20) {
+            latestFrame?.let { frame ->
+                latestFrame = null
+                return frame
+            }
+            delay(50)
+        }
+        return null
+    }
+
+    private fun speakNow(text: String) = deliver(listOf(Cue.SpeakText(text, Priority.HIGH)))
 
     // ---- User actions ----------------------------------------------------------------------------
 
@@ -370,8 +542,12 @@ class CrossWiseViewModel(application: Application) : AndroidViewModel(applicatio
     private fun deliver(cues: List<Cue>) {
         if (cues.isEmpty()) return
         feedback.dispatch(cues)
-        cues.lastOrNull { it is Cue.Speak }?.let { speak ->
-            val text = feedback.textOf(speak as Cue.Speak)
+        cues.lastOrNull { it is Cue.Speak || it is Cue.SpeakText }?.let { spoken ->
+            val text = when (spoken) {
+                is Cue.Speak -> feedback.textOf(spoken)
+                is Cue.SpeakText -> spoken.text
+                else -> return@let
+            }
             uiState.update { it.copy(caption = text) }
         }
     }
@@ -406,6 +582,13 @@ class CrossWiseViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     private companion object {
+        /** Label sent to the model, and the phrase spoken before each capture. */
+        private val SCAN_STEPS = listOf(
+            "left" to R.string.gemini_point_left,
+            "front" to R.string.gemini_point_front,
+            "right" to R.string.gemini_point_right,
+        )
+
         const val TAG = "CrossWiseViewModel"
         const val BUNDLED_MODEL = "crosswise.tflite"
     }

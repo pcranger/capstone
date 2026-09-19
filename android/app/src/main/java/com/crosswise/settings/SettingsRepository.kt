@@ -34,6 +34,14 @@ data class AppSettings(
     val showOverlay: Boolean = true,
     val logSessions: Boolean = false,
     val appFont: AppFont = AppFont.MODERN,
+    /** Everything below covers the camera, so each one is opt-in and off by default unless it is a warning. */
+    val showWarnings: Boolean = true,
+    val showScene: Boolean = false,
+    val showModelLine: Boolean = false,
+    val geminiEnabled: Boolean = true,
+    val navigationEnabled: Boolean = false,
+    val geminiApiKey: String = "",
+    val mapsApiKey: String = "",
     /** Low-vision mode: the phase word takes the whole bottom panel instead of a compact line. */
     val largeStatus: Boolean = false,
     /** Absolute path of a user-imported model, or null for the bundled asset. */
@@ -56,6 +64,9 @@ private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(na
 class SettingsRepository(context: Context) {
     private val store = context.applicationContext.dataStore
 
+    /** The readable mirror of these settings; also how a hand-placed API key reaches the app. */
+    val file = SettingsFile(context)
+
     private object Keys {
         val speech = booleanPreferencesKey("speech")
         val tones = booleanPreferencesKey("tones")
@@ -63,6 +74,13 @@ class SettingsRepository(context: Context) {
         val speechRate = floatPreferencesKey("speech_rate")
         val verbosity = stringPreferencesKey("verbosity")
         val appFont = stringPreferencesKey("app_font")
+        val showWarnings = booleanPreferencesKey("show_warnings")
+        val showScene = booleanPreferencesKey("show_scene")
+        val showModelLine = booleanPreferencesKey("show_model_line")
+        val geminiEnabled = booleanPreferencesKey("gemini_enabled")
+        val navigationEnabled = booleanPreferencesKey("navigation_enabled")
+        val geminiApiKey = stringPreferencesKey("gemini_api_key")
+        val mapsApiKey = stringPreferencesKey("maps_api_key")
         val largeStatus = booleanPreferencesKey("large_status")
         val aimSonar = booleanPreferencesKey("aim_sonar")
         val veer = booleanPreferencesKey("veer")
@@ -78,17 +96,27 @@ class SettingsRepository(context: Context) {
         val acceptedSafety = booleanPreferencesKey("accepted_safety_notice")
     }
 
-    val settings: Flow<AppSettings> = store.data.map(::fromPreferences)
+    // The conf file is applied on top of DataStore, so editing it by hand takes effect on the next read, and
+    // whatever the app writes back keeps the file current.
+    val settings: Flow<AppSettings> = store.data.map { file.mergeInto(fromPreferences(it)) }
 
     suspend fun update(transform: (AppSettings) -> AppSettings) {
         store.edit { p ->
-            val next = transform(fromPreferences(p))
+            val next = transform(file.mergeInto(fromPreferences(p)))
+            file.write(next)
             p[Keys.speech] = next.speech
             p[Keys.tones] = next.tones
             p[Keys.haptics] = next.haptics
             p[Keys.speechRate] = next.speechRate
             p[Keys.verbosity] = next.verbosity.name
             p[Keys.appFont] = next.appFont.name
+            p[Keys.showWarnings] = next.showWarnings
+            p[Keys.showScene] = next.showScene
+            p[Keys.showModelLine] = next.showModelLine
+            p[Keys.geminiEnabled] = next.geminiEnabled
+            p[Keys.navigationEnabled] = next.navigationEnabled
+            p[Keys.geminiApiKey] = next.geminiApiKey
+            p[Keys.mapsApiKey] = next.mapsApiKey
             p[Keys.largeStatus] = next.largeStatus
             p[Keys.aimSonar] = next.aimSonar
             p[Keys.veer] = next.veerGuidance
@@ -115,6 +143,13 @@ class SettingsRepository(context: Context) {
             speechRate = p[Keys.speechRate] ?: d.speechRate,
             verbosity = p[Keys.verbosity]?.let { v -> Verbosity.entries.firstOrNull { it.name == v } } ?: d.verbosity,
             appFont = p[Keys.appFont]?.let { v -> AppFont.entries.firstOrNull { it.name == v } } ?: d.appFont,
+            showWarnings = p[Keys.showWarnings] ?: d.showWarnings,
+            showScene = p[Keys.showScene] ?: d.showScene,
+            showModelLine = p[Keys.showModelLine] ?: d.showModelLine,
+            geminiEnabled = p[Keys.geminiEnabled] ?: d.geminiEnabled,
+            navigationEnabled = p[Keys.navigationEnabled] ?: d.navigationEnabled,
+            geminiApiKey = p[Keys.geminiApiKey] ?: d.geminiApiKey,
+            mapsApiKey = p[Keys.mapsApiKey] ?: d.mapsApiKey,
             largeStatus = p[Keys.largeStatus] ?: d.largeStatus,
             aimSonar = p[Keys.aimSonar] ?: d.aimSonar,
             veerGuidance = p[Keys.veer] ?: d.veerGuidance,

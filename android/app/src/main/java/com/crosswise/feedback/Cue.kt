@@ -63,6 +63,9 @@ enum class HapticPattern { WALK, DONT_WALK, FLASHING, LOST, CENTERED_TICK, VEER_
 sealed interface Cue {
     data class Speak(val phrase: Phrase, val priority: Priority, val args: List<Any> = emptyList()) : Cue
 
+    /** Words generated at runtime — a scene description or a route step — rather than a fixed phrase. */
+    data class SpeakText(val text: String, val priority: Priority) : Cue
+
     /** [pan] from -1 (left ear) to +1 (right ear): the sound comes from the direction to attend to. */
     data class Tone(val kind: ToneKind, val pan: Float = 0f) : Cue
 

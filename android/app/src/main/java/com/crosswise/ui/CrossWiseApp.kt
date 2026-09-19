@@ -45,6 +45,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
@@ -155,6 +156,7 @@ fun CrossWiseApp(viewModel: CrossWiseViewModel) {
                             ) {
                                 when {
                                     showSettings -> SettingsScreen(viewModel, onBack = { showSettings = false })
+                                    tab == Tab.NAVIGATE -> NavigateScreen(viewModel)
                                     tab == Tab.PRACTICE -> PracticeScreen(viewModel)
                                     tab == Tab.GUIDE -> GuideScreen(viewModel)
                                     else -> Unit
@@ -184,6 +186,7 @@ fun CrossWiseApp(viewModel: CrossWiseViewModel) {
                     }
                     BottomTabs(
                         current = if (showSettings) Tab.SETTINGS else tab,
+                        navigationEnabled = settings.navigationEnabled,
                         onSelect = { selected ->
                             showSettings = selected == Tab.SETTINGS
                             if (selected != Tab.SETTINGS) tab = selected
@@ -215,6 +218,7 @@ private fun MessageScreen(title: String, body: String, action: String, onAction:
 
 enum class Tab(val label: Int, val icon: ImageVector) {
     ASSIST(R.string.tab_assist, Icons.Filled.LocationOn),
+    NAVIGATE(R.string.tab_navigate, Icons.Filled.Place),
     PRACTICE(R.string.tab_practice, Icons.Filled.PlayArrow),
     GUIDE(R.string.tab_guide, Icons.Filled.Info),
     SETTINGS(R.string.tab_settings, Icons.Filled.Settings),
@@ -225,7 +229,7 @@ enum class Tab(val label: Int, val icon: ImageVector) {
  * people most likely to rely on this app are the least likely to see it clearly.
  */
 @Composable
-private fun BottomTabs(current: Tab, onSelect: (Tab) -> Unit) {
+private fun BottomTabs(current: Tab, navigationEnabled: Boolean, onSelect: (Tab) -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -233,7 +237,7 @@ private fun BottomTabs(current: Tab, onSelect: (Tab) -> Unit) {
             .padding(horizontal = Dimens.gapSmall, vertical = Dimens.gapSmall),
         horizontalArrangement = Arrangement.spacedBy(Dimens.gapSmall),
     ) {
-        Tab.entries.forEach { entry ->
+        Tab.entries.filter { it != Tab.NAVIGATE || navigationEnabled }.forEach { entry ->
             val selected = entry == current
             val tint = if (selected) CrossWiseColors.Accent else CrossWiseColors.OnSurfaceMuted
             Column(

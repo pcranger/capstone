@@ -45,6 +45,11 @@ class FeedbackEngine(context: Context) {
                     if (cue.priority >= Priority.HIGH) interruptUsed = true
                     speaker.speak(textOf(cue), cue.priority, interrupt)
                 }
+                is Cue.SpeakText -> if (cfg.speech) {
+                    val interrupt = !interruptUsed && cue.priority >= Priority.HIGH
+                    if (cue.priority >= Priority.HIGH) interruptUsed = true
+                    speaker.speak(cue.text, cue.priority, interrupt)
+                }
                 is Cue.Tone -> if (cfg.tones) tones.play(cue.kind, cue.pan)
                 is Cue.Haptic -> if (cfg.haptics) haptics.play(cue.pattern)
             }

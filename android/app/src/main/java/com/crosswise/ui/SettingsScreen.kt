@@ -14,6 +14,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
@@ -21,6 +22,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -142,6 +144,33 @@ fun SettingsScreen(viewModel: CrossWiseViewModel, onBack: () -> Unit) {
             SwitchRow(stringResource(R.string.settings_large_status), settings.largeStatus) { v ->
                 update { it.copy(largeStatus = v) }
             }
+            SwitchRow(stringResource(R.string.settings_show_warnings), settings.showWarnings) { v ->
+                update { it.copy(showWarnings = v) }
+            }
+            SwitchRow(stringResource(R.string.settings_show_scene), settings.showScene) { v ->
+                update { it.copy(showScene = v) }
+            }
+            SwitchRow(stringResource(R.string.settings_show_model_line), settings.showModelLine) { v ->
+                update { it.copy(showModelLine = v) }
+            }
+        }
+
+        SectionCard(stringResource(R.string.settings_section_ai)) {
+            SwitchRow(stringResource(R.string.settings_gemini), settings.geminiEnabled) { v ->
+                update { it.copy(geminiEnabled = v) }
+            }
+            SwitchRow(stringResource(R.string.settings_navigation), settings.navigationEnabled) { v ->
+                update { it.copy(navigationEnabled = v) }
+            }
+            KeyRow(
+                label = stringResource(R.string.settings_gemini_key),
+                value = settings.geminiApiKey,
+            ) { v -> update { it.copy(geminiApiKey = v) } }
+            KeyRow(
+                label = stringResource(R.string.settings_maps_key),
+                value = settings.mapsApiKey,
+            ) { v -> update { it.copy(mapsApiKey = v) } }
+            Hint(stringResource(R.string.settings_key_hint, viewModel.configPath))
         }
 
         SectionCard(stringResource(R.string.settings_section_guidance)) {
@@ -265,5 +294,46 @@ private fun SliderRow(
             onValueChangeFinished = { onCommit(local) },
             valueRange = range,
         )
+    }
+}
+
+
+/** An API key field. Shown masked, because a key on screen at a bus stop is a key in someone else's notebook. */
+@Composable
+private fun KeyRow(label: String, value: String, onChange: (String) -> Unit) {
+    var editing by remember { mutableStateOf(false) }
+    Column(Modifier.fillMaxWidth()) {
+        Text(label, style = MaterialTheme.typography.titleMedium)
+        if (editing) {
+            var draft by remember { mutableStateOf(value) }
+            OutlinedTextField(
+                value = draft,
+                onValueChange = { draft = it },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(Dimens.gapSmall)) {
+                TextButton(onClick = { onChange(draft); editing = false }) {
+                    Text(stringResource(R.string.action_save), color = CrossWiseColors.Accent)
+                }
+                TextButton(onClick = { editing = false }) {
+                    Text(stringResource(R.string.action_cancel), color = CrossWiseColors.OnSurfaceMuted)
+                }
+            }
+        } else {
+            Row(
+                Modifier.fillMaxWidth().heightIn(min = Dimens.touchTarget),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Hint(
+                    if (value.isBlank()) stringResource(R.string.settings_key_missing)
+                    else "•".repeat(8) + value.takeLast(4),
+                    Modifier.weight(1f),
+                )
+                TextButton(onClick = { editing = true }) {
+                    Text(stringResource(R.string.action_edit), color = CrossWiseColors.Accent)
+                }
+            }
+        }
     }
 }

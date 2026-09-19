@@ -45,6 +45,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -108,6 +109,10 @@ fun MainScreen(
     val assistOn = ui.snapshot.mode != AssistMode.IDLE
     var detailsOpen by rememberSaveable { mutableStateOf(false) }
     var showMask by rememberSaveable { mutableStateOf(true) }
+    // Dismissed warnings stay dismissed until the app is reopened: a warning you have read and acted on should
+    // not keep covering the street.
+    var dismissedWarnings by rememberSaveable { mutableStateOf(emptySet<String>()) }
+    val describing by viewModel.describing.collectAsStateWithLifecycle()
     val segmentation = (model as? ModelState.Ready)?.info?.format == YoloOutputFormat.SEGMENTATION
     val view = LocalView.current
     DisposableEffect(assistOn) {
@@ -144,13 +149,15 @@ fun MainScreen(
                     style = MaterialTheme.typography.titleLarge,
                     modifier = Modifier.semantics { heading() },
                 )
-                Text(
-                    modelLabel(model, ui),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = CrossWiseColors.OnSurfaceMuted,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                if (settings.showModelLine) {
+                    Text(
+                        modelLabel(model, ui),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = CrossWiseColors.OnSurfaceMuted,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
             IconPill(
                 icon = Icons.Filled.Settings,
@@ -190,8 +197,16 @@ fun MainScreen(
                 }
                 if (detailsOpen) SegmentationLegend()
             }
-                WarningsPanel(ui, model, expanded = detailsOpen)
-                if (detailsOpen) ScenePanel(ui)
+                if (settings.showWarnings) {
+                    WarningsPanel(
+                        ui = ui,
+                        model = model,
+                        expanded = detailsOpen,
+                        dismissed = dismissedWarnings,
+                        onDismiss = { dismissedWarnings = dismissedWarnings + it },
+                    )
+                }
+                if (settings.showScene || detailsOpen) ScenePanel(ui)
             }
             StatusPanel(
                 ui,
@@ -199,7 +214,13 @@ fun MainScreen(
                 onToggleDetails = { detailsOpen = !detailsOpen },
                 detailsOpen = detailsOpen,
             )
-            Controls(ui.snapshot.mode, viewModel::command)
+            Controls(
+                mode = ui.snapshot.mode,
+                describeEnabled = settings.geminiEnabled,
+                describing = describing,
+                onDescribe = viewModel::describeSurroundings,
+                onCommand = viewModel::command,
+            )
         }
         }
     }
@@ -270,6 +291,7 @@ private fun StatusPanel(
             .semantics(mergeDescendants = true) {},
         verticalArrangement = Arrangement.spacedBy(Dimens.gapSmall / 2),
     ) {
+        val hasPhase = signal.phase != SignalPhase.UNKNOWN
         Row(verticalAlignment = Alignment.CenterVertically) {
             // The state colour reads as a lit indicator beside the words rather than a block behind them,
             // so the panel can stay sheer enough to see the street through.
@@ -278,8 +300,21 @@ private fun StatusPanel(
                 mode.uppercase(),
                 style = MaterialTheme.typography.labelLarge,
                 color = CrossWiseColors.OnSurfaceMuted,
-                modifier = Modifier.padding(start = Dimens.gapSmall).weight(1f),
+                modifier = Modifier.padding(start = Dimens.gapSmall),
             )
+            // With no phase to announce there is nothing worth a second line, so the whole card is one row.
+            if (!hasPhase) {
+                Text(
+                    "  " + title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = CrossWiseColors.OnSurfaceMuted,
+                    modifier = Modifier.weight(1f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            } else {
+                Box(Modifier.weight(1f))
+            }
             TextButton(onClick = onToggleDetails, modifier = Modifier.heightIn(min = 40.dp)) {
                 Text(
                     stringResource(if (detailsOpen) R.string.action_hide_details else R.string.action_details),
@@ -288,11 +323,15 @@ private fun StatusPanel(
                 )
             }
         }
-        Text(
-            title,
-            style = if (large) MaterialTheme.typography.displayLarge else MaterialTheme.typography.displayMedium,
-            color = if (accent == CrossWiseColors.Unknown) CrossWiseColors.OnSurface else Color.White,
-        )
+        // Size follows importance, not habit: a real phase is the one thing worth covering the street for.
+        if (hasPhase) {
+            Text(
+                title,
+                style = if (large) MaterialTheme.typography.displayLarge
+                else MaterialTheme.typography.displayMedium,
+                color = Color.White,
+            )
+        }
         if (detail != null) {
             Text(detail, style = MaterialTheme.typography.bodyLarge, color = CrossWiseColors.OnSurfaceMuted)
         }
@@ -338,7 +377,13 @@ private fun StatusPanel(
 }
 
 @Composable
-private fun Controls(mode: AssistMode, onCommand: (UserCommand) -> Unit) {
+private fun Controls(
+    mode: AssistMode,
+    describeEnabled: Boolean,
+    describing: Boolean,
+    onDescribe: () -> Unit,
+    onCommand: (UserCommand) -> Unit,
+) {
     val assistOn = mode != AssistMode.IDLE
     Row(
         Modifier.fillMaxWidth(),
@@ -371,6 +416,17 @@ private fun Controls(mode: AssistMode, onCommand: (UserCommand) -> Unit) {
             enabled = assistOn,
             onClick = { onCommand(UserCommand.REPEAT_STATUS) },
         )
+        if (describeEnabled) {
+            // An icon, not a banner: it is used occasionally, and a full-width button cost a tenth of the view.
+            IconPill(
+                icon = Icons.Filled.Search,
+                contentDescription = stringResource(
+                    if (describing) R.string.action_describing else R.string.action_describe,
+                ),
+                enabled = !describing,
+                onClick = onDescribe,
+            )
+        }
     }
 }
 

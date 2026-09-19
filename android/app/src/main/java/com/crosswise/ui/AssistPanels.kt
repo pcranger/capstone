@@ -6,6 +6,7 @@ import android.media.AudioManager
 import android.os.BatteryManager
 import android.os.SystemClock
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -75,7 +76,14 @@ fun ScenePanel(ui: UiState, modifier: Modifier = Modifier) {
  * so the app has to say which one it is rather than report an empty, confident-looking scene.
  */
 @Composable
-fun WarningsPanel(ui: UiState, model: ModelState, expanded: Boolean = true, modifier: Modifier = Modifier) {
+fun WarningsPanel(
+    ui: UiState,
+    model: ModelState,
+    expanded: Boolean = true,
+    dismissed: Set<String> = emptySet(),
+    onDismiss: (String) -> Unit = {},
+    modifier: Modifier = Modifier,
+) {
     val context = LocalContext.current
     val assistOn = ui.snapshot.mode != AssistMode.IDLE
     val headphones by produceState(initialValue = true, assistOn) {
@@ -91,17 +99,20 @@ fun WarningsPanel(ui: UiState, model: ModelState, expanded: Boolean = true, modi
         }
     }
 
-    val warnings = buildList {
-        if (assistOn && ui.frameBrightness < 0.04f) add(stringResource(R.string.warn_covered))
-        else if (assistOn && ui.frameBrightness < 0.12f) add(stringResource(R.string.warn_dark))
-        ui.snapshot.pitchDeg?.let { if (it < -45f) add(stringResource(R.string.warn_tilt)) }
-        if (assistOn && ui.fps in 0.1f..8f) add(stringResource(R.string.warn_slow, ui.fps))
-        if (!headphones) add(stringResource(R.string.warn_no_headphones))
-        if (battery <= 20) add(stringResource(R.string.warn_battery, battery))
+    // Each warning has a stable id so dismissing one does not silence the others, and a warning that comes back
+    // (the lens is covered again) is a new event rather than something already waved away.
+    val all = buildList {
+        if (assistOn && ui.frameBrightness < 0.04f) add("covered" to stringResource(R.string.warn_covered))
+        else if (assistOn && ui.frameBrightness < 0.12f) add("dark" to stringResource(R.string.warn_dark))
+        ui.snapshot.pitchDeg?.let { if (it < -45f) add("tilt" to stringResource(R.string.warn_tilt)) }
+        if (assistOn && ui.fps in 0.1f..8f) add("slow" to stringResource(R.string.warn_slow, ui.fps))
+        if (!headphones) add("headphones" to stringResource(R.string.warn_no_headphones))
+        if (battery <= 20) add("battery" to stringResource(R.string.warn_battery, battery))
         (model as? ModelState.Ready)?.let {
-            if (!it.info.hasPedestrianSignalClasses) add(stringResource(R.string.warn_baseline_model))
+            if (!it.info.hasPedestrianSignalClasses) add("baseline" to stringResource(R.string.warn_baseline_model))
         }
     }
+    val warnings = all.filterNot { it.first in dismissed }
     if (warnings.isEmpty()) return
 
     Column(
@@ -114,23 +125,40 @@ fun WarningsPanel(ui: UiState, model: ModelState, expanded: Boolean = true, modi
     ) {
         // Collapsed, it is one line that says how many checks failed; open, it lists them. Either way it is
         // never silently hidden.
-        Text(
-            stringResource(R.string.warn_title).uppercase() + "  ·  " + warnings.size,
-            style = MaterialTheme.typography.labelLarge,
-            color = androidx.compose.ui.graphics.Color.White,
-        )
         if (expanded) {
-            warnings.forEach {
-                Text(it, style = MaterialTheme.typography.bodyMedium, color = androidx.compose.ui.graphics.Color.White)
-            }
-        } else {
             Text(
-                warnings.first(),
-                style = MaterialTheme.typography.bodyMedium,
+                stringResource(R.string.warn_title).uppercase() + "  ·  " +
+                    stringResource(R.string.warn_tap_to_dismiss),
+                style = MaterialTheme.typography.labelLarge,
                 color = androidx.compose.ui.graphics.Color.White,
-                maxLines = 1,
-                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
             )
+        }
+        // Collapsed, a warning is one row: a count, the newest message, and a tap target to make it go away.
+        (if (expanded) warnings else warnings.take(1)).forEach { (id, text) ->
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clickable { onDismiss(id) }
+                    .padding(vertical = Dimens.gapSmall / 2),
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Dimens.gapSmall),
+            ) {
+                if (!expanded && warnings.size > 1) {
+                    Text(
+                        warnings.size.toString(),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = androidx.compose.ui.graphics.Color.White,
+                    )
+                }
+                Text(
+                    text,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = androidx.compose.ui.graphics.Color.White,
+                    maxLines = if (expanded) Int.MAX_VALUE else 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+            }
         }
     }
 }
