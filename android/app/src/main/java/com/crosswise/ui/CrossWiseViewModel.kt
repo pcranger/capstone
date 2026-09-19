@@ -22,6 +22,7 @@ import com.crosswise.logging.SessionLogger
 import com.crosswise.perception.DetectorOptions
 import com.crosswise.perception.LiteRtDetector
 import com.crosswise.perception.ModelInfo
+import com.crosswise.perception.ASSET_PREFIX
 import com.crosswise.perception.ModelSource
 import com.crosswise.sensors.MotionSensors
 import com.crosswise.settings.AppSettings
@@ -88,6 +89,7 @@ class CrossWiseViewModel(application: Application) : AndroidViewModel(applicatio
     private var loadedModelKey: Pair<String?, Boolean>? = null
 
     private var fps = 0f
+    private val modelLibraryState = MutableStateFlow<List<ModelSource>>(emptyList())
     private var lastFrameMs = 0L
     private var brightness = 0.5f
     private var lastPublishMs = 0L
@@ -225,12 +227,16 @@ class CrossWiseViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch(Dispatchers.IO) {
             runCatching {
                 val dir = File(app.filesDir, "models").apply { mkdirs() }
-                val target = File(dir, "imported_${System.currentTimeMillis()}.tflite")
+                // Imports accumulate into a library instead of replacing each other: comparing two detectors is
+                // the whole point of being able to import one.
+                val name = displayNameOf(uri)?.substringAfterLast('/')?.takeIf { it.endsWith(".tflite") }
+                    ?: "imported_${System.currentTimeMillis()}.tflite"
+                val target = File(dir, name)
                 app.contentResolver.openInputStream(uri)?.use { input ->
                     target.outputStream().use { input.copyTo(it) }
                 } ?: error("Cannot open the selected file")
-                dir.listFiles()?.filter { it != target }?.forEach { it.delete() }
                 settingsRepository.update { it.copy(customModelPath = target.absolutePath) }
+                refreshModelLibrary()
             }.onFailure {
                 Log.e(TAG, "Model import failed", it)
                 modelState.value = ModelState.Failed(it.message ?: "Import failed")
@@ -240,13 +246,52 @@ class CrossWiseViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun useBundledModel() = updateSettings { it.copy(customModelPath = null) }
 
+    /** Everything the app can load right now: models shipped in the APK plus everything imported since. */
+    val modelLibrary: StateFlow<List<ModelSource>> get() = modelLibraryState.asStateFlow()
+
+    fun selectModel(source: ModelSource) = updateSettings { it.copy(customModelPath = source.reference) }
+
+    fun deleteModel(source: ModelSource) {
+        if (source !is ModelSource.LocalFile) return
+        viewModelScope.launch(Dispatchers.IO) {
+            if (settings.value.customModelPath == source.path) {
+                settingsRepository.update { it.copy(customModelPath = null) }
+            }
+            File(source.path).delete()
+            refreshModelLibrary()
+        }
+    }
+
+    private fun refreshModelLibrary() {
+        val assets = runCatching { app.assets.list("models")?.toList() }.getOrNull().orEmpty()
+            .filter { it.endsWith(".tflite") }
+            .map { ModelSource.Asset("models/$it") }
+        val imported = File(app.filesDir, "models").listFiles().orEmpty()
+            .filter { it.extension == "tflite" }
+            .sortedBy { it.name }
+            .map { ModelSource.LocalFile(it.absolutePath) }
+        modelLibraryState.value = assets + imported
+    }
+
+    private fun displayNameOf(uri: Uri): String? = runCatching {
+        app.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+            val column = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+            if (column >= 0 && cursor.moveToFirst()) cursor.getString(column) else null
+        }
+    }.getOrNull()
+
     // ---- Internals -------------------------------------------------------------------------------
 
     private fun loadModel(s: AppSettings) {
         viewModelScope.launch(Dispatchers.Default) {
             modelState.value = ModelState.Loading
-            val source = s.customModelPath?.takeIf { File(it).exists() }?.let { ModelSource.LocalFile(it) }
-                ?: bundledModel()
+            val source = when {
+                s.customModelPath == null -> bundledModel()
+                s.customModelPath.startsWith(ASSET_PREFIX) ->
+                    ModelSource.Asset(s.customModelPath.removePrefix(ASSET_PREFIX))
+                File(s.customModelPath).exists() -> ModelSource.LocalFile(s.customModelPath)
+                else -> bundledModel()
+            }
             if (source == null) {
                 swapDetector(null)
                 modelState.value = ModelState.Missing
@@ -264,6 +309,10 @@ class CrossWiseViewModel(application: Application) : AndroidViewModel(applicatio
                 modelState.value = ModelState.Failed(t.message ?: t.javaClass.simpleName)
             }
         }
+    }
+
+    init {
+        refreshModelLibrary()
     }
 
     private fun bundledModel(): ModelSource? {

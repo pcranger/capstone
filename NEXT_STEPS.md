@@ -90,6 +90,41 @@ Everything in this section is already run; the commands are here so you can repe
 
 The Roboflow set's green skew cancels VIDVIP's red skew: 2,460 red against 2,463 green overall.
 
+### Results of the first full run (19 Sep, ~6 h on a Kaggle T4)
+
+The run finished `complete`. Everything is in `ml/kaggle_output/artifacts/`, and `crosswise_v1_best.tflite` is already
+bundled in the app on your phone (25.8 fps / 21 ms on the GPU, nine real classes).
+
+**Validation split** — 1,386 held-out images from VIDVIP + Roboflow + DTLD:
+
+| Metric | crosswise_v1 |
+|---|---|
+| mAP50 / mAP50-95 | **0.850** / 0.580 |
+| ped_red mAP50-95 | 0.601 |
+| ped_green mAP50-95 | 0.548 |
+| crosswalk mAP50-95 | 0.488 |
+| **Red boxes called green** | **2 of 599 (0.33 %)** |
+| Green boxes called red | 1 of 908 (0.11 %) |
+
+**ImVisible test set** — 739 Shanghai street photos, a city and camera the model never trained on:
+
+| Metric | crosswise_v1 |
+|---|---|
+| Phase accuracy | 83.9 % |
+| **Red called green** | **5.75 %** |
+| Green called red | 6.10 % |
+| Red / green recall | 83.2 % / 83.7 % |
+
+**Read those two tables together — the gap between them is the headline finding.** The dangerous error is 0.33 % on
+data from the distributions it trained on and 5.75 % on a city it has never seen: about one red signal in seventeen
+gets called green. That is the honest generalisation gap of a detector trained on Japan, Germany and a European
+Roboflow set, it is the strongest evidence in your report for why the app never says "safe to cross", and it is
+exactly the number your own recordings will re-measure for your city.
+
+Note for the write-up: **v0 scored higher than v1** (mAP50 0.879 vs 0.850), but they are not comparable. Mining
+ImVisible enlarged the validation split from 683 to 1,507 signal boxes, so v1 was scored on a larger, harder set.
+Quote each against its own split; do not present it as a regression.
+
 ### Left for you
 
 - [ ] **If the run failed with "No GPU"**: phone-verify at kaggle.com/settings, then tell me and I will re-push.

@@ -18,17 +18,25 @@ import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
+/** Stored in settings to mean "this bundled asset", as opposed to an absolute path to an imported file. */
+const val ASSET_PREFIX = "asset:"
+
 sealed interface ModelSource {
     val displayName: String
+
+    /** How this source is written into settings; null means "the default bundled model". */
+    val reference: String?
 
     /** A model bundled under `app/src/main/assets`. */
     data class Asset(val path: String) : ModelSource {
         override val displayName: String get() = path.substringAfterLast('/')
+        override val reference: String get() = ASSET_PREFIX + path
     }
 
     /** A model imported by the user at runtime (copied into app storage). */
     data class LocalFile(val path: String) : ModelSource {
         override val displayName: String get() = File(path).name
+        override val reference: String get() = path
     }
 }
 

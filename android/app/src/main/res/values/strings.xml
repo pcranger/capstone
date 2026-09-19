@@ -225,4 +225,9 @@
     <string name="action_stop_short">Stop</string>
     <string name="action_crossing_short">Crossing</string>
     <string name="action_crossing_end_short">End</string>
+    <string name="settings_model_active">Active: %1$s</string>
+    <string name="settings_model_delete">Remove</string>
+    <string name="model_kind_trained">Trained on pedestrian signals</string>
+    <string name="model_kind_coco">COCO baseline — no signal colours</string>
+    <string name="model_kind_imported">Imported</string>
 </resources>

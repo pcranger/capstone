@@ -32,6 +32,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.crosswise.R
 import com.crosswise.feedback.Verbosity
+import com.crosswise.perception.ModelSource
 import com.crosswise.settings.AppFont
 import com.crosswise.settings.AppSettings
 import java.util.Locale
@@ -178,14 +179,55 @@ fun SettingsScreen(viewModel: CrossWiseViewModel, onBack: () -> Unit) {
         }
 
         SectionCard(stringResource(R.string.settings_section_model)) {
+            // A library, not a single slot: comparing the trained detector with a baseline is the whole point of
+            // being able to load another one.
+            val library by viewModel.modelLibrary.collectAsStateWithLifecycle()
+            val active = settings.customModelPath
+            library.forEach { source ->
+                val selected = active == source.reference || (active == null && source == library.firstOrNull())
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = Dimens.touchTarget)
+                        .selectable(
+                            selected = selected,
+                            role = Role.RadioButton,
+                            onClick = { viewModel.selectModel(source) },
+                        ),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    RadioButton(selected = selected, onClick = null)
+                    Column(Modifier.weight(1f).padding(start = Dimens.gapMedium)) {
+                        Text(source.displayName, style = MaterialTheme.typography.titleMedium)
+                        Hint(
+                            when {
+                                source.displayName.startsWith("crosswise") ->
+                                    stringResource(R.string.model_kind_trained)
+                                source is ModelSource.Asset -> stringResource(R.string.model_kind_coco)
+                                else -> stringResource(R.string.model_kind_imported)
+                            },
+                        )
+                    }
+                    if (source is ModelSource.LocalFile) {
+                        TextButton(onClick = { viewModel.deleteModel(source) }) {
+                            Text(
+                                stringResource(R.string.settings_model_delete),
+                                style = MaterialTheme.typography.labelLarge,
+                                color = CrossWiseColors.OnSurfaceMuted,
+                            )
+                        }
+                    }
+                }
+            }
             Hint(
                 when (val m = model) {
                     ModelState.Loading -> stringResource(R.string.model_loading)
                     ModelState.Missing -> stringResource(R.string.model_missing)
                     is ModelState.Failed -> stringResource(R.string.model_failed, m.message)
                     is ModelState.Ready ->
-                        "${m.info.displayName}\n${m.info.inputWidth}×${m.info.inputHeight} · ${m.info.format} · " +
-                            "${m.info.backend}\n${m.info.labels.joinToString(", ")}"
+                        m.info.displayName + "\n" + m.info.inputWidth + "\u00d7" + m.info.inputHeight +
+                            " \u00b7 " + m.info.format + " \u00b7 " + m.info.backend + "\n" +
+                            m.info.labels.joinToString(", ")
                 },
             )
             BigButton(
@@ -194,14 +236,6 @@ fun SettingsScreen(viewModel: CrossWiseViewModel, onBack: () -> Unit) {
                 onClick = { importer.launch(arrayOf("application/octet-stream", "*/*")) },
                 modifier = Modifier.fillMaxWidth().padding(top = Dimens.gapSmall),
             )
-            if (settings.customModelPath != null) {
-                BigButton(
-                    text = stringResource(R.string.settings_use_bundled),
-                    color = CrossWiseColors.Unknown,
-                    onClick = viewModel::useBundledModel,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
         }
 
         SectionCard(stringResource(R.string.settings_section_data)) {
