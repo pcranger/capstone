@@ -1,0 +1,19 @@
+# Canonical CrossWise classes (order = model class ids). Mirrors ml/crosswise_ml/classes.py and
+# android/.../perception/LabelMapper.kt. The app reads names from the model, so keep these names.
+names:
+  0: ped_red        # pedestrian signal "don't walk": red standing figure, orange/red hand
+  1: ped_green      # pedestrian signal "walk": green walking figure, white walking person (incl. with countdown)
+  2: crosswalk      # zebra or marked crossing (box around the visible marked area)
+  3: person
+  4: bicycle
+  5: car
+  6: motorcycle     # includes scooters/mopeds: dominant traffic in much of Asia
+  7: bus
+  8: truck
+
+labeling_rules:
+  - Box only the lit pedestrian head (the figure), not the pole or the countdown digits.
+  - A pedestrian head that is dark (off phase of a flash) is NOT labeled.
+  - Vehicle signals (circles/arrows) are never labeled as ped_red/ped_green.
+  - Label signals as small as ~10 px tall; distant signals are exactly what the app must see.
+  - Crosswalk boxes cover the visible stripes up to about 25 m away.

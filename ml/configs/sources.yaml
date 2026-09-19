@@ -1,0 +1,61 @@
+sources:
+- name: rf_pedestrian_traffic_light
+  path: data/raw/rf_pedestrian_traffic_light
+  role: train
+  has_traffic_labels: false
+  class_map:
+    red: ped_red
+    green: ped_green
+    pedestrian Traffic Light: null
+    signal-light: null
+  unstated_signal_class: pedestrian Traffic Light
+  manual: From https://universe.roboflow.com/ono-gedd7/pedestrian-traffic-light-puf4a
+    (CC BY 4.0). 926 images; 39 are skipped because a signal head has no red/green
+    box.
+- name: vidvip
+  path: C:/Users/HP/crosswise-data/vidvip_yolo
+  manual: 'Apply at https://tetsuakibaba.jp/project/vidvip/ (CC BY-NC-ND 4.0). The
+    download unpacks as dist/vidvipo_full_2023_05_27/vidvipo_full_2023_05_27 (30,471
+    jpg+txt pairs, 13.5 GB; the 10,000 set is a subset of it). Then: python scripts/prepare_vidvip.py
+    --src <that folder> --out data/raw/vidvip_yolo'
+  role: all
+  has_traffic_labels: true
+  class_map:
+    signal_red: ped_red
+    signal_blue: ped_green
+    traffic_light: null
+    bicycler: bicycle
+- name: dtld
+  path: data/raw/dtld_yolo
+  manual: 'Register at https://www.uni-ulm.de/en/in/institute-of-measurement-control-and-microtechnology/research/data-sets/driveu-traffic-light-dataset/
+    (research and teaching use), unzip a few cities and DTLD_Labels_v2.0 into one
+    folder, then: python scripts/convert_dtld.py --dtld <that folder> --labels <that
+    folder>/DTLD_Labels_v2.0 --cities Bochum Bremen Fulda --stride 2 --val-cities
+    Fulda --out data/raw/dtld_yolo'
+  role: all
+  has_traffic_labels: false
+- name: vistas
+  path: data/raw/vistas_yolo
+  manual: 'python scripts/fetch_datasets.py --only vistas_ninja, then: python scripts/convert_vistas.py
+    --vistas data/raw/vistas_ninja --out data/raw/vistas_yolo (add --model <v0 best.pt>
+    for a stricter vote)'
+  role: all
+  has_traffic_labels: false
+- name: imvisible_mined
+  path: data/raw/imvisible_mined
+  manual: 'Train v0, then: python scripts/mine_imvisible.py --model runs/detect/crosswise_v0/weights/best.pt'
+  role: all
+  has_traffic_labels: false
+- name: local_test
+  path: data/raw/local_auto
+  manual: python scripts/autolabel_video.py --videos data/videos --model <best.pt>;
+    python scripts/review_labels.py make/apply --drop-unreviewed
+  role: test
+  has_traffic_labels: true
+raw:
+- name: imvisible
+  path: data/raw/imvisible
+  imvisible: true
+- name: vistas_ninja
+  path: data/raw/vistas_ninja
+  dataset_ninja: Mapillary Vistas

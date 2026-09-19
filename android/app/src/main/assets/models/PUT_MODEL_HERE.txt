@@ -1,0 +1,2 @@
+Put the exported model here as crosswise.tflite (see ml/README.md),
+or import a .tflite on the phone via Settings > Import .tflite model.

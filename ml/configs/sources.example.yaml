@@ -1,0 +1,82 @@
+# Copy to sources.yaml and edit. Paths are relative to the ml/ folder.
+#
+# role:  train -> used for train/val (own train/valid splits kept, others hashed 88/12)
+#        all   -> keep the source's own train/val/test splits (the converters below already split sensibly)
+#        test  -> held out entirely (use for your OWN recordings: that is the honest benchmark)
+# has_traffic_labels: true if persons and vehicles are already labeled in every image
+#                     (otherwise scripts/pseudo_label.py adds them from a COCO teacher)
+# class_map: optional explicit mapping from the source's class names to canonical names
+#            (ped_red, ped_green, crosswalk, person, bicycle, car, motorcycle, bus, truck) or null to drop.
+# manual: printed by fetch_datasets.py while the data is not there yet.
+#
+# Sources whose folder has no data.yaml are skipped by build_dataset.py, so it is safe to keep entries you do not
+# have yet.
+
+sources:
+  # ---------------------------------------------------------------- Roboflow Universe (free account + API key)
+  # Open a dataset, "Download Dataset" -> "YOLOv8" -> "show download code" to read workspace / project / version.
+  # These entries are EXAMPLES found during research: verify license, class names and version before relying on them.
+  - name: rf_aid_for_the_blind
+    path: data/raw/rf_aid_for_the_blind
+    roboflow: {workspace: kartezyencorp, project: aid-for-the-blind, version: 1}
+    role: train
+    has_traffic_labels: false
+
+  - name: rf_pedestrian_traffic_light
+    path: data/raw/rf_pedestrian_traffic_light
+    roboflow: {workspace: ono-gedd7, project: pedestrian-traffic-light-puf4a, version: 1}
+    role: train
+    has_traffic_labels: false
+
+  - name: rf_zebra_cross
+    path: data/raw/rf_zebra_cross
+    roboflow: {workspace: telkom-university-ifw99, project: zebra-cross-dataset, version: 1}
+    role: train
+    has_traffic_labels: false
+
+  # ---------------------------------------------------------------- no hand labeling needed
+  # VIDVIP (Japan, sidewalk eye level, ~30k images; signal_red 2.2k, signal_blue 1.6k, crosswalk 17.6k boxes).
+  - name: vidvip
+    path: data/raw/vidvip_yolo
+    manual: "Apply at https://tetsuakibaba.jp/project/vidvip/ (CC BY-NC-ND 4.0). The download unpacks as dist/vidvipo_full_2023_05_27/vidvipo_full_2023_05_27 (30,471 jpg+txt pairs, 13.5 GB; the 10,000 set is a subset of it). Then: python scripts/prepare_vidvip.py --src <that folder> --out data/raw/vidvip_yolo"
+    role: all
+    has_traffic_labels: true
+    class_map: {signal_red: ped_red, signal_blue: ped_green, traffic_light: null, bicycler: bicycle}
+
+  # DTLD (Germany, car-mounted camera): pedestrian lights with red/green/off state; vehicle lights = hard negatives.
+  - name: dtld
+    path: data/raw/dtld_yolo
+    manual: "Register at https://www.uni-ulm.de/en/in/institute-of-measurement-control-and-microtechnology/research/data-sets/driveu-traffic-light-dataset/ (research and teaching use), unzip a few cities and DTLD_Labels_v2.0 into one folder, then: python scripts/convert_dtld.py --dtld <that folder> --labels <that folder>/DTLD_Labels_v2.0 --cities Bochum Bremen Fulda --stride 2 --val-cities Fulda --out data/raw/dtld_yolo"
+    role: all
+    has_traffic_labels: false
+
+  # Mapillary Vistas v2.0 (worldwide): pedestrian-signal outlines; red/green assigned by scripts/convert_vistas.py.
+  - name: vistas
+    path: data/raw/vistas_yolo
+    manual: "python scripts/fetch_datasets.py --only vistas_ninja, then: python scripts/convert_vistas.py --vistas data/raw/vistas_ninja --out data/raw/vistas_yolo (add --model <v0 best.pt> for a stricter vote)"
+    role: all
+    has_traffic_labels: false
+
+  # Weak labels from ImVisible (Shanghai, MIT): produced by scripts/mine_imvisible.py after training v0.
+  - name: imvisible_mined
+    path: data/raw/imvisible_mined
+    manual: "Train v0, then: python scripts/mine_imvisible.py --model runs/detect/crosswise_v0/weights/best.pt"
+    role: all
+    has_traffic_labels: false
+
+  # Your own recordings: auto-labeled, then every frame reviewed (accept / flip / reject), never drawn by hand.
+  - name: local_test
+    path: data/raw/local_auto
+    manual: "python scripts/autolabel_video.py --videos data/videos --model <best.pt>; python scripts/review_labels.py make/apply --drop-unreviewed"
+    role: test
+    has_traffic_labels: true
+
+# Downloaded but not merged directly.
+raw:
+  - name: imvisible
+    path: data/raw/imvisible
+    imvisible: true
+
+  - name: vistas_ninja
+    path: data/raw/vistas_ninja
+    dataset_ninja: Mapillary Vistas

@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">CrossWise</string>
+
+    <!-- Spoken phrases. Keep them short: they compete with traffic noise and the user's attention.
+         Never phrase anything as "safe to cross"; describe what is seen and let the user decide. -->
+    <string name="say_assist_started">CrossWise on. Point the phone across the street.</string>
+    <string name="say_assist_stopped">CrossWise off.</string>
+    <string name="say_model_missing">No detection model installed. Signal detection is off.</string>
+    <string name="say_baseline_model">Basic model loaded. Light colors will be unverified.</string>
+    <string name="say_search_hint">No signal found. Scan slowly left and right, phone upright.</string>
+    <string name="say_tilt_up">Tilt the phone up.</string>
+    <string name="say_tilt_down">Tilt the phone down.</string>
+    <string name="say_turn_left_slightly">Signal was to the left.</string>
+    <string name="say_turn_right_slightly">Signal was to the right.</string>
+    <string name="say_signal_centered">Signal straight ahead.</string>
+    <string name="say_crosswalk_centered">Crosswalk straight ahead.</string>
+    <string name="say_walk_started">Walk sign just came on.</string>
+    <string name="say_walk_already_on">Walk sign is on, but it may end soon.</string>
+    <string name="say_walk_flashing">Walk sign flashing.</string>
+    <string name="say_dont_walk">Don\'t walk sign.</string>
+    <string name="say_dont_walk_flashing">Don\'t walk sign flashing.</string>
+    <string name="say_signal_lost">Signal lost.</string>
+    <string name="say_light_green_unverified">Light looks green. Not verified as a pedestrian signal.</string>
+    <string name="say_light_red_unverified">Light looks red. Not verified as a pedestrian signal.</string>
+    <string name="say_signal_changed_dont_walk_while_crossing">Signal changed to don\'t walk.</string>
+    <string name="say_walking_on_dont_walk">Caution, the signal shows don\'t walk.</string>
+    <string name="say_crossing_started">Crossing. I will tell you if you drift.</string>
+    <string name="say_crossing_detected">Crossing detected. I will tell you if you drift.</string>
+    <string name="say_crossing_ended">Crossing mode ended.</string>
+    <string name="say_no_heading_sensor">Crossing. Drift guidance is not available on this phone.</string>
+    <string name="say_bear_left">Bear left.</string>
+    <string name="say_bear_right">Bear right.</string>
+    <string name="say_vehicle_left">Vehicle approaching, left.</string>
+    <string name="say_vehicle_ahead">Vehicle approaching, ahead.</string>
+    <string name="say_vehicle_right">Vehicle approaching, right.</string>
+    <string name="say_vehicle_close_left">Vehicle close, left.</string>
+    <string name="say_vehicle_close_ahead">Vehicle close, ahead.</string>
+    <string name="say_vehicle_close_right">Vehicle close, right.</string>
+    <string name="say_status_no_signal">No signal in view.</string>
+    <plurals name="say_status_walk_elapsed">
+        <item quantity="one">Walk sign, on for %1$d second.</item>
+        <item quantity="other">Walk sign, on for %1$d seconds.</item>
+    </plurals>
+    <string name="say_status_walk_unknown_age">Walk sign, start time unknown.</string>
+    <string name="say_status_walk_flashing">Walk sign flashing.</string>
+    <string name="say_status_dont_walk">Don\'t walk sign.</string>
+    <string name="say_status_no_vehicles">No approaching vehicles detected.</string>
+    <plurals name="say_status_vehicles">
+        <item quantity="one">%1$d approaching vehicle detected.</item>
+        <item quantity="other">%1$d approaching vehicles detected.</item>
+    </plurals>
+    <string name="say_status_on_course">On course.</string>
+    <string name="say_status_off_course_left">Drifted left.</string>
+    <string name="say_status_off_course_right">Drifted right.</string>
+
+    <!-- UI -->
+    <string name="action_start_assist">Start assist</string>
+    <string name="action_stop_assist">Stop assist</string>
+    <string name="action_start_crossing">I\'m crossing now</string>
+    <string name="action_end_crossing">End crossing</string>
+    <string name="action_repeat_status">Repeat status</string>
+    <string name="action_settings">Settings</string>
+    <string name="action_back">Back</string>
+    <string name="action_grant_camera">Allow camera</string>
+    <string name="camera_permission_needed">CrossWise needs the camera to see pedestrian signals and traffic. Images are processed on the phone and never uploaded.</string>
+
+    <string name="mode_idle">Assist off</string>
+    <string name="mode_searching">Looking for a signal</string>
+    <string name="mode_waiting">Watching the signal</string>
+    <string name="mode_crossing">Crossing</string>
+
+    <string name="phase_unknown">NO SIGNAL</string>
+    <string name="phase_walk">WALK</string>
+    <string name="phase_walk_flashing">WALK FLASHING</string>
+    <string name="phase_dont_walk">DON\'T WALK</string>
+    <string name="phase_dont_walk_flashing">DON\'T WALK FLASHING</string>
+    <string name="phase_detail_fresh">just started · %1$d s</string>
+    <string name="phase_detail_unknown_age">start not seen · may end soon</string>
+    <string name="phase_detail_unverified">unverified light color</string>
+    <string name="veer_on_course">on course</string>
+    <string name="veer_drift_left">drifted left %1$d°</string>
+    <string name="veer_drift_right">drifted right %1$d°</string>
+    <string name="hazard_banner">VEHICLE APPROACHING · %1$s</string>
+    <string name="side_left">LEFT</string>
+    <string name="side_ahead">AHEAD</string>
+    <string name="side_right">RIGHT</string>
+
+    <string name="model_loading">Loading model…</string>
+    <string name="model_missing">No model · see ml/README.md</string>
+    <string name="model_failed">Model error: %1$s</string>
+    <string name="model_ready">%1$s · %2$d px · %3$s</string>
+    <string name="perf_stats">%1$.1f fps · %2$d ms</string>
+
+    <string name="safety_title">Before you use CrossWise</string>
+    <string name="safety_body">CrossWise is an aid, not a replacement for your cane, guide dog, orientation and mobility skills, or your own judgment. It can miss or misread signals and vehicles, especially at night, in rain, or when the view is blocked. It never tells you that it is safe to cross. Test it with a sighted helper before relying on it.</string>
+    <string name="safety_accept">I understand</string>
+
+    <string name="settings_title">Settings</string>
+    <string name="settings_section_feedback">Feedback</string>
+    <string name="settings_speech">Speech</string>
+    <string name="settings_tones">Tones (use headphones for left/right)</string>
+    <string name="settings_haptics">Vibration</string>
+    <string name="settings_speech_rate">Speech rate</string>
+    <string name="settings_verbosity">Verbosity</string>
+    <string name="verbosity_minimal">Minimal</string>
+    <string name="verbosity_normal">Normal</string>
+    <string name="verbosity_detailed">Detailed</string>
+    <string name="settings_section_guidance">Guidance</string>
+    <string name="settings_aim_sonar">Signal sonar while aiming</string>
+    <string name="settings_veer">Drift warnings while crossing</string>
+    <string name="settings_vehicle_alerts">Approaching vehicle alerts</string>
+    <string name="settings_auto_crossing">Detect crossing start from walking</string>
+    <string name="settings_volume_keys">Volume keys: up = crossing, down = repeat status</string>
+    <string name="settings_section_detection">Detection</string>
+    <string name="settings_gpu">Use GPU when available</string>
+    <string name="settings_threshold">Detection threshold</string>
+    <string name="settings_preview">Show camera preview</string>
+    <string name="settings_overlay">Show detection boxes</string>
+    <string name="settings_section_model">Model</string>
+    <string name="settings_import_model">Import .tflite model</string>
+    <string name="settings_use_bundled">Use bundled model</string>
+    <string name="settings_section_data">Research data</string>
+    <string name="settings_log">Log sessions to CSV</string>
+    <string name="settings_log_location">Logs are saved in: %1$s</string>
+</resources>

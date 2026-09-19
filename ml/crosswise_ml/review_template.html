@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Label review · __DATASET_NAME__</title>
+<style>
+  :root {
+    --ground: #101316; --panel: #171b1f; --line: #2a3137; --ink: #e8ecee; --muted: #9aa5ad;
+    --accept: #2ea463; --flip: #c7922a; --reject: #d2463e; --focus: #7fb0ff;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--ground); color: var(--ink); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  button { font: inherit; color: var(--ink); background: #232a30; border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; cursor: pointer; }
+  button:hover { background: #2c343b; }
+  button:focus-visible, input:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+  kbd { font: 12px ui-monospace, Consolas, monospace; background: #0c0f11; border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; margin-left: 6px; }
+  .bar { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  .title { display: flex; gap: 10px; align-items: baseline; }
+  .title span, .progress { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .progress { display: flex; gap: 16px; }
+  .actions { margin-left: auto; display: flex; gap: 12px; align-items: center; }
+  .stage { display: grid; grid-template-columns: minmax(0, 1fr) 320px; height: calc(100vh - 58px); }
+  .viewer { position: relative; display: grid; place-items: center; padding: 12px; overflow: hidden; }
+  .viewer img { max-width: 100%; max-height: calc(100vh - 82px); display: block; }
+  .viewer canvas { position: absolute; pointer-events: none; }
+  .panel { border-left: 1px solid var(--line); background: var(--panel); padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
+  .file { font: 12px ui-monospace, Consolas, monospace; color: var(--muted); word-break: break-all; margin: 0; }
+  .decision { margin: 0; font-weight: 700; font-size: 18px; }
+  .decision.accept { color: var(--accept); } .decision.flip { color: var(--flip); } .decision.reject { color: var(--reject); }
+  .flags, .legend { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+  .flags li { background: #3a2a12; color: #f2d49b; border-radius: 6px; padding: 5px 8px; font-size: 13px; }
+  .legend li { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
+  .legend i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+  .keys { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .keys button[data-act="accept"] { border-color: var(--accept); }
+  .keys button[data-act="flip"] { border-color: var(--flip); }
+  .keys button[data-act="reject"] { border-color: var(--reject); }
+  .help { color: var(--muted); font-size: 13px; margin: 0; }
+  .empty { color: var(--muted); font-size: 18px; }
+  @media (max-width: 800px) { .stage { grid-template-columns: 1fr; height: auto; } .panel { border-left: 0; border-top: 1px solid var(--line); } }
+</style>
+</head>
+<body>
+<header class="bar">
+  <div class="title"><strong>Label review</strong><span id="dataset"></span></div>
+  <div class="progress" aria-live="polite"><span id="position"></span><span id="tally"></span></div>
+  <div class="actions">
+    <label><input type="checkbox" id="undecided-only"> Undecided only</label>
+    <button id="download" type="button">Download decisions.json</button>
+  </div>
+</header>
+<main class="stage">
+  <div class="viewer" id="viewer"><img id="photo" alt=""><canvas id="overlay"></canvas></div>
+  <aside class="panel">
+    <p id="file" class="file"></p>
+    <p id="decision" class="decision"></p>
+    <ul id="flags" class="flags" aria-label="Why this frame was flagged"></ul>
+    <div class="keys">
+      <button type="button" data-act="accept">Accept<kbd>A</kbd></button>
+      <button type="button" data-act="flip">Flip red/green<kbd>F</kbd></button>
+      <button type="button" data-act="reject">Reject<kbd>R</kbd></button>
+      <button type="button" data-act="clear">Undo<kbd>U</kbd></button>
+      <button type="button" data-act="prev">Back<kbd>←</kbd></button>
+      <button type="button" data-act="next">Skip<kbd>→</kbd></button>
+    </div>
+    <ul id="legend" class="legend" aria-label="Box colors"></ul>
+    <p class="help"><b>Accept</b> when every pedestrian signal you can see has a box with the right color and nothing important is missing.
+      <b>Flip</b> when the boxes are right but red and green are swapped. <b>Reject</b> anything else.
+      Decisions stay in this browser until you download them.</p>
+  </aside>
+</main>
+<script>
+const DATA = __DATA__;
+const COLORS = { ped_red: "#ff5a52", ped_green: "#2ee67a", crosswalk: "#f2f2f2", person: "#e36cf5" };
+const VEHICLE = "#33d6ff";
+const FLAG_TEXT = {
+  near_phase_change: "Close to a red/green change",
+  color_disagrees: "Lit color disagrees with the label",
+  tracked_signal_missing: "A tracked signal has no box here",
+  possible_missed_signal: "Open-vocabulary model sees another signal",
+  short_or_untracked_signal: "Signal seen only briefly",
+};
+const storeKey = "crosswise-review::" + DATA.dataset;
+let decisions = {};
+try { decisions = JSON.parse(localStorage.getItem(storeKey) || "{}"); } catch (e) { decisions = {}; }
+let pos = 0;
+
+const $ = (id) => document.getElementById(id);
+const photo = $("photo"), overlay = $("overlay"), undecidedOnly = $("undecided-only");
+
+function save() { try { localStorage.setItem(storeKey, JSON.stringify(decisions)); } catch (e) { /* private mode */ } }
+function visible() {
+  const all = DATA.items.map((_, i) => i);
+  return undecidedOnly.checked ? all.filter((i) => !decisions[DATA.items[i].img]) : all;
+}
+function currentItem() {
+  const list = visible();
+  if (!list.length) return null;
+  pos = Math.max(0, Math.min(pos, list.length - 1));
+  return DATA.items[list[pos]];
+}
+function colorFor(name) { return COLORS[name] || VEHICLE; }
+function displayName(cls, decision) {
+  const name = DATA.names[cls] || String(cls);
+  if (decision !== "flip") return name;
+  return name === "ped_red" ? "ped_green" : name === "ped_green" ? "ped_red" : name;
+}
+
+function draw() {
+  const item = currentItem();
+  const ctx = overlay.getContext("2d");
+  overlay.width = photo.clientWidth;
+  overlay.height = photo.clientHeight;
+  overlay.style.left = photo.offsetLeft + "px";
+  overlay.style.top = photo.offsetTop + "px";
+  ctx.clearRect(0, 0, overlay.width, overlay.height);
+  if (!item) return;
+  ctx.font = "600 13px system-ui, sans-serif";
+  for (const [cls, cx, cy, w, h] of item.boxes) {
+    const name = displayName(cls, decisions[item.img]);
+    const x = (cx - w / 2) * overlay.width, y = (cy - h / 2) * overlay.height;
+    const bw = w * overlay.width, bh = h * overlay.height;
+    const signal = name === "ped_red" || name === "ped_green";
+    ctx.lineWidth = signal ? 3 : 1.5;
+    ctx.strokeStyle = colorFor(name);
+    ctx.strokeRect(x, y, bw, bh);
+    if (signal || bw > 60) {
+      const label = name.replace("ped_", "");
+      const tw = ctx.measureText(label).width + 8;
+      const ty = y > 18 ? y - 18 : y + bh;
+      ctx.fillStyle = "rgba(0,0,0,0.75)";
+      ctx.fillRect(x, ty, tw, 18);
+      ctx.fillStyle = colorFor(name);
+      ctx.fillText(label, x + 4, ty + 13);
+    }
+  }
+}
+
+function render() {
+  const list = visible();
+  const item = currentItem();
+  const counts = { accept: 0, flip: 0, reject: 0 };
+  for (const d of Object.values(decisions)) if (counts[d] !== undefined) counts[d] += 1;
+  const undecided = DATA.items.length - counts.accept - counts.flip - counts.reject;
+  $("dataset").textContent = DATA.dataset;
+  $("tally").textContent = `accepted ${counts.accept} · flipped ${counts.flip} · rejected ${counts.reject} · undecided ${undecided}`;
+  if (!item) {
+    $("position").textContent = "Nothing left to review";
+    photo.removeAttribute("src");
+    $("file").textContent = "";
+    $("decision").textContent = "";
+    $("flags").replaceChildren();
+    draw();
+    return;
+  }
+  $("position").textContent = `${pos + 1} / ${list.length}`;
+  $("file").textContent = item.img;
+  const decision = decisions[item.img];
+  $("decision").textContent = { accept: "Accepted", flip: "Flipped red/green", reject: "Rejected" }[decision] || "Undecided";
+  $("decision").className = "decision " + (decision || "");
+  $("flags").replaceChildren(...item.flags.map((f) => Object.assign(document.createElement("li"), { textContent: FLAG_TEXT[f] || f })));
+  if (photo.getAttribute("src") !== item.img) photo.src = item.img; else draw();
+  const next = DATA.items[list[pos + 1]];
+  if (next) new Image().src = next.img;
+}
+
+function act(action) {
+  const item = currentItem();
+  if (!item) return;
+  if (action === "prev") { pos -= 1; return render(); }
+  if (action === "next") { pos += 1; return render(); }
+  if (action === "clear") { delete decisions[item.img]; save(); return render(); }
+  decisions[item.img] = action;
+  save();
+  if (!undecidedOnly.checked) pos += 1;  // with "undecided only" the decided item leaves the list by itself
+  render();
+}
+
+document.querySelectorAll("[data-act]").forEach((b) => b.addEventListener("click", () => act(b.dataset.act)));
+document.addEventListener("keydown", (e) => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const key = e.key.toLowerCase();
+  // Enter/Space on a focused button already clicks it; don't also treat Enter as "accept".
+  if (e.target.tagName === "BUTTON" && (key === "enter" || key === " ")) return;
+  const map = { a: "accept", enter: "accept", f: "flip", r: "reject", delete: "reject", backspace: "reject",
+                u: "clear", arrowleft: "prev", arrowright: "next" };
+  if (map[key]) { e.preventDefault(); act(map[key]); }
+});
+undecidedOnly.addEventListener("change", () => { pos = 0; render(); });
+photo.addEventListener("load", draw);
+window.addEventListener("resize", draw);
+$("download").addEventListener("click", () => {
+  const blob = new Blob([JSON.stringify({ dataset: DATA.dataset, decisions }, null, 1)], { type: "application/json" });
+  const link = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: "decisions.json" });
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+});
+const legend = ["ped_red", "ped_green", "crosswalk", "person", "car"];
+$("legend").replaceChildren(...legend.map((n) => {
+  const li = document.createElement("li");
+  const swatch = document.createElement("i");
+  swatch.style.background = colorFor(n);
+  li.append(swatch, n === "car" ? "vehicles" : n);
+  return li;
+}));
+render();
+</script>
+</body>
+</html>

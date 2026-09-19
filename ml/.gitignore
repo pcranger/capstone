@@ -1,0 +1,9 @@
+data/
+runs/
+*.pt
+*.tflite
+*.onnx
+__pycache__/
+.ipynb_checkpoints/
+.kaggle_build/
+kaggle_output/

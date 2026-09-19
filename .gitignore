@@ -1,0 +1,40 @@
+# Secrets — never commit. steps.md and .env both hold the Roboflow API key.
+.env
+steps.md
+*.key
+
+# Datasets: tens of gigabytes, and VIDVIP/DTLD may not be redistributed.
+DTLD/
+VIDVIP/
+ml/data/
+ml/runs/
+ml/kaggle_output/
+ml/.kaggle_build/
+
+# Model binaries are produced by ml/ (see ml/README.md to build or download one).
+*.tflite
+*.pt
+*.onnx
+android/app/src/main/assets/models/*.tflite
+
+# Android / Gradle
+android/build/
+android/app/build/
+android/.gradle/
+android/local.properties
+android/.kotlin/
+.gradle/
+build/
+*.apk
+*.aab
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
