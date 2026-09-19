@@ -123,4 +123,94 @@
     <string name="settings_section_data">Research data</string>
     <string name="settings_log">Log sessions to CSV</string>
     <string name="settings_log_location">Logs are saved in: %1$s</string>
+
+    <!-- Navigation -->
+    <string name="tab_assist">Assist</string>
+    <string name="tab_practice">Practice</string>
+    <string name="tab_guide">Guide</string>
+    <string name="tab_settings">Settings</string>
+
+    <!-- Scene panel -->
+    <string name="scene_title">What the camera sees</string>
+    <string name="scene_signal_at">Signal at %1$d o’clock, confidence %2$d%%</string>
+    <string name="scene_signal_stale">Signal last seen %1$d s ago</string>
+    <string name="scene_signal_none">No pedestrian signal in view</string>
+    <string name="scene_crosswalk">Crosswalk markings in view</string>
+    <string name="scene_no_crosswalk">No crosswalk markings in view</string>
+    <string name="scene_nearby">%1$s at %2$d o’clock</string>
+    <string name="scene_nearby_many">%1$d %2$s, nearest at %3$d o’clock</string>
+    <string name="scene_quiet">No people or vehicles detected</string>
+    <string name="scene_heading">Facing %1$s, %2$d°</string>
+    <string name="scene_walking">Walking</string>
+    <string name="scene_standing">Standing still</string>
+
+    <!-- Conditions / precautions -->
+    <string name="warn_title">Check before you rely on it</string>
+    <string name="warn_dark">Very dark image. Detection is unreliable at night without street lighting.</string>
+    <string name="warn_covered">The lens may be covered. Check nothing is over the camera.</string>
+    <string name="warn_tilt">Phone is flat. Hold it upright, chest height, pointing across the street.</string>
+    <string name="warn_slow">Only %1$.0f frames per second. A fast vehicle may be missed.</string>
+    <string name="warn_no_headphones">No headphones. Left and right tones will both play from the phone.</string>
+    <string name="warn_battery">Battery %1$d%%. Assist uses the camera continuously.</string>
+    <string name="warn_baseline_model">Baseline model: it cannot tell a red signal from a green one. Colours are announced as unverified.</string>
+    <string name="warn_none">No warnings. Conditions look usable.</string>
+
+    <!-- Practice -->
+    <string name="practice_title">Practice the cues</string>
+    <string name="practice_intro">Every sound, word and vibration the app can produce, on demand, with no traffic involved. Learn them here before you stand at a curb. Use headphones to hear left and right.</string>
+    <string name="practice_signals">Signal phases</string>
+    <string name="practice_hazards">Vehicles</string>
+    <string name="practice_guidance">Aiming and drift</string>
+    <string name="practice_walk">Walk sign just came on</string>
+    <string name="practice_walk_old">Walk sign already on</string>
+    <string name="practice_flashing">Walk sign flashing</string>
+    <string name="practice_dont_walk">Don’t walk</string>
+    <string name="practice_lost">Signal lost</string>
+    <string name="practice_vehicle_left">Vehicle from the left</string>
+    <string name="practice_vehicle_ahead">Vehicle ahead</string>
+    <string name="practice_vehicle_right">Vehicle from the right</string>
+    <string name="practice_vehicle_close">Vehicle very close</string>
+    <string name="practice_sonar">Aiming sonar</string>
+    <string name="practice_centered">Signal centered</string>
+    <string name="practice_bear_left">Bear left</string>
+    <string name="practice_bear_right">Bear right</string>
+    <string name="practice_crossing">Crossing started</string>
+
+    <!-- Guide -->
+    <string name="guide_title">Guide</string>
+    <string name="guide_section_safety">Safety</string>
+    <string name="guide_section_holding">Holding the phone</string>
+    <string name="guide_section_sounds">What the sounds mean</string>
+    <string name="guide_section_haptics">What the vibrations mean</string>
+    <string name="guide_section_trouble">If something is wrong</string>
+    <string name="guide_section_about">About</string>
+    <string name="guide_section_sessions">Recorded sessions</string>
+    <string name="guide_holding">Hold the phone upright at chest height, screen towards you, camera pointing across the street. Sweep slowly left and right until the sonar tone speeds up and centres. Keep it still while you read the signal.</string>
+    <string name="guide_sound_sonar">Repeating tick that speeds up as the signal moves towards the centre of view, panned to the ear it is on.</string>
+    <string name="guide_sound_centered">Short double tick: the signal is straight ahead.</string>
+    <string name="guide_sound_walk">Rising chime: the walk sign came on while you were watching.</string>
+    <string name="guide_sound_stop">Low tone: don’t walk.</string>
+    <string name="guide_sound_alert">Two quick beeps from one ear: a vehicle is approaching from that side.</string>
+    <string name="guide_sound_critical">Urgent repeated beeps: a vehicle is close and closing fast.</string>
+    <string name="guide_sound_veer">Soft tone in one ear while crossing: you are drifting towards that ear.</string>
+    <string name="guide_sound_lost">Falling tone: the signal left the camera view.</string>
+    <string name="guide_haptic_walk">Two long pulses: walk.</string>
+    <string name="guide_haptic_dont">One long pulse: don’t walk.</string>
+    <string name="guide_haptic_flashing">Three short pulses: flashing, the interval is ending.</string>
+    <string name="guide_haptic_alert">Sharp double buzz: vehicle warning.</string>
+    <string name="guide_haptic_tick">Single tick: the signal is centred.</string>
+    <string name="guide_trouble_nosignal">If no signal is found: check the lens is clear, hold the phone upright and sweep slowly. Some crossings have no pedestrian signal at all.</string>
+    <string name="guide_trouble_nosound">If you hear nothing: check the phone is not silent, that Speech and Tones are on in Settings, and that any headphones are connected.</string>
+    <string name="guide_trouble_slow">If the frame rate is low: close other apps, or turn the preview off in Settings.</string>
+    <string name="guide_trouble_model">If the model is missing: import a .tflite in Settings, or reinstall a build with one bundled.</string>
+    <string name="guide_about_version">Version %1$s</string>
+    <string name="guide_about_model">Model: %1$s</string>
+    <string name="guide_about_licenses">Detector from Ultralytics YOLO (AGPL-3.0). Type is Atkinson Hyperlegible by the Braille Institute (SIL OFL 1.1). Training data: VIDVIP (CC BY-NC-ND 4.0, non-commercial), DTLD (research and teaching), Roboflow Universe sets (CC BY 4.0). Research prototype — not a commercial product.</string>
+    <string name="guide_sessions_empty">No sessions recorded yet. Turn on “Log sessions to CSV” in Settings.</string>
+    <string name="guide_sessions_count">%1$d session file(s) in %2$s</string>
+    <string name="guide_share">Share session logs</string>
+
+    <!-- Last crossing summary -->
+    <string name="summary_title">Last crossing</string>
+    <string name="summary_line">%1$d s, %2$d vehicle alert(s), drift up to %3$d°</string>
 </resources>

@@ -113,6 +113,43 @@ simply grows — the layout has no hole in it.
 Settings becomes cards instead of a wall of rows: one card per section (Feedback, Guidance, Detection, Model, Data),
 each with a `labelLarge` header, rows of a uniform 56dp, switch on the right, and the value shown inline on sliders.
 
+## Screens
+
+Four tabs, always in the same order, labelled with words rather than icons — an icon has to be learned, and the
+people most likely to rely on this app are the least likely to see it clearly. Assist stays mounted underneath the
+others, so the camera, the engine and the announcements keep running while the traveler reads the guide.
+
+| Tab | What it is for |
+|---|---|
+| **Assist** | The live screen. Warnings, viewfinder and scene detail scroll; the phase card and the controls never move. |
+| **Practice** | Every cue the app can produce, on demand, indoors. It drives the real feedback engine, not recordings. |
+| **Guide** | Safety, how to hold the phone, what each sound and vibration means, troubleshooting, recorded sessions, licences. |
+| **Settings** | Unchanged, now reachable as a tab as well as from the top bar. |
+
+### Assist, in priority order
+
+1. **Warnings** — only when they apply, and above everything else, because a clipped warning is a warning nobody
+   reads: lens covered, scene too dark, phone flat, frame rate too low for a moving vehicle, no headphones (the
+   left/right tones collapse to mono), low battery, baseline model that cannot verify colour.
+2. **Viewfinder** — a 160dp strip. It exists for the sighted helper; it is not the product.
+3. **Scene** — where the signal is *on a clock face*, how confident the phase is, whether crosswalk markings are in
+   view, what else is on the street and at which clock position, which way the traveler is facing, and whether they
+   are walking.
+4. **Phase card** and **controls** — fixed, never scroll.
+
+### Why clock positions
+
+"Left" and "right" throw away most of what a traveler needs: 11 and 1 o'clock are both nearly ahead, and the
+difference decides whether a car is crossing your path or passing behind it. Clock directions are what orientation
+and mobility instructors teach and what every other navigation app for blind travelers uses (BlindSquare announces
+"entrance at 2 o'clock"), so the app should speak the language its users already have.
+
+### Why a practice screen
+
+A traveler cannot learn the difference between a rising chime and a falling tone while standing at a live curb —
+that is the one place where getting it wrong is expensive. Practice is the rehearsal room. No other crossing app
+ships one, and for a cue vocabulary this size it is the difference between a feature and a usable feature.
+
 ## What must not change
 
 * Merged semantics on the status card, so TalkBack reads it as one announcement, not six fragments.

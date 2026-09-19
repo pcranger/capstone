@@ -6,6 +6,7 @@ import android.net.Uri
 import android.os.SystemClock
 import android.util.Log
 import android.view.KeyEvent
+import androidx.core.graphics.get
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.crosswise.camera.CameraPipeline
@@ -53,6 +54,8 @@ data class UiState(
     val frameAspect: Float = 9f / 16f,
     /** Last spoken message, shown as a caption. */
     val caption: String? = null,
+    /** Mean luminance of the last analysed frame, 0..1 — feeds the "too dark / lens covered" warning. */
+    val frameBrightness: Float = 0.5f,
 )
 
 class CrossWiseViewModel(application: Application) : AndroidViewModel(application) {
@@ -86,6 +89,7 @@ class CrossWiseViewModel(application: Application) : AndroidViewModel(applicatio
 
     private var fps = 0f
     private var lastFrameMs = 0L
+    private var brightness = 0.5f
     private var lastPublishMs = 0L
 
     init {
@@ -130,6 +134,7 @@ class CrossWiseViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun onFrame(frame: Bitmap, timestampMs: Long) {
         val result = synchronized(detectorLock) { detector?.detect(frame, timestampMs) } ?: return
+        brightness = 0.8f * brightness + 0.2f * meanLuminance(frame)
         val output = engine.onFrame(result, camera.geometry)
         deliver(output.cues)
 
@@ -146,6 +151,31 @@ class CrossWiseViewModel(application: Application) : AndroidViewModel(applicatio
             frameAspect = result.frameWidth.toFloat() / result.frameHeight.coerceAtLeast(1),
         )
     }
+
+    /**
+     * Average brightness of a coarse grid of pixels. A lens covered by a finger or a pocket looks the same to the
+     * detector as an empty street — it simply finds nothing — so the app has to notice it and say so.
+     */
+    private fun meanLuminance(frame: Bitmap): Float {
+        val step = 16
+        var sum = 0L
+        var count = 0
+        var y = 0
+        while (y < frame.height) {
+            var x = 0
+            while (x < frame.width) {
+                val pixel = frame[x, y]
+                sum += ((pixel shr 16 and 0xFF) * 77 + (pixel shr 8 and 0xFF) * 150 + (pixel and 0xFF) * 29) shr 8
+                count++
+                x += step
+            }
+            y += step
+        }
+        return if (count == 0) 0.5f else sum.toFloat() / count / 255f
+    }
+
+    /** Plays one cue on demand, for the Practice screen: the real sounds, with no traffic involved. */
+    fun practice(cues: List<Cue>) = deliver(cues)
 
     // ---- User actions ----------------------------------------------------------------------------
 
@@ -275,6 +305,7 @@ class CrossWiseViewModel(application: Application) : AndroidViewModel(applicatio
                 fps = fps,
                 inferenceMs = inferenceMs ?: it.inferenceMs,
                 frameAspect = frameAspect ?: it.frameAspect,
+                frameBrightness = brightness,
             )
         }
     }

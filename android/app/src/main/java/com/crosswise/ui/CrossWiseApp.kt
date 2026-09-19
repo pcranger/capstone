@@ -34,6 +34,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.heading
@@ -62,6 +69,7 @@ fun CrossWiseApp(viewModel: CrossWiseViewModel) {
         askedForCamera = true
     }
     var showSettings by rememberSaveable { mutableStateOf(false) }
+    var tab by rememberSaveable { mutableStateOf(Tab.ASSIST) }
 
     // Re-check when returning from the system settings screen.
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -81,7 +89,10 @@ fun CrossWiseApp(viewModel: CrossWiseViewModel) {
             permissionLauncher.launch(Manifest.permission.CAMERA)
         }
     }
-    BackHandler(enabled = showSettings) { showSettings = false }
+    BackHandler(enabled = showSettings || tab != Tab.ASSIST) {
+        showSettings = false
+        tab = Tab.ASSIST
+    }
 
     Box(Modifier.fillMaxSize().background(CrossWiseColors.Background).safeDrawingPadding()) {
         when {
@@ -111,22 +122,43 @@ fun CrossWiseApp(viewModel: CrossWiseViewModel) {
                 },
             )
             else -> {
-                // Settings are drawn on top so the camera and engine keep running underneath. While they are open,
-                // the main screen is hidden from TalkBack and a blocker swallows taps that would fall through.
-                MainScreen(
-                    viewModel,
-                    settings,
-                    onOpenSettings = { showSettings = true },
-                    modifier = if (showSettings) Modifier.clearAndSetSemantics {} else Modifier,
-                )
-                if (showSettings) {
-                    Box(
-                        Modifier
-                            .fillMaxSize()
-                            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {}
-                            .clearAndSetSemantics {},
+                // Assist stays mounted under the other tabs so the camera, engine and announcements keep running
+                // while the traveler reads the guide or practises a cue. Only its semantics are hidden.
+                val assistVisible = tab == Tab.ASSIST && !showSettings
+                Column(Modifier.fillMaxSize()) {
+                    Box(Modifier.weight(1f)) {
+                        MainScreen(
+                            viewModel,
+                            settings,
+                            onOpenSettings = { showSettings = true },
+                            modifier = if (assistVisible) Modifier else Modifier.clearAndSetSemantics {},
+                        )
+                        if (!assistVisible) {
+                            Box(
+                                Modifier
+                                    .fillMaxSize()
+                                    .background(CrossWiseColors.Background)
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null,
+                                    ) {},
+                            ) {
+                                when {
+                                    showSettings -> SettingsScreen(viewModel, onBack = { showSettings = false })
+                                    tab == Tab.PRACTICE -> PracticeScreen(viewModel)
+                                    tab == Tab.GUIDE -> GuideScreen(viewModel)
+                                    else -> Unit
+                                }
+                            }
+                        }
+                    }
+                    BottomTabs(
+                        current = if (showSettings) Tab.SETTINGS else tab,
+                        onSelect = { selected ->
+                            showSettings = selected == Tab.SETTINGS
+                            if (selected != Tab.SETTINGS) tab = selected
+                        },
                     )
-                    SettingsScreen(viewModel, onBack = { showSettings = false })
                 }
             }
         }
@@ -147,5 +179,50 @@ private fun MessageScreen(title: String, body: String, action: String, onAction:
         )
         Text(body, color = Color.White, fontSize = 20.sp, lineHeight = 28.sp)
         BigButton(text = action, color = CrossWiseColors.Crossing, onClick = onAction, modifier = Modifier.fillMaxWidth())
+    }
+}
+
+
+enum class Tab(val label: Int) {
+    ASSIST(R.string.tab_assist),
+    PRACTICE(R.string.tab_practice),
+    GUIDE(R.string.tab_guide),
+    SETTINGS(R.string.tab_settings),
+}
+
+/**
+ * Four destinations, always in the same place. Text labels rather than icons: an icon has to be learned, and the
+ * people most likely to rely on this app are the least likely to see it clearly.
+ */
+@Composable
+private fun BottomTabs(current: Tab, onSelect: (Tab) -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .background(CrossWiseColors.Surface)
+            .padding(horizontal = Dimens.gapSmall, vertical = Dimens.gapSmall),
+        horizontalArrangement = Arrangement.spacedBy(Dimens.gapSmall),
+    ) {
+        Tab.entries.forEach { entry ->
+            val selected = entry == current
+            Box(
+                Modifier
+                    .weight(1f)
+                    .heightIn(min = Dimens.touchTarget)
+                    .background(
+                        if (selected) CrossWiseColors.SurfaceVariant else Color.Transparent,
+                        RoundedCornerShape(Dimens.radiusRow),
+                    )
+                    .selectable(selected = selected, role = Role.Tab, onClick = { onSelect(entry) }),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    stringResource(entry.label),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = if (selected) CrossWiseColors.OnSurface else CrossWiseColors.OnSurfaceMuted,
+                    textAlign = TextAlign.Center,
+                )
+            }
+        }
     }
 }

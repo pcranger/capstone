@@ -13,6 +13,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
@@ -130,23 +133,30 @@ fun MainScreen(
             }
         }
 
-        if (settings.showPreview) {
-            // A viewfinder, not wallpaper: bounded, inset, and it yields its height to the status card.
-            // clipToBounds is required — PreviewView scales its texture to FILL_CENTER and a Compose interop view
-            // is not clipped by default, so without it the preview bleeds over the bar above.
-            Box(
-                Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(Dimens.radiusRow))
-                    .background(CrossWiseColors.SurfaceVariant)
-                    .clipToBounds(),
-            ) {
-                AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
-                if (settings.showOverlay) DetectionOverlay(ui.snapshot, ui.frameAspect, Modifier.fillMaxSize())
+        // Detail scrolls; state and controls never do. Whatever else is on screen, the phase and the buttons
+        // are always in the same place under the thumb.
+        Column(
+            Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(Dimens.gapMedium),
+        ) {
+            // Warnings first: a clipped warning at a scroll boundary is a warning nobody reads.
+            WarningsPanel(ui, model)
+            if (settings.showPreview) {
+                // clipToBounds is required — PreviewView scales its texture to FILL_CENTER and a Compose interop
+                // view is not clipped by default, so without it the preview bleeds over the bar above.
+                Box(
+                    Modifier
+                        .height(Dimens.previewHeight)
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(Dimens.radiusRow))
+                        .background(CrossWiseColors.SurfaceVariant)
+                        .clipToBounds(),
+                ) {
+                    AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
+                    if (settings.showOverlay) DetectionOverlay(ui.snapshot, ui.frameAspect, Modifier.fillMaxSize())
+                }
             }
-        } else {
-            Box(Modifier.weight(1f))
+            ScenePanel(ui)
         }
 
         StatusPanel(ui)

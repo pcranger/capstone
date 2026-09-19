@@ -46,6 +46,9 @@ gyroscope; GPU recommended).
      *Settings → Import .tflite model*.
 3. Run on the phone. Accept the safety notice and camera permission, tap **Start assist**, point the phone across the street.
 
+Four tabs: **Assist** (live), **Practice** (rehearse every sound, word and vibration indoors), **Guide** (safety,
+cue legend, troubleshooting, session logs, licences) and **Settings**. Assist keeps running underneath the others.
+
 Hands-free: while assist is on, **volume up** starts/ends crossing mode and **volume down** repeats the status.
 Bone-conduction headphones make the left/right tones usable while keeping ears open to traffic.
 

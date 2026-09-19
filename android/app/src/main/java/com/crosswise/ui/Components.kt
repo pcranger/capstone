@@ -106,6 +106,8 @@ fun BigButton(
     enabled: Boolean = true,
     primary: Boolean = false,
 ) {
+    // Amber is the one state color that white text cannot sit on (1.1:1); it always takes black.
+    val content = if (color == CrossWiseColors.Hazard) CrossWiseColors.OnHazard else Color.White
     Button(
         onClick = onClick,
         enabled = enabled,
@@ -113,7 +115,7 @@ fun BigButton(
         shape = RoundedCornerShape(Dimens.radiusCard),
         colors = ButtonDefaults.buttonColors(
             containerColor = color,
-            contentColor = Color.White,
+            contentColor = content,
             disabledContainerColor = CrossWiseColors.SurfaceVariant,
             disabledContentColor = CrossWiseColors.OnSurfaceMuted,
         ),

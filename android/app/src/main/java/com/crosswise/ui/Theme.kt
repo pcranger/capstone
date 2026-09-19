@@ -54,8 +54,10 @@ object Dimens {
 
     /** Above Android's 48dp floor: this app is used standing, moving, sometimes one-handed. */
     val touchTarget = 56.dp
-    val primaryButton = 76.dp
-    val secondaryButton = 64.dp
+    val primaryButton = 64.dp
+    val secondaryButton = 56.dp
+    /** The preview is a strip now: the screen's job is information, not video. */
+    val previewHeight = 160.dp
 }
 
 /**
