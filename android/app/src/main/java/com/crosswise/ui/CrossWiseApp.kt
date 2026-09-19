@@ -41,6 +41,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Icon
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.heading
@@ -183,11 +191,11 @@ private fun MessageScreen(title: String, body: String, action: String, onAction:
 }
 
 
-enum class Tab(val label: Int) {
-    ASSIST(R.string.tab_assist),
-    PRACTICE(R.string.tab_practice),
-    GUIDE(R.string.tab_guide),
-    SETTINGS(R.string.tab_settings),
+enum class Tab(val label: Int, val icon: ImageVector) {
+    ASSIST(R.string.tab_assist, Icons.Filled.LocationOn),
+    PRACTICE(R.string.tab_practice, Icons.Filled.PlayArrow),
+    GUIDE(R.string.tab_guide, Icons.Filled.Info),
+    SETTINGS(R.string.tab_settings, Icons.Filled.Settings),
 }
 
 /**
@@ -205,21 +213,25 @@ private fun BottomTabs(current: Tab, onSelect: (Tab) -> Unit) {
     ) {
         Tab.entries.forEach { entry ->
             val selected = entry == current
-            Box(
+            val tint = if (selected) CrossWiseColors.Accent else CrossWiseColors.OnSurfaceMuted
+            Column(
                 Modifier
                     .weight(1f)
                     .heightIn(min = Dimens.touchTarget)
                     .background(
-                        if (selected) CrossWiseColors.SurfaceVariant else Color.Transparent,
+                        if (selected) CrossWiseColors.GlassLight else Color.Transparent,
                         RoundedCornerShape(Dimens.radiusRow),
                     )
-                    .selectable(selected = selected, role = Role.Tab, onClick = { onSelect(entry) }),
-                contentAlignment = Alignment.Center,
+                    .selectable(selected = selected, role = Role.Tab, onClick = { onSelect(entry) })
+                    .padding(vertical = 6.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
             ) {
+                Icon(entry.icon, contentDescription = null, tint = tint, modifier = Modifier.size(22.dp))
                 Text(
                     stringResource(entry.label),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = if (selected) CrossWiseColors.OnSurface else CrossWiseColors.OnSurfaceMuted,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = tint,
                     textAlign = TextAlign.Center,
                 )
             }

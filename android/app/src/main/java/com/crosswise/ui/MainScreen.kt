@@ -34,6 +34,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -94,18 +104,33 @@ fun MainScreen(
     }
 
     val assistOn = ui.snapshot.mode != AssistMode.IDLE
+    var detailsOpen by rememberSaveable { mutableStateOf(false) }
     val view = LocalView.current
     DisposableEffect(assistOn) {
         view.keepScreenOn = assistOn
         onDispose { view.keepScreenOn = false }
     }
 
-    Column(
-        modifier.fillMaxSize().background(CrossWiseColors.Background).padding(horizontal = Dimens.gutter),
-        verticalArrangement = Arrangement.spacedBy(Dimens.gapMedium),
-    ) {
+    // Camera-first: the viewfinder is the surface, everything else floats over it in the thumb zone.
+    // A scrim top and bottom keeps the chrome legible over a bright sky without hiding the street.
+    Box(modifier.fillMaxSize().background(CrossWiseColors.Background)) {
+        if (settings.showPreview) {
+            // clipToBounds is required — PreviewView scales its texture to FILL_CENTER and a Compose interop view
+            // is not clipped by default, so without it the preview paints over the chrome.
+            Box(Modifier.fillMaxSize().clipToBounds()) {
+                AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
+                if (settings.showOverlay) DetectionOverlay(ui.snapshot, ui.frameAspect, Modifier.fillMaxSize())
+            }
+        }
+
+        Box(Modifier.fillMaxWidth().height(140.dp).align(Alignment.TopCenter).background(CrossWiseColors.TopScrim))
+        Box(Modifier.fillMaxWidth().height(260.dp).align(Alignment.BottomCenter).background(CrossWiseColors.BottomScrim))
+
         Row(
-            Modifier.fillMaxWidth().padding(top = Dimens.gapSmall),
+            Modifier
+                .align(Alignment.TopCenter)
+                .fillMaxWidth()
+                .padding(horizontal = Dimens.gutter, vertical = Dimens.gapSmall),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.weight(1f)) {
@@ -114,53 +139,34 @@ fun MainScreen(
                     style = MaterialTheme.typography.titleLarge,
                     modifier = Modifier.semantics { heading() },
                 )
-                // Debug readout for a sighted helper: present, but never competing with the status card.
                 Text(
                     modelLabel(model, ui),
                     style = MaterialTheme.typography.labelMedium,
                     color = CrossWiseColors.OnSurfaceMuted,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
-            TextButton(
+            IconPill(
+                icon = Icons.Filled.Settings,
+                contentDescription = stringResource(R.string.action_settings),
                 onClick = onOpenSettings,
-                modifier = Modifier.heightIn(min = Dimens.touchTarget),
-            ) {
-                Text(
-                    stringResource(R.string.action_settings),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = CrossWiseColors.Accent,
-                )
-            }
+            )
         }
 
-        // Detail scrolls; state and controls never do. Whatever else is on screen, the phase and the buttons
-        // are always in the same place under the thumb.
         Column(
-            Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(Dimens.gapMedium),
+            Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .padding(horizontal = Dimens.gutter)
+                .padding(bottom = Dimens.gapMedium),
+            verticalArrangement = Arrangement.spacedBy(Dimens.gapSmall),
         ) {
-            // Warnings first: a clipped warning at a scroll boundary is a warning nobody reads.
-            WarningsPanel(ui, model)
-            if (settings.showPreview) {
-                // clipToBounds is required — PreviewView scales its texture to FILL_CENTER and a Compose interop
-                // view is not clipped by default, so without it the preview bleeds over the bar above.
-                Box(
-                    Modifier
-                        .height(Dimens.previewHeight)
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(Dimens.radiusRow))
-                        .background(CrossWiseColors.SurfaceVariant)
-                        .clipToBounds(),
-                ) {
-                    AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
-                    if (settings.showOverlay) DetectionOverlay(ui.snapshot, ui.frameAspect, Modifier.fillMaxSize())
-                }
-            }
-            ScenePanel(ui)
+            WarningsPanel(ui, model, expanded = detailsOpen)
+            if (detailsOpen) ScenePanel(ui)
+            StatusPanel(ui, large = settings.largeStatus, onToggleDetails = { detailsOpen = !detailsOpen }, detailsOpen = detailsOpen)
+            Controls(ui.snapshot.mode, viewModel::command)
         }
-
-        StatusPanel(ui)
-        Controls(ui.snapshot.mode, viewModel::command)
     }
 }
 
@@ -177,10 +183,16 @@ private fun modelLabel(model: ModelState, ui: UiState): String = when (model) {
 }
 
 @Composable
-private fun StatusPanel(ui: UiState, modifier: Modifier = Modifier) {
+private fun StatusPanel(
+    ui: UiState,
+    large: Boolean,
+    detailsOpen: Boolean,
+    onToggleDetails: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val snapshot = ui.snapshot
     val signal = snapshot.signal
-    val background = when {
+    val accent = when {
         snapshot.mode == AssistMode.IDLE -> CrossWiseColors.Unknown
         !signal.trusted && signal.phase != SignalPhase.UNKNOWN -> CrossWiseColors.Caution
         signal.phase == SignalPhase.WALK && signal.freshWalk -> CrossWiseColors.Walk
@@ -216,18 +228,39 @@ private fun StatusPanel(ui: UiState, modifier: Modifier = Modifier) {
     Column(
         modifier
             .fillMaxWidth()
-            .background(background, RoundedCornerShape(Dimens.radiusHero))
+            .clip(RoundedCornerShape(Dimens.radiusHero))
+            .background(CrossWiseColors.Glass)
+            .border(1.dp, CrossWiseColors.Hairline, RoundedCornerShape(Dimens.radiusHero))
             .padding(Dimens.cardPadding)
             .semantics(mergeDescendants = true) {},
-        verticalArrangement = Arrangement.spacedBy(Dimens.gapSmall),
+        verticalArrangement = Arrangement.spacedBy(Dimens.gapSmall / 2),
     ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            // The state colour reads as a lit indicator beside the words rather than a block behind them,
+            // so the panel can stay sheer enough to see the street through.
+            Box(Modifier.size(12.dp).clip(CircleShape).background(accent))
+            Text(
+                mode.uppercase(),
+                style = MaterialTheme.typography.labelLarge,
+                color = CrossWiseColors.OnSurfaceMuted,
+                modifier = Modifier.padding(start = Dimens.gapSmall).weight(1f),
+            )
+            TextButton(onClick = onToggleDetails, modifier = Modifier.heightIn(min = 40.dp)) {
+                Text(
+                    stringResource(if (detailsOpen) R.string.action_hide_details else R.string.action_details),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = CrossWiseColors.Accent,
+                )
+            }
+        }
         Text(
-            mode.uppercase(),
-            style = MaterialTheme.typography.labelLarge,
-            color = Color.White.copy(alpha = 0.85f),
+            title,
+            style = if (large) MaterialTheme.typography.displayLarge else MaterialTheme.typography.displayMedium,
+            color = if (accent == CrossWiseColors.Unknown) CrossWiseColors.OnSurface else Color.White,
         )
-        Text(title, style = MaterialTheme.typography.displayLarge, color = Color.White)
-        if (detail != null) Text(detail, style = MaterialTheme.typography.bodyLarge, color = Color.White)
+        if (detail != null) {
+            Text(detail, style = MaterialTheme.typography.bodyLarge, color = CrossWiseColors.OnSurfaceMuted)
+        }
         snapshot.veer?.let { veer ->
             val degrees = abs(veer.deviationDeg).roundToInt()
             Text(
@@ -237,7 +270,6 @@ private fun StatusPanel(ui: UiState, modifier: Modifier = Modifier) {
                     VeerState.DRIFTED_RIGHT -> stringResource(R.string.veer_drift_right, degrees)
                 },
                 style = MaterialTheme.typography.bodyLarge,
-                color = Color.White,
             )
         }
         snapshot.hazards.firstOrNull()?.let { hazard ->
@@ -248,19 +280,23 @@ private fun StatusPanel(ui: UiState, modifier: Modifier = Modifier) {
             }
             Text(
                 stringResource(R.string.hazard_banner, side),
-                style = MaterialTheme.typography.titleLarge,
+                style = MaterialTheme.typography.titleMedium,
                 color = CrossWiseColors.OnHazard,
                 modifier = Modifier
+                    .padding(top = Dimens.gapSmall / 2)
                     .fillMaxWidth()
-                    .background(CrossWiseColors.Hazard, RoundedCornerShape(Dimens.radiusRow))
+                    .clip(RoundedCornerShape(Dimens.radiusRow))
+                    .background(CrossWiseColors.Hazard)
                     .padding(horizontal = Dimens.gapMedium, vertical = Dimens.gapSmall),
             )
         }
         ui.caption?.let {
             Text(
-                "“$it”",
+                "\u201c$it\u201d",
                 style = MaterialTheme.typography.bodyMedium,
-                color = Color.White.copy(alpha = 0.85f),
+                color = CrossWiseColors.OnSurfaceMuted,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
             )
         }
     }
@@ -269,38 +305,39 @@ private fun StatusPanel(ui: UiState, modifier: Modifier = Modifier) {
 @Composable
 private fun Controls(mode: AssistMode, onCommand: (UserCommand) -> Unit) {
     val assistOn = mode != AssistMode.IDLE
-    Column(
-        Modifier.fillMaxWidth().padding(bottom = Dimens.gapMedium),
-        verticalArrangement = Arrangement.spacedBy(Dimens.gapMedium),
+    Row(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(Dimens.gapSmall),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         BigButton(
-            text = stringResource(if (assistOn) R.string.action_stop_assist else R.string.action_start_assist),
+            text = stringResource(if (assistOn) R.string.action_stop_short else R.string.action_start_short),
+            description = stringResource(if (assistOn) R.string.action_stop_assist else R.string.action_start_assist),
             color = if (assistOn) CrossWiseColors.DontWalk else CrossWiseColors.Walk,
             onClick = { onCommand(if (assistOn) UserCommand.STOP_ASSIST else UserCommand.START_ASSIST) },
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.weight(1f),
             primary = true,
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(Dimens.gapMedium)) {
-            BigButton(
-                text = stringResource(
-                    if (mode == AssistMode.CROSSING) R.string.action_end_crossing else R.string.action_start_crossing,
-                ),
-                color = CrossWiseColors.Crossing,
-                enabled = assistOn,
-                onClick = { onCommand(UserCommand.TOGGLE_CROSSING) },
-                modifier = Modifier.weight(1f),
-            )
-            BigButton(
-                text = stringResource(R.string.action_repeat_status),
-                color = CrossWiseColors.Unknown,
-                enabled = assistOn,
-                onClick = { onCommand(UserCommand.REPEAT_STATUS) },
-                modifier = Modifier.weight(1f),
-            )
-        }
+        BigButton(
+            text = stringResource(
+                if (mode == AssistMode.CROSSING) R.string.action_crossing_end_short else R.string.action_crossing_short,
+            ),
+            description = stringResource(
+                if (mode == AssistMode.CROSSING) R.string.action_end_crossing else R.string.action_start_crossing,
+            ),
+            color = CrossWiseColors.Crossing,
+            enabled = assistOn,
+            onClick = { onCommand(UserCommand.TOGGLE_CROSSING) },
+            modifier = Modifier.weight(1f),
+        )
+        IconPill(
+            icon = Icons.Filled.Refresh,
+            contentDescription = stringResource(R.string.action_repeat_status),
+            enabled = assistOn,
+            onClick = { onCommand(UserCommand.REPEAT_STATUS) },
+        )
     }
 }
-
 
 /** Draws tracked objects over the center-cropped preview (same crop as PreviewView FILL_CENTER). */
 @Composable

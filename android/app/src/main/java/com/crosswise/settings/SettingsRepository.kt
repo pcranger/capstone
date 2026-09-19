@@ -14,6 +14,9 @@ import com.crosswise.feedback.Verbosity
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
+/** Typeface for the whole app; see docs/UI_DESIGN.md. */
+enum class AppFont { MODERN, CLASSIC, HYPERLEGIBLE }
+
 data class AppSettings(
     val speech: Boolean = true,
     val tones: Boolean = true,
@@ -30,6 +33,9 @@ data class AppSettings(
     val showPreview: Boolean = true,
     val showOverlay: Boolean = true,
     val logSessions: Boolean = false,
+    val appFont: AppFont = AppFont.MODERN,
+    /** Low-vision mode: the phase word takes the whole bottom panel instead of a compact line. */
+    val largeStatus: Boolean = false,
     /** Absolute path of a user-imported model, or null for the bundled asset. */
     val customModelPath: String? = null,
     val acceptedSafetyNotice: Boolean = false,
@@ -56,6 +62,8 @@ class SettingsRepository(context: Context) {
         val haptics = booleanPreferencesKey("haptics")
         val speechRate = floatPreferencesKey("speech_rate")
         val verbosity = stringPreferencesKey("verbosity")
+        val appFont = stringPreferencesKey("app_font")
+        val largeStatus = booleanPreferencesKey("large_status")
         val aimSonar = booleanPreferencesKey("aim_sonar")
         val veer = booleanPreferencesKey("veer")
         val vehicleAlerts = booleanPreferencesKey("vehicle_alerts")
@@ -80,6 +88,8 @@ class SettingsRepository(context: Context) {
             p[Keys.haptics] = next.haptics
             p[Keys.speechRate] = next.speechRate
             p[Keys.verbosity] = next.verbosity.name
+            p[Keys.appFont] = next.appFont.name
+            p[Keys.largeStatus] = next.largeStatus
             p[Keys.aimSonar] = next.aimSonar
             p[Keys.veer] = next.veerGuidance
             p[Keys.vehicleAlerts] = next.vehicleAlerts
@@ -104,6 +114,8 @@ class SettingsRepository(context: Context) {
             haptics = p[Keys.haptics] ?: d.haptics,
             speechRate = p[Keys.speechRate] ?: d.speechRate,
             verbosity = p[Keys.verbosity]?.let { v -> Verbosity.entries.firstOrNull { it.name == v } } ?: d.verbosity,
+            appFont = p[Keys.appFont]?.let { v -> AppFont.entries.firstOrNull { it.name == v } } ?: d.appFont,
+            largeStatus = p[Keys.largeStatus] ?: d.largeStatus,
             aimSonar = p[Keys.aimSonar] ?: d.aimSonar,
             veerGuidance = p[Keys.veer] ?: d.veerGuidance,
             vehicleAlerts = p[Keys.vehicleAlerts] ?: d.vehicleAlerts,

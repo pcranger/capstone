@@ -12,3 +12,9 @@ that is a functional requirement, not a style preference.
 
 The OFL permits bundling and redistribution in an application, including commercially, provided the font files keep
 this notice and are not sold on their own. The app does not rename the font.
+
+**Inter** — © 2016 The Inter Project Authors, SIL OFL 1.1. The app's default face: a neutral interface sans with a
+tall x-height, which is what a mainstream 2026 app is expected to look like.
+
+**Tinos** — © Steve Matteson, Apache License 2.0. Metric-compatible with Times New Roman, so the "Classic" option
+looks like Times without redistributing Microsoft's font.

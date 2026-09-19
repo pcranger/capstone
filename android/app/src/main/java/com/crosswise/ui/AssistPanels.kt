@@ -75,7 +75,7 @@ fun ScenePanel(ui: UiState, modifier: Modifier = Modifier) {
  * so the app has to say which one it is rather than report an empty, confident-looking scene.
  */
 @Composable
-fun WarningsPanel(ui: UiState, model: ModelState, modifier: Modifier = Modifier) {
+fun WarningsPanel(ui: UiState, model: ModelState, expanded: Boolean = true, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val assistOn = ui.snapshot.mode != AssistMode.IDLE
     val headphones by produceState(initialValue = true, assistOn) {
@@ -108,17 +108,29 @@ fun WarningsPanel(ui: UiState, model: ModelState, modifier: Modifier = Modifier)
         modifier
             .fillMaxWidth()
             .background(CrossWiseColors.Caution, RoundedCornerShape(Dimens.radiusCard))
-            .padding(Dimens.cardPadding)
+            .padding(horizontal = Dimens.cardPadding, vertical = Dimens.gapSmall)
             .semantics(mergeDescendants = true) {},
-        verticalArrangement = Arrangement.spacedBy(Dimens.gapSmall),
+        verticalArrangement = Arrangement.spacedBy(Dimens.gapSmall / 2),
     ) {
+        // Collapsed, it is one line that says how many checks failed; open, it lists them. Either way it is
+        // never silently hidden.
         Text(
-            stringResource(R.string.warn_title).uppercase(),
+            stringResource(R.string.warn_title).uppercase() + "  ·  " + warnings.size,
             style = MaterialTheme.typography.labelLarge,
             color = androidx.compose.ui.graphics.Color.White,
         )
-        warnings.forEach {
-            Text(it, style = MaterialTheme.typography.bodyMedium, color = androidx.compose.ui.graphics.Color.White)
+        if (expanded) {
+            warnings.forEach {
+                Text(it, style = MaterialTheme.typography.bodyMedium, color = androidx.compose.ui.graphics.Color.White)
+            }
+        } else {
+            Text(
+                warnings.first(),
+                style = MaterialTheme.typography.bodyMedium,
+                color = androidx.compose.ui.graphics.Color.White,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            )
         }
     }
 }

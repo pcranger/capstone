@@ -30,23 +30,31 @@ Everything below follows from that ranking. This is not a dashboard; it is a **s
 
 ## Type
 
-**Atkinson Hyperlegible** (Braille Institute, OFL 1.1) for the whole app. It was drawn for low-vision readers: the
-letterforms that blur into each other in other faces — `I l 1`, `O 0`, `a e s` — are given distinct shapes and
-asymmetric terminals. Using it here is a functional decision, not a stylistic one. Two weights only (400/700), so the
-rhythm stays uniform; the system falls back to the platform sans if the font is unavailable.
+Three typefaces, chosen in Settings, because this app has two audiences and they do not want the same thing.
+
+| Option | Face | For |
+|---|---|---|
+| **Modern** (default) | Inter | The interface face of the last decade — what a sighted user expects a 2026 app to look like. Tall x-height, tight spacing, neutral. |
+| **Classic** | Tinos | Metric-compatible with Times New Roman, and redistributable (Apache 2.0). For readers who simply prefer a serif. |
+| **Hyperlegible** | Atkinson Hyperlegible | Braille Institute, OFL 1.1. Drawn for low vision: `I l 1`, `O 0`, `a e s` are given distinct shapes and asymmetric terminals. |
+
+Each option is rendered *in its own face* in the settings list, so the choice is visible rather than described. Two
+weights per family (400/700) keeps the rhythm uniform whichever is picked.
 
 | Slot | Size / weight | Used for |
 |---|---|---|
-| `displayLarge` | 56sp / 700, -1% tracking | The phase word: WALK, DON'T WALK |
-| `headlineMedium` | 28sp / 700 | Screen titles (Settings) |
-| `titleLarge` | 22sp / 700 | Card headings, button labels |
-| `titleMedium` | 19sp / 700 | Setting row labels |
-| `bodyLarge` | 18sp / 400, 26sp line | Detail lines, secondary readouts |
-| `bodyMedium` | 16sp / 400, 23sp line | Spoken caption, help text |
-| `labelLarge` | 14sp / 700, +8% tracking, uppercase | Eyebrows ("WAITING"), section headers |
-| `labelMedium` | 13sp / 400 | Debug meta: model, fps, backend |
+| `displayLarge` | 52sp / 700 | The phase word, **only** when "Large status text" is on |
+| `displayMedium` | 34sp / 700 | The phase word, default |
+| `headlineMedium` | 26sp / 700 | Screen titles |
+| `titleLarge` | 20sp / 700 | Card headings, primary button |
+| `titleMedium` | 17sp / 700 | Setting rows, secondary buttons |
+| `bodyLarge` | 16sp / 400 | Detail lines |
+| `bodyMedium` | 15sp / 400 | Captions, help text |
+| `labelLarge` | 13sp / 700, tracked, uppercase | Eyebrows, section headers |
+| `labelMedium` | 12sp / 400 | Debug meta, tab labels |
 
-The jump from 56sp to 22sp is deliberate: at a glance there is exactly one thing to read.
+The phase word came down from 56sp to 34sp. At 56sp it was a billboard that covered the street; the people who
+genuinely need a billboard now turn one on in Settings, and everyone else gets their camera back.
 
 ## Color
 
@@ -80,38 +88,42 @@ preview frame. No shadows — elevation is expressed by surface lightness, which
 
 ## Layout
 
+Camera-first, following what current mobile design actually does: a full-bleed live surface with floating glass
+panels anchored in the thumb zone, rather than a form with a video thumbnail in it.
+
 ```
 ┌──────────────────────────────────────┐
-│ CrossWise                    ⚙ 56dp  │  top bar: name + quiet meta line
-│ crosswise.tflite · GPU · 23 fps      │  labelMedium, muted
-├──────────────────────────────────────┤
-│  ┌────────────────────────────────┐  │  viewfinder: inset, radius 12,
-│  │                                │  │  1dp SurfaceVariant border,
-│  │      camera + overlay          │  │  weight(1f) so it yields to
-│  │                                │  │  everything else
-│  └────────────────────────────────┘  │
+│ CrossWise                       (⚙)  │  over a top scrim, not a bar
+│ crosswise.tflite · GPU · 23 fps      │
+│                                      │
+│                                      │
+│          camera, full bleed          │  the surface, not a widget
+│          + detection overlay         │
+│                                      │
 │  ┌────────────────────────────────┐  │
-│  │ WAITING                        │  │  eyebrow, labelLarge
-│  │ DON'T WALK                     │  │  displayLarge — the hero
-│  │ Started 4 s ago                │  │  bodyLarge
-│  │ ▸ Vehicle approaching, left    │  │  hazard banner, black on amber
-│  │ "Don't walk sign."             │  │  caption, muted
-│  └────────────────────────────────┘  │
-│  ┌────────────────────────────────┐  │
-│  │          Stop assist           │  │  primary, 76dp, full width
-│  └────────────────────────────────┘  │
-│  ┌─────────────┐  ┌──────────────┐   │  secondary pair, 64dp
-│  │ I'm crossing│  │Repeat status │   │
-│  └─────────────┘  └──────────────┘   │
+│  │ CHECK BEFORE YOU RELY ON IT · 2│  │  amber, collapsed to one line
+│  ├────────────────────────────────┤  │
+│  │ ● WAITING            Details   │  │  state as a lit dot, not a block
+│  │ DON'T WALK                     │  │  34sp
+│  │ Started 4 s ago                │  │
+│  └────────────────────────────────┘  │  glass: 90% dark + hairline
+│  ┌────────┐ ┌──────────┐ ┌────┐      │
+│  │ Start  │ │ Crossing │ │ ⟳  │      │  56dp pills, single line
+│  └────────┘ └──────────┘ └────┘      │
+│  ◉ Assist  ▶ Practice  ⓘ Guide  ⚙    │  icon + label, 56dp
 └──────────────────────────────────────┘
 ```
 
-The status card sits **directly above the controls**, not floating over the preview: a thumb reaching the primary
-button passes the card, and the eye travels state → action in one move. When the preview is switched off the card
-simply grows — the layout has no hole in it.
+Three things make this work without losing the accessibility:
 
-Settings becomes cards instead of a wall of rows: one card per section (Feedback, Guidance, Detection, Model, Data),
-each with a `labelLarge` header, rows of a uniform 56dp, switch on the right, and the value shown inline on sliders.
+* **State is a lit dot beside the words**, not a colour block behind them. The panel can then stay sheer enough to
+  see the street through, and colour still carries the meaning.
+* **Scrims, not bars.** A gradient top and bottom keeps white text legible over a bright sky while showing the view.
+* **Short labels, full announcements.** The button reads "Start"; TalkBack still says "Start assist". Shrinking a
+  control should never shrink what a blind user is told.
+
+Detail (the scene panel, the full warning list) is behind a *Details* toggle, so the default screen is quiet and the
+information is one tap away — the bottom-sheet pattern, without hiding anything behind a gesture nobody discovers.
 
 ## Screens
 

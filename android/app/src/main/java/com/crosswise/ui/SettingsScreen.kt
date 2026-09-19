@@ -32,6 +32,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.crosswise.R
 import com.crosswise.feedback.Verbosity
+import com.crosswise.settings.AppFont
 import com.crosswise.settings.AppSettings
 import java.util.Locale
 
@@ -106,6 +107,39 @@ fun SettingsScreen(viewModel: CrossWiseViewModel, onBack: () -> Unit) {
                         modifier = Modifier.padding(start = Dimens.gapMedium),
                     )
                 }
+            }
+        }
+
+        SectionCard(stringResource(R.string.settings_section_display)) {
+            Text(stringResource(R.string.settings_font), style = MaterialTheme.typography.titleMedium)
+            AppFont.entries.forEach { font ->
+                val label = when (font) {
+                    AppFont.MODERN -> stringResource(R.string.font_modern)
+                    AppFont.CLASSIC -> stringResource(R.string.font_classic)
+                    AppFont.HYPERLEGIBLE -> stringResource(R.string.font_hyperlegible)
+                }
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = Dimens.touchTarget)
+                        .selectable(
+                            selected = settings.appFont == font,
+                            role = Role.RadioButton,
+                            onClick = { update { it.copy(appFont = font) } },
+                        ),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    RadioButton(selected = settings.appFont == font, onClick = null)
+                    // Each option is drawn in its own face, so the choice is visible rather than described.
+                    Text(
+                        label,
+                        style = MaterialTheme.typography.titleMedium.copy(fontFamily = familyOf(font)),
+                        modifier = Modifier.padding(start = Dimens.gapMedium),
+                    )
+                }
+            }
+            SwitchRow(stringResource(R.string.settings_large_status), settings.largeStatus) { v ->
+                update { it.copy(largeStatus = v) }
             }
         }
 
