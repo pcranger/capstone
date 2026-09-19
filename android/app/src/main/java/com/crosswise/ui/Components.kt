@@ -2,6 +2,7 @@ package com.crosswise.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -15,6 +16,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -179,4 +181,37 @@ fun GlassCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.()
         verticalArrangement = Arrangement.spacedBy(Dimens.gapSmall / 2),
         content = content,
     )
+}
+
+
+/** A compact on/off chip for controls that sit over the camera, like the mask and box switches. */
+@Composable
+fun TogglePill(label: String, checked: Boolean, onChange: (Boolean) -> Unit, modifier: Modifier = Modifier) {
+    Row(
+        modifier
+            .heightIn(min = 44.dp)
+            .clip(RoundedCornerShape(Dimens.radiusPill))
+            .background(if (checked) CrossWiseColors.Accent.copy(alpha = 0.25f) else CrossWiseColors.Glass)
+            .border(
+                1.dp,
+                if (checked) CrossWiseColors.Accent else CrossWiseColors.Hairline,
+                RoundedCornerShape(Dimens.radiusPill),
+            )
+            .toggleable(value = checked, role = Role.Switch, onValueChange = onChange)
+            .padding(horizontal = Dimens.gapMedium),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Dimens.gapSmall),
+    ) {
+        Box(
+            Modifier
+                .size(12.dp)
+                .clip(CircleShape)
+                .background(if (checked) CrossWiseColors.Accent else CrossWiseColors.OnSurfaceMuted),
+        )
+        Text(
+            label,
+            style = MaterialTheme.typography.titleMedium,
+            color = if (checked) CrossWiseColors.OnSurface else CrossWiseColors.OnSurfaceMuted,
+        )
+    }
 }

@@ -49,6 +49,8 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.heading
@@ -159,6 +161,26 @@ fun CrossWiseApp(viewModel: CrossWiseViewModel) {
                                 }
                             }
                         }
+                    }
+                    val notice by viewModel.notice.collectAsStateWithLifecycle()
+                    notice?.let { message ->
+                        // Announced as well as shown: a user who cannot read the chip still needs to know which
+                        // model just became active.
+                        LaunchedEffect(message) {
+                            kotlinx.coroutines.delay(4_000)
+                            viewModel.clearNotice()
+                        }
+                        Text(
+                            message,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = CrossWiseColors.OnSurface,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = Dimens.gutter, vertical = Dimens.gapSmall)
+                                .background(CrossWiseColors.Crossing, RoundedCornerShape(Dimens.radiusRow))
+                                .padding(horizontal = Dimens.gapMedium, vertical = Dimens.gapSmall)
+                                .semantics { liveRegion = LiveRegionMode.Assertive },
+                        )
                     }
                     BottomTabs(
                         current = if (showSettings) Tab.SETTINGS else tab,

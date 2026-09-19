@@ -6,6 +6,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -65,6 +66,7 @@ import com.crosswise.crossing.Side
 import com.crosswise.crossing.UserCommand
 import com.crosswise.crossing.VeerState
 import com.crosswise.perception.ObjectCategory
+import com.crosswise.perception.YoloOutputFormat
 import com.crosswise.settings.AppSettings
 import com.crosswise.signal.SignalPhase
 import kotlin.math.abs
@@ -105,6 +107,8 @@ fun MainScreen(
 
     val assistOn = ui.snapshot.mode != AssistMode.IDLE
     var detailsOpen by rememberSaveable { mutableStateOf(false) }
+    var showMask by rememberSaveable { mutableStateOf(true) }
+    val segmentation = (model as? ModelState.Ready)?.info?.format == YoloOutputFormat.SEGMENTATION
     val view = LocalView.current
     DisposableEffect(assistOn) {
         view.keepScreenOn = assistOn
@@ -119,6 +123,7 @@ fun MainScreen(
             // is not clipped by default, so without it the preview paints over the chrome.
             Box(Modifier.fillMaxSize().clipToBounds()) {
                 AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
+                if (showMask) SegmentationOverlay(ui.mask, Modifier.fillMaxSize())
                 if (settings.showOverlay) DetectionOverlay(ui.snapshot, ui.frameAspect, Modifier.fillMaxSize())
             }
         }
@@ -154,18 +159,48 @@ fun MainScreen(
             )
         }
 
+        // The detail stack can grow taller than the screen once the legend is open, so it scrolls within half the
+        // height instead of pushing the status card and controls off the top.
+        BoxWithConstraints(Modifier.align(Alignment.BottomCenter)) {
+        val detailMax = maxHeight * 0.5f
         Column(
             Modifier
-                .align(Alignment.BottomCenter)
                 .fillMaxWidth()
                 .padding(horizontal = Dimens.gutter)
                 .padding(bottom = Dimens.gapMedium),
             verticalArrangement = Arrangement.spacedBy(Dimens.gapSmall),
         ) {
-            WarningsPanel(ui, model, expanded = detailsOpen)
-            if (detailsOpen) ScenePanel(ui)
-            StatusPanel(ui, large = settings.largeStatus, onToggleDetails = { detailsOpen = !detailsOpen }, detailsOpen = detailsOpen)
+            Column(
+                Modifier.heightIn(max = detailMax).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(Dimens.gapSmall),
+            ) {
+            if (segmentation) {
+                // These only exist while a segmentation model is loaded, mirroring the AN-S3 controls.
+                Row(horizontalArrangement = Arrangement.spacedBy(Dimens.gapSmall)) {
+                    TogglePill(
+                        label = stringResource(R.string.seg_show_mask),
+                        checked = showMask,
+                        onChange = { showMask = it },
+                    )
+                    TogglePill(
+                        label = stringResource(R.string.seg_show_boxes),
+                        checked = settings.showOverlay,
+                        onChange = { value -> viewModel.updateSettings { it.copy(showOverlay = value) } },
+                    )
+                }
+                if (detailsOpen) SegmentationLegend()
+            }
+                WarningsPanel(ui, model, expanded = detailsOpen)
+                if (detailsOpen) ScenePanel(ui)
+            }
+            StatusPanel(
+                ui,
+                large = settings.largeStatus,
+                onToggleDetails = { detailsOpen = !detailsOpen },
+                detailsOpen = detailsOpen,
+            )
             Controls(ui.snapshot.mode, viewModel::command)
+        }
         }
     }
 }

@@ -71,9 +71,9 @@ data class ModelInfo(
  */
 class LiteRtDetector private constructor(
     private val runner: Runner,
-    val info: ModelInfo,
-    @Volatile var options: DetectorOptions,
-) : AutoCloseable {
+    override val info: ModelInfo,
+    @Volatile override var options: DetectorOptions,
+) : FrameAnalyzer {
 
     private val categories = info.labels.map(LabelMapper::categoryFor)
     private val area = info.inputWidth * info.inputHeight
@@ -86,7 +86,7 @@ class LiteRtDetector private constructor(
     private val padColor = Color.rgb(114, 114, 114)
 
     /** Detects objects in an upright frame. Not thread-safe: call from a single analysis thread. */
-    fun detect(frame: Bitmap, timestampMs: Long): FrameDetections {
+    override fun detect(frame: Bitmap, timestampMs: Long): FrameDetections {
         val start = SystemClock.elapsedRealtime()
         val letterbox = Letterbox(frame.width, frame.height, info.inputWidth, info.inputHeight)
         canvas.drawColor(padColor)

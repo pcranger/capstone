@@ -29,6 +29,8 @@ enum class YoloOutputFormat {
     RAW_CHANNELS_LAST,
     /** [1, maxDet, 6]: x1, y1, x2, y2, score, class (YOLO26 / YOLOv10 NMS-free export). */
     END_TO_END,
+    /** [1, 4 + nc + 32, anchors] plus a prototype tensor: handled by SegmentationDetector, not this decoder. */
+    SEGMENTATION,
 }
 
 object YoloDecoder {

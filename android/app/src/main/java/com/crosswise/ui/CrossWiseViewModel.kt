@@ -9,6 +9,7 @@ import android.view.KeyEvent
 import androidx.core.graphics.get
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.crosswise.R
 import com.crosswise.camera.CameraPipeline
 import com.crosswise.crossing.AssistMode
 import com.crosswise.crossing.CrossingEngine
@@ -20,7 +21,10 @@ import com.crosswise.feedback.Phrase
 import com.crosswise.feedback.Priority
 import com.crosswise.logging.SessionLogger
 import com.crosswise.perception.DetectorOptions
+import com.crosswise.perception.FrameAnalyzer
 import com.crosswise.perception.LiteRtDetector
+import com.crosswise.perception.SegmentationDetector
+import com.crosswise.perception.YoloOutputFormat
 import com.crosswise.perception.ModelInfo
 import com.crosswise.perception.ASSET_PREFIX
 import com.crosswise.perception.ModelSource
@@ -57,6 +61,8 @@ data class UiState(
     val caption: String? = null,
     /** Mean luminance of the last analysed frame, 0..1 — feeds the "too dark / lens covered" warning. */
     val frameBrightness: Float = 0.5f,
+    /** Segmentation mask from the active model, or null when a box model is loaded. */
+    val mask: Bitmap? = null,
 )
 
 class CrossWiseViewModel(application: Application) : AndroidViewModel(application) {
@@ -85,11 +91,12 @@ class CrossWiseViewModel(application: Application) : AndroidViewModel(applicatio
     private val detectorLock = Any()
 
     @Volatile
-    private var detector: LiteRtDetector? = null
+    private var detector: FrameAnalyzer? = null
     private var loadedModelKey: Pair<String?, Boolean>? = null
 
     private var fps = 0f
     private val modelLibraryState = MutableStateFlow<List<ModelSource>>(emptyList())
+    private val noticeState = MutableStateFlow<String?>(null)
     private var lastFrameMs = 0L
     private var brightness = 0.5f
     private var lastPublishMs = 0L
@@ -237,6 +244,7 @@ class CrossWiseViewModel(application: Application) : AndroidViewModel(applicatio
                 } ?: error("Cannot open the selected file")
                 settingsRepository.update { it.copy(customModelPath = target.absolutePath) }
                 refreshModelLibrary()
+                noticeState.value = app.getString(R.string.notice_model_imported, target.name)
             }.onFailure {
                 Log.e(TAG, "Model import failed", it)
                 modelState.value = ModelState.Failed(it.message ?: "Import failed")
@@ -248,6 +256,13 @@ class CrossWiseViewModel(application: Application) : AndroidViewModel(applicatio
 
     /** Everything the app can load right now: models shipped in the APK plus everything imported since. */
     val modelLibrary: StateFlow<List<ModelSource>> get() = modelLibraryState.asStateFlow()
+
+    /** One-shot message for the UI (and TalkBack): a model was imported, switched, or failed to load. */
+    val notice: StateFlow<String?> get() = noticeState.asStateFlow()
+
+    fun clearNotice() {
+        noticeState.value = null
+    }
 
     fun selectModel(source: ModelSource) = updateSettings { it.copy(customModelPath = source.reference) }
 
@@ -298,15 +313,24 @@ class CrossWiseViewModel(application: Application) : AndroidViewModel(applicatio
                 return@launch
             }
             try {
-                val loaded = LiteRtDetector.create(
-                    app, source, DetectorOptions(preferGpu = s.useGpu, scoreThreshold = s.scoreThreshold),
-                )
+                val detectorOptions = DetectorOptions(preferGpu = s.useGpu, scoreThreshold = s.scoreThreshold)
+                val loaded = if (isSegmentation(source)) {
+                    SegmentationDetector.create(app, source, detectorOptions)
+                } else {
+                    LiteRtDetector.create(app, source, detectorOptions)
+                }
                 swapDetector(loaded)
                 modelState.value = ModelState.Ready(loaded.info)
+                noticeState.value = app.getString(
+                    R.string.notice_model_active,
+                    loaded.info.displayName,
+                    loaded.info.labels.size,
+                )
             } catch (t: Throwable) {
                 Log.e(TAG, "Model load failed", t)
                 swapDetector(null)
                 modelState.value = ModelState.Failed(t.message ?: t.javaClass.simpleName)
+                noticeState.value = app.getString(R.string.notice_model_failed, source.displayName)
             }
         }
     }
@@ -315,13 +339,26 @@ class CrossWiseViewModel(application: Application) : AndroidViewModel(applicatio
         refreshModelLibrary()
     }
 
+    /** Reads the output tensors once to tell a YOLO-seg export from a plain detector. */
+    private fun isSegmentation(source: ModelSource): Boolean = runCatching {
+        val bytes = when (source) {
+            is ModelSource.Asset -> app.assets.open(source.path).use { it.readBytes() }
+            is ModelSource.LocalFile -> java.io.File(source.path).readBytes()
+        }
+        val buffer = java.nio.ByteBuffer.allocateDirect(bytes.size)
+            .order(java.nio.ByteOrder.nativeOrder()).apply { put(bytes); rewind() }
+        org.tensorflow.lite.Interpreter(buffer, org.tensorflow.lite.Interpreter.Options().setNumThreads(1)).use {
+            SegmentationDetector.looksLikeSegmentation(it)
+        }
+    }.getOrDefault(false)
+
     private fun bundledModel(): ModelSource? {
         val names = runCatching { app.assets.list("models")?.toList() }.getOrNull().orEmpty()
         val name = names.firstOrNull { it == BUNDLED_MODEL } ?: names.firstOrNull { it.endsWith(".tflite") }
         return name?.let { ModelSource.Asset("models/$it") }
     }
 
-    private fun swapDetector(next: LiteRtDetector?) {
+    private fun swapDetector(next: FrameAnalyzer?) {
         val previous = synchronized(detectorLock) {
             val old = detector
             detector = next
@@ -355,6 +392,7 @@ class CrossWiseViewModel(application: Application) : AndroidViewModel(applicatio
                 inferenceMs = inferenceMs ?: it.inferenceMs,
                 frameAspect = frameAspect ?: it.frameAspect,
                 frameBrightness = brightness,
+                mask = detector?.mask,
             )
         }
     }
