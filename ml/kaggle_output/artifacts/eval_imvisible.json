@@ -1,0 +1,19 @@
+{
+  "images": 739,
+  "accuracy": 0.8389715832205683,
+  "red_called_green_rate": 0.05752212389380531,
+  "green_called_red_rate": 0.06100217864923747,
+  "red_recall": 0.831858407079646,
+  "green_recall": 0.8366013071895425,
+  "confusion": {
+    "ped_red->ped_red": 188,
+    "ped_red->ped_green": 13,
+    "ped_red->none": 25,
+    "ped_green->ped_red": 28,
+    "ped_green->ped_green": 384,
+    "ped_green->none": 47,
+    "none->ped_red": 4,
+    "none->ped_green": 2,
+    "none->none": 48
+  }
+}

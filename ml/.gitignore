@@ -6,4 +6,6 @@ runs/
 __pycache__/
 .ipynb_checkpoints/
 .kaggle_build/
-kaggle_output/
+
+# Kaggle training output, including crosswise_v1_best.tflite, is tracked.
+!kaggle_output/**

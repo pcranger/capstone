@@ -8,8 +8,10 @@ DTLD/
 VIDVIP/
 ml/data/
 ml/runs/
-ml/kaggle_output/
 ml/.kaggle_build/
+
+# Kaggle training output, including crosswise_v1_best.tflite, is tracked.
+!ml/kaggle_output/**
 
 # Model binaries are produced by ml/ (see ml/README.md to build or download one).
 *.tflite

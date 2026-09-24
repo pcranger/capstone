@@ -1,0 +1,25 @@
+{
+  "weights": "/kaggle/temp/runs/detect/crosswise_v0/weights/best.pt",
+  "split": "val",
+  "mAP50-95": 0.5904104110872217,
+  "mAP50": 0.8789619466044939,
+  "per_class_mAP50-95": {
+    "ped_red": 0.6145799554796182,
+    "ped_green": 0.5114928779989188,
+    "crosswalk": 0.46622054777579064,
+    "person": 0.5998922561860718,
+    "bicycle": 0.5520680232380395,
+    "car": 0.6674563776201531,
+    "motorcycle": 0.571444152581306,
+    "bus": 0.6938312711231608,
+    "truck": 0.6367082377819362
+  },
+  "red_boxes_called_green": 0.005714285714285714,
+  "green_boxes_called_red": 0.003003003003003003,
+  "counts": {
+    "true_red": 350.0,
+    "true_green": 333.0,
+    "red_as_green": 2.0,
+    "green_as_red": 1.0
+  }
+}
