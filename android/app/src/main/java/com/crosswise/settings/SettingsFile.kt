@@ -47,8 +47,8 @@ class SettingsFile(context: Context) {
                 put("customModelPath", settings.customModelPath ?: JSONObject.NULL)
                 put("geminiEnabled", settings.geminiEnabled)
                 put("navigationEnabled", settings.navigationEnabled)
-                put("geminiApiKey", settings.geminiApiKey)
-                put("mapsApiKey", settings.mapsApiKey)
+
+
             }
             file.parentFile?.mkdirs()
             file.writeText(json.toString(2))

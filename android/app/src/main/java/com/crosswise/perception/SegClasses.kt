@@ -6,8 +6,7 @@ import android.graphics.Color
  * The sixteen sidewalk classes and the palette from the AN-S3 project (UOW research), kept byte-identical so a
  * model trained there is read here exactly as its authors intended — same order, same colours, same legend.
  *
- * These are surfaces and regions, not the traffic objects this app's crossing logic is built on, so only the four
- * that overlap are mapped onto CrossWise categories; the rest exist to be seen, not to steer a decision.
+ * These are surfaces and regions. Broad labels must not imply a specific crossing or pedestrian signal state.
  */
 object SegClasses {
 
@@ -36,15 +35,18 @@ object SegClasses {
     )
 
     /**
-     * Only where the meaning genuinely carries over. "Markings" becomes a crosswalk because painted road markings
-     * are what the crossing logic looks for; "Signals" becomes an unverified traffic light because this model
-     * knows a signal is present but not what colour it shows.
+     * Map explicit labels, not class positions. Markings include parking bays and lane paint;
+     * People/Animals cannot establish that a person is present.
      */
-    fun categoryOf(index: Int): ObjectCategory = when (LABELS.getOrNull(index)) {
-        "People/Animals" -> ObjectCategory.PERSON
-        "Vehicles" -> ObjectCategory.CAR
-        "Signals" -> ObjectCategory.TRAFFIC_LIGHT
-        "Markings" -> ObjectCategory.CROSSWALK
-        else -> ObjectCategory.OTHER
+    fun categoryFor(label: String): ObjectCategory = when (val name = LabelMapper.normalize(label)) {
+        "vehicles" -> ObjectCategory.CAR
+        "signals" -> ObjectCategory.TRAFFIC_LIGHT
+        else -> LabelMapper.CANONICAL[name] ?: ObjectCategory.OTHER
+    }
+
+    fun labelsFor(classes: Int, names: List<String>?): List<String> {
+        require(classes > 0) { "Invalid segmentation class count." }
+        require(names == null || names.size == classes) { "Segmentation labels do not match the model output." }
+        return names?.toList() ?: List(classes) { "class_$it" }
     }
 }

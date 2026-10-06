@@ -20,6 +20,7 @@ class Speaker(context: Context) {
 
     @Volatile
     private var ready = false
+    @Volatile private var failed = false
 
     /** The most recent urgent message requested while the TTS engine was still starting (guarded by [lock]). */
     private var beforeReady: Pair<String, Priority>? = null
@@ -32,7 +33,7 @@ class Speaker(context: Context) {
         }
 
     private val tts: TextToSpeech = TextToSpeech(context.applicationContext) { status ->
-        if (status == TextToSpeech.SUCCESS) onReady() else Log.e(TAG, "TTS init failed: $status")
+        if (status == TextToSpeech.SUCCESS) onReady() else { failed = true; synchronized(lock) { beforeReady = null }; Log.e(TAG, "TTS init failed: $status") }
     }
 
     private fun onReady() {
@@ -89,9 +90,11 @@ class Speaker(context: Context) {
             }
             if (queueMode == TextToSpeech.QUEUE_FLUSH) pending.clear()
             pending[id] = priority
-            tts.speak(text, queueMode, Bundle(), id)
+            if (tts.speak(text, queueMode, Bundle(), id) == TextToSpeech.ERROR) pending.remove(id)
         }
     }
+
+    val busy: Boolean get() = synchronized(lock) { !failed && (!ready || pending.isNotEmpty() || beforeReady != null) }
 
     fun stop() {
         if (!ready) return

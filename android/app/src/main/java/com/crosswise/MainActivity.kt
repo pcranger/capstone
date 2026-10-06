@@ -1,7 +1,6 @@
 package com.crosswise
 
 import android.os.Bundle
-import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -27,7 +26,4 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /** Hands-free control: works with the phone in a chest mount or pocket-less lanyard. */
-    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean =
-        viewModel.handleVolumeKey(keyCode, event.repeatCount) || super.onKeyDown(keyCode, event)
 }

@@ -15,6 +15,8 @@ import kotlin.math.sqrt
 
 data class GeoPoint(val latitude: Double, val longitude: Double)
 
+data class PlaceCandidate(val id: String, val name: String, val address: String, val point: GeoPoint)
+
 data class RouteStep(val instruction: String, val distanceMeters: Int)
 
 data class WalkingRoute(
@@ -38,46 +40,33 @@ class NavigationService {
         withContext(Dispatchers.IO) {
             if (apiKey.isBlank()) return@withContext Result.failure(IllegalStateException("No Maps API key set"))
             runCatching {
-                val place = searchPlace(query, from, apiKey)
+                val place = search(query, from, apiKey).firstOrNull() ?: error("No matching place")
                 route(from, place, apiKey)
             }.onFailure { Log.w(TAG, "findRoute failed", it) }
         }
 
-    private class Place(val name: String, val point: GeoPoint)
-
-    private fun searchPlace(query: String, from: Location, apiKey: String): Place {
-        val body = JSONObject()
-            .put("textQuery", query)
-            .put("maxResultCount", 5)
-            .put(
-                "locationBias",
-                JSONObject().put(
-                    "circle",
-                    JSONObject()
-                        .put(
-                            "center",
-                            JSONObject().put("latitude", from.latitude).put("longitude", from.longitude),
-                        )
-                        .put("radius", 5_000.0),
-                ),
-            )
-        val response = post(
-            url = "https://places.googleapis.com/v1/places:searchText",
-            body = body.toString(),
-            apiKey = apiKey,
-            fieldMask = "places.displayName,places.location,places.formattedAddress",
-        )
-        val places = JSONObject(response).optJSONArray("places")
-            ?: error("No place matched \"$query\"")
-        val first = places.optJSONObject(0) ?: error("No place matched \"$query\"")
-        val location = first.getJSONObject("location")
-        return Place(
-            name = first.optJSONObject("displayName")?.optString("text").orEmpty().ifBlank { query },
-            point = GeoPoint(location.getDouble("latitude"), location.getDouble("longitude")),
-        )
+    suspend fun search(query: String, from: Location?, apiKey: String): List<PlaceCandidate> = withContext(Dispatchers.IO) {
+        val body = JSONObject().put("textQuery", query).put("maxResultCount", 3)
+        if (from != null) body.put("locationBias", JSONObject().put("circle", JSONObject()
+            .put("center", JSONObject().put("latitude", from.latitude).put("longitude", from.longitude)).put("radius", 5000)))
+        val response = JSONObject(post("https://places.googleapis.com/v1/places:searchText", body.toString(), apiKey,
+            "places.id,places.displayName,places.location,places.formattedAddress"))
+        val values = response.optJSONArray("places") ?: JSONArray()
+        (0 until values.length()).map { candidate(values.getJSONObject(it)) }
     }
+    suspend fun details(id: String, apiKey: String): PlaceCandidate = withContext(Dispatchers.IO) {
+        require(id.matches(Regex("[A-Za-z0-9_-]+")))
+        candidate(JSONObject(post("https://places.googleapis.com/v1/places/$id", null, apiKey, "id,displayName,location,formattedAddress")))
+    }
+    private fun candidate(json: JSONObject): PlaceCandidate {
+        val point = json.getJSONObject("location")
+        return PlaceCandidate(json.getString("id"), json.optJSONObject("displayName")?.optString("text").orEmpty(),
+            json.optString("formattedAddress"), GeoPoint(point.getDouble("latitude"), point.getDouble("longitude")))
+    }
+    suspend fun walking(from: Location, to: PlaceCandidate, key: String): WalkingRoute = withContext(Dispatchers.IO) { route(from, to, key) }
 
-    private fun route(from: Location, to: Place, apiKey: String): WalkingRoute {
+
+    private fun route(from: Location, to: PlaceCandidate, apiKey: String): WalkingRoute {
         val body = JSONObject()
             .put("origin", waypoint(from.latitude, from.longitude))
             .put("destination", waypoint(to.point.latitude, to.point.longitude))
@@ -123,22 +112,22 @@ class NavigationService {
         JSONObject().put("latLng", JSONObject().put("latitude", latitude).put("longitude", longitude)),
     )
 
-    private fun post(url: String, body: String, apiKey: String, fieldMask: String): String {
+    private fun post(url: String, body: String?, apiKey: String, fieldMask: String): String {
         val connection = (URL(url).openConnection() as HttpURLConnection).apply {
-            requestMethod = "POST"
-            doOutput = true
+            requestMethod = if (body == null) "GET" else "POST"
+            doOutput = body != null
             connectTimeout = 15_000
             readTimeout = 20_000
             setRequestProperty("Content-Type", "application/json")
             setRequestProperty("X-Goog-Api-Key", apiKey)
             setRequestProperty("X-Goog-FieldMask", fieldMask)
         }
-        connection.outputStream.use { it.write(body.toByteArray()) }
+        if (body != null) connection.outputStream.use { it.write(body.toByteArray()) }
         val code = connection.responseCode
         val text = (if (code in 200..299) connection.inputStream else connection.errorStream)
             ?.bufferedReader()?.use { it.readText() }.orEmpty()
         connection.disconnect()
-        if (code !in 200..299) error("Google returned $code: ${text.take(200)}")
+        if (code !in 200..299) error("Maps request failed ($code). Retry.")
         return text
     }
 

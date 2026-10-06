@@ -17,7 +17,10 @@ import kotlinx.coroutines.flow.map
 /** Typeface for the whole app; see docs/UI_DESIGN.md. */
 enum class AppFont { MODERN, CLASSIC, HYPERLEGIBLE }
 
+enum class InterfaceMode { USER, DEVELOPER }
+
 data class AppSettings(
+    val interfaceMode: InterfaceMode = InterfaceMode.USER,
     val speech: Boolean = true,
     val tones: Boolean = true,
     val haptics: Boolean = true,
@@ -27,7 +30,7 @@ data class AppSettings(
     val veerGuidance: Boolean = true,
     val vehicleAlerts: Boolean = true,
     val autoDetectCrossing: Boolean = true,
-    val volumeKeys: Boolean = true,
+    val volumeKeys: Boolean = false,
     val useGpu: Boolean = true,
     val scoreThreshold: Float = 0.35f,
     val showPreview: Boolean = true,
@@ -39,7 +42,7 @@ data class AppSettings(
     val showScene: Boolean = false,
     val showModelLine: Boolean = false,
     val geminiEnabled: Boolean = true,
-    val navigationEnabled: Boolean = false,
+    val navigationEnabled: Boolean = true,
     val geminiApiKey: String = "",
     val mapsApiKey: String = "",
     /** Low-vision mode: the phase word takes the whole bottom panel instead of a compact line. */
@@ -52,7 +55,7 @@ data class AppSettings(
         aimSonar = aimSonar,
         veerGuidance = veerGuidance,
         vehicleAlerts = vehicleAlerts,
-        autoDetectCrossing = autoDetectCrossing,
+        autoDetectCrossing = autoDetectCrossing && interfaceMode == InterfaceMode.DEVELOPER,
         verbosity = verbosity,
     )
 
@@ -68,6 +71,7 @@ class SettingsRepository(context: Context) {
     val file = SettingsFile(context)
 
     private object Keys {
+        val interfaceMode = stringPreferencesKey("interface_mode")
         val speech = booleanPreferencesKey("speech")
         val tones = booleanPreferencesKey("tones")
         val haptics = booleanPreferencesKey("haptics")
@@ -104,6 +108,7 @@ class SettingsRepository(context: Context) {
         store.edit { p ->
             val next = transform(file.mergeInto(fromPreferences(p)))
             file.write(next)
+            p[Keys.interfaceMode] = next.interfaceMode.name
             p[Keys.speech] = next.speech
             p[Keys.tones] = next.tones
             p[Keys.haptics] = next.haptics
@@ -137,6 +142,7 @@ class SettingsRepository(context: Context) {
     private fun fromPreferences(p: Preferences): AppSettings {
         val d = AppSettings()
         return AppSettings(
+            interfaceMode = p[Keys.interfaceMode]?.let { v -> InterfaceMode.entries.firstOrNull { it.name == v } } ?: InterfaceMode.USER,
             speech = p[Keys.speech] ?: d.speech,
             tones = p[Keys.tones] ?: d.tones,
             haptics = p[Keys.haptics] ?: d.haptics,

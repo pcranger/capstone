@@ -10,6 +10,11 @@ import androidx.core.graphics.get
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.crosswise.R
+import com.crosswise.BuildConfig
+import com.crosswise.nav.JourneyCoordinator
+import com.crosswise.voice.VoiceCommands
+import com.crosswise.voice.VoiceInput
+import com.crosswise.settings.InterfaceMode
 import com.crosswise.ai.GeminiService
 import com.crosswise.camera.CameraPipeline
 import com.crosswise.crossing.AssistMode
@@ -104,7 +109,7 @@ class CrossWiseViewModel(application: Application) : AndroidViewModel(applicatio
     private var fps = 0f
     private val modelLibraryState = MutableStateFlow<List<ModelSource>>(emptyList())
     private val noticeState = MutableStateFlow<String?>(null)
-    private var lastFrameMs = 0L
+    @Volatile private var lastFrameMs = 0L
     private var brightness = 0.5f
     private val gemini = GeminiService()
     private val navigation = NavigationService()
@@ -119,7 +124,7 @@ class CrossWiseViewModel(application: Application) : AndroidViewModel(applicatio
     init {
         viewModelScope.launch {
             settingsRepository.settings.collect { s ->
-                engine.settings = s.engineSettings()
+                engine.settings = s.engineSettings().copy(autoDetectCrossing = s.interfaceMode == InterfaceMode.DEVELOPER && s.autoDetectCrossing && !navigatingState.value)
                 feedback.config = s.feedbackConfig()
                 // options is @Volatile: no need to wait for an inference to finish on the main thread.
                 detector?.let { it.options = it.options.copy(scoreThreshold = s.scoreThreshold) }
@@ -144,14 +149,63 @@ class CrossWiseViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    val journey = JourneyCoordinator(app, viewModelScope, BuildConfig.MAPS_API_KEY, ::speakNow)
+    val mapOpen = MutableStateFlow(false)
+    private val voice = VoiceInput(app, viewModelScope, { feedback.speaking || journey.state.value.busy }, ::handleVoice)
+    val voiceStatus get() = voice.status
+    val voiceActive get() = voice.active
+    private var home = false
+    private var foreground = false
+    private var greeted = false
+    fun homeVisible(value: Boolean) { home = value; if (!value) stopVoice() else { foreground = true; onForeground(); startVoice() } }
+    fun startVoice() {
+        if (!home || !foreground || !settings.value.speech) return
+        if (!greeted) { greeted = true; speakNow("Welcome to CrossWise. After the tone, say navigate to, then your destination.") }
+        voice.start()
+    }
+    fun toggleVoice() { if (voice.active) stopVoice() else startVoice() }
+    fun stopVoice() { voice.stop(); journey.cancel() }
+    fun frameFresh(now: Long) = lastFrameMs > 0 && now - lastFrameMs in 0..2000
+    fun stopJourney() { journey.end(); command(UserCommand.STOP_ASSIST) }
+    fun startPlannedJourney() { journey.start() }
+    fun beginCrossing() { journey.crossing(true); command(UserCommand.START_CROSSING) }
+    fun finishCrossing() { command(UserCommand.END_CROSSING); journey.crossing(false); if (journey.state.value.phase == "walking") journey.repeat() }
+    fun repeatGuidance() { if (journey.state.value.phase == "walking" && !journey.state.value.crossing) journey.repeat() else command(UserCommand.REPEAT_STATUS) }
+    fun readManual() = speakNow(VoiceCommands.MANUAL)
+    private fun handleVoice(text: String) {
+        val c = VoiceCommands.parse(text)
+        when (c?.kind) {
+            "help" -> readManual()
+            "off" -> voice.stop()
+            "navigate", "search" -> { mapOpen.value = true; journey.search(c.argument, c.kind == "navigate") }
+            "choose" -> journey.state.value.candidates.getOrNull(c.argument.toInt())?.let { journey.select(it, true) } ?: speakNow("No matching choice.")
+            "start" -> if (journey.state.value.route == null) journey.confirm(true) else journey.start()
+            "save" -> journey.save(alias = c.argument.ifBlank { null })
+            "repeat" -> repeatGuidance()
+            "pause" -> if (journey.state.value.phase == "walking") journey.pause() else speakNow("No journey running.")
+            "resume" -> journey.start()
+            "end" -> { journey.end(); command(UserCommand.STOP_ASSIST) }
+            "cancel" -> { journey.cancelPlanning(); speakNow("Cancelled.") }
+            "retry" -> if (journey.state.value.selected != null) journey.confirm() else journey.search()
+            else -> speakNow("Command not recognised. Say manual.")
+        }
+    }
+
+    init {
+        viewModelScope.launch { journey.state.collect { state ->
+            engine.settings = settings.value.engineSettings().copy(autoDetectCrossing = state.phase == "idle" && settings.value.interfaceMode == InterfaceMode.DEVELOPER && settings.value.autoDetectCrossing)
+            if (state.phase == "walking" && engine.mode == AssistMode.IDLE) command(UserCommand.START_ASSIST)
+        } }
+    }
+
     // ---- Lifecycle -------------------------------------------------------------------------------
 
-    fun onForeground() = sensors.start()
+    fun onForeground() { foreground = true; sensors.start(); journey.foreground(); if (home && !voice.active) startVoice() }
 
     fun onBackground() {
         // The camera stops in the background, so any signal state would go stale: say so and stop.
         if (engine.mode != AssistMode.IDLE) command(UserCommand.STOP_ASSIST)
-        sensors.stop()
+        sensors.stop(); foreground = false; voice.stop(); journey.background()
     }
 
     // ---- Camera frames (analysis thread) ---------------------------------------------------------
@@ -160,6 +214,7 @@ class CrossWiseViewModel(application: Application) : AndroidViewModel(applicatio
         if (wantFrame) latestFrame = frame.copy(Bitmap.Config.ARGB_8888, false).also { wantFrame = false }
         val result = synchronized(detectorLock) { detector?.detect(frame, timestampMs) } ?: return
         brightness = 0.8f * brightness + 0.2f * meanLuminance(frame)
+        if (journey.state.value.phase != "idle") engine.settings = engine.settings.copy(autoDetectCrossing = false)
         val output = engine.onFrame(result, camera.geometry)
         deliver(output.cues)
 
@@ -213,7 +268,7 @@ class CrossWiseViewModel(application: Application) : AndroidViewModel(applicatio
      * run together, and a route instruction never outranks a vehicle warning.
      */
     fun navigateTo(query: String) {
-        val key = settings.value.mapsApiKey
+        val key = BuildConfig.MAPS_API_KEY
         if (key.isBlank()) {
             noticeState.value = app.getString(R.string.nav_no_key)
             speakNow(app.getString(R.string.nav_no_key))
@@ -313,7 +368,7 @@ class CrossWiseViewModel(application: Application) : AndroidViewModel(applicatio
      */
     fun describeSurroundings() {
         if (describingState.value) return
-        val key = settings.value.geminiApiKey
+        val key = BuildConfig.GEMINI_API_KEY
         if (key.isBlank()) {
             noticeState.value = app.getString(R.string.gemini_no_key)
             speakNow(app.getString(R.string.gemini_no_key))
@@ -363,39 +418,10 @@ class CrossWiseViewModel(application: Application) : AndroidViewModel(applicatio
     fun command(command: UserCommand) {
         val now = SystemClock.elapsedRealtime()
         val output = engine.command(command, now)
-        val extra = ArrayList<Cue>()
-        when (command) {
-            UserCommand.START_ASSIST -> {
-                if (settings.value.logSessions) logger.start()
-                when (val m = modelState.value) {
-                    ModelState.Missing, is ModelState.Failed -> extra += Cue.Speak(Phrase.MODEL_MISSING, Priority.HIGH)
-                    is ModelState.Ready -> if (!m.info.hasPedestrianSignalClasses) {
-                        extra += Cue.Speak(Phrase.BASELINE_MODEL, Priority.HIGH)
-                    }
-                    ModelState.Loading -> Unit
-                }
-            }
-            UserCommand.STOP_ASSIST -> logger.stop()
-            else -> Unit
-        }
-        deliver(output.cues + extra)
+        if (command == UserCommand.START_ASSIST && settings.value.logSessions) logger.start()
+        if (command == UserCommand.STOP_ASSIST) logger.stop()
+        deliver(output.cues.filterNot { it is Cue.Speak && it.phrase in setOf(Phrase.BASELINE_MODEL) })
         publish(output.snapshot, force = true)
-    }
-
-    /** Volume up toggles crossing mode, volume down repeats the status (only while assist is on). */
-    fun handleVolumeKey(keyCode: Int, repeatCount: Int): Boolean {
-        if (!settings.value.volumeKeys || engine.mode == AssistMode.IDLE) return false
-        return when (keyCode) {
-            KeyEvent.KEYCODE_VOLUME_UP -> {
-                if (repeatCount == 0) command(UserCommand.TOGGLE_CROSSING)
-                true
-            }
-            KeyEvent.KEYCODE_VOLUME_DOWN -> {
-                if (repeatCount == 0) command(UserCommand.REPEAT_STATUS)
-                true
-            }
-            else -> false
-        }
     }
 
     fun updateSettings(transform: (AppSettings) -> AppSettings) {
@@ -493,11 +519,7 @@ class CrossWiseViewModel(application: Application) : AndroidViewModel(applicatio
                 }
                 swapDetector(loaded)
                 modelState.value = ModelState.Ready(loaded.info)
-                noticeState.value = app.getString(
-                    R.string.notice_model_active,
-                    loaded.info.displayName,
-                    loaded.info.labels.size,
-                )
+
             } catch (t: Throwable) {
                 Log.e(TAG, "Model load failed", t)
                 swapDetector(null)
@@ -541,7 +563,10 @@ class CrossWiseViewModel(application: Application) : AndroidViewModel(applicatio
 
     private fun deliver(cues: List<Cue>) {
         if (cues.isEmpty()) return
-        feedback.dispatch(cues)
+        val filtered = if (journey.state.value.phase == "walking" && !journey.state.value.crossing)
+            cues.filter { it !is Cue.Speak || it.priority >= Priority.HIGH } else cues
+        if (filtered.any { it is Cue.Speak || it is Cue.SpeakText }) android.os.Handler(android.os.Looper.getMainLooper()).post { voice.interrupt() }
+        feedback.dispatch(filtered)
         cues.lastOrNull { it is Cue.Speak || it is Cue.SpeakText }?.let { spoken ->
             val text = when (spoken) {
                 is Cue.Speak -> feedback.textOf(spoken)
@@ -574,6 +599,7 @@ class CrossWiseViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     override fun onCleared() {
+        voice.stop(); journey.background()
         sensors.stop()
         camera.shutdown()
         logger.stop()
@@ -590,6 +616,6 @@ class CrossWiseViewModel(application: Application) : AndroidViewModel(applicatio
         )
 
         const val TAG = "CrossWiseViewModel"
-        const val BUNDLED_MODEL = "crosswise.tflite"
+        const val BUNDLED_MODEL = "yolo26n.tflite"
     }
 }

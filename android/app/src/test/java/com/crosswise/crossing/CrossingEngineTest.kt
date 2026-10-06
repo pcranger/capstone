@@ -10,6 +10,7 @@ import com.crosswise.perception.ObjectCategory
 import com.crosswise.perception.SignalColorHeuristic
 import com.crosswise.perception.SignalColor
 import com.crosswise.sensors.OrientationSample
+import com.crosswise.signal.SignalPhase
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -75,12 +76,72 @@ class CrossingEngineTest {
         }
         assertTrue(phrases().any { it == Phrase.VEHICLE_LEFT || it == Phrase.VEHICLE_CLOSE_LEFT })
 
-        // Standing still on the far side ends crossing mode.
+        // A refuge pause cannot establish arrival at the far footpath.
         walking = false
         heading = 0f
         run(6_000) { emptyList() }
+        assertEquals(AssistMode.CROSSING, engine.mode)
+        assertFalse(Phrase.CROSSING_ENDED in phrases())
+        collect(engine.command(UserCommand.END_CROSSING, now))
         assertEquals(AssistMode.SEARCHING, engine.mode)
         assertTrue(Phrase.CROSSING_ENDED in phrases())
+        assertNull(engine.snapshot.veer)
+        assertNull(engine.snapshot.crossingElapsedMs)
+        assertEquals(SignalPhase.UNKNOWN, engine.snapshot.signal.phase)
+        assertTrue(engine.command(UserCommand.END_CROSSING, now).cues.isEmpty())
+        collect(engine.command(UserCommand.START_CROSSING, now))
+        assertEquals(AssistMode.CROSSING, engine.mode)
+        assertEquals(0L, engine.snapshot.crossingElapsedMs)
+    }
+
+    private fun assertLongCrossing(isWalking: Boolean) {
+        engine.command(UserCommand.START_ASSIST, now)
+        run(1_000) { emptyList() }
+        engine.command(UserCommand.START_CROSSING, now)
+        walking = isWalking
+        run(125_000) { emptyList() }
+        assertEquals(AssistMode.CROSSING, engine.mode)
+        assertTrue(engine.snapshot.crossingElapsedMs!! >= 120_000)
+        assertTrue(engine.snapshot.veer != null)
+        assertFalse(Phrase.CROSSING_ENDED in phrases())
+        val carStart = now
+        run(1_500) { t ->
+            val h = (0.24 / (3 - (t - carStart) / 1000.0)).toFloat()
+            listOf(det(ObjectCategory.CAR, BoxF.fromCenter(0.2f, 0.6f, h * 0.8f, h), 0.9f))
+        }
+        assertTrue(phrases().any { it == Phrase.VEHICLE_LEFT || it == Phrase.VEHICLE_CLOSE_LEFT })
+    }
+
+    @Test
+    fun crossingRemainsActivePastTwoMinutesWhileStill() = assertLongCrossing(false)
+
+    @Test
+    fun crossingRemainsActivePastTwoMinutesWhileWalking() = assertLongCrossing(true)
+
+    @Test
+    fun sensorGapDoesNotCompleteCrossingButExplicitShortcutDoes() {
+        engine.command(UserCommand.START_ASSIST, 0)
+        engine.command(UserCommand.START_CROSSING, 0)
+        collect(engine.onSensors(180_000, null, false))
+        assertEquals(AssistMode.CROSSING, engine.mode)
+        assertFalse(Phrase.CROSSING_ENDED in phrases())
+        collect(engine.command(UserCommand.TOGGLE_CROSSING, 180_001))
+        assertEquals(AssistMode.SEARCHING, engine.mode)
+        assertTrue(Phrase.CROSSING_ENDED in phrases())
+    }
+
+    @Test
+    fun stoppingAssistanceCancelsWithoutClaimingCompletion() {
+        engine.command(UserCommand.START_ASSIST, now)
+        run(1_000) { emptyList() }
+        engine.command(UserCommand.START_CROSSING, now)
+        collect(engine.command(UserCommand.STOP_ASSIST, now))
+        assertEquals(AssistMode.IDLE, engine.mode)
+        assertNull(engine.snapshot.veer)
+        assertNull(engine.snapshot.crossingElapsedMs)
+        collect(engine.onSensors(180_000, null, false))
+        assertEquals(AssistMode.IDLE, engine.mode)
+        assertEquals(listOf(Phrase.ASSIST_STOPPED), phrases())
     }
 
     @Test

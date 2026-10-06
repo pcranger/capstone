@@ -1,0 +1,1 @@
+bus.jpg: Ultralytics reference image, https://github.com/ultralytics/ultralytics/blob/main/ultralytics/assets/bus.jpg (AGPL-3.0). Used only for connected-device inference regression; not included in production APK. It is not evidence of outdoor accuracy.

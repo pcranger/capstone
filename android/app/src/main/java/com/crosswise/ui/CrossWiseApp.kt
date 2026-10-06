@@ -1,7 +1,6 @@
 package com.crosswise.ui
 
 import android.Manifest
-import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -10,256 +9,62 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawingPadding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.foundation.layout.size
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.Place
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.Icon
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.LiveRegionMode
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.crosswise.R
+import androidx.lifecycle.*
+import androidx.lifecycle.compose.*
 
 @Composable
-fun CrossWiseApp(viewModel: CrossWiseViewModel) {
-    val settings by viewModel.settings.collectAsStateWithLifecycle()
-    val settingsLoaded by viewModel.settingsLoaded.collectAsStateWithLifecycle()
+fun CrossWiseApp(vm: CrossWiseViewModel) {
+    val settings by vm.settings.collectAsStateWithLifecycle()
+    val loaded by vm.settingsLoaded.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    var hasCamera by remember {
-        mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED)
+    fun granted(permission: String) = ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
+    var camera by remember { mutableStateOf(granted(Manifest.permission.CAMERA)) }
+    var asked by rememberSaveable { mutableStateOf(false) }
+    var permissionReady by remember { mutableStateOf(false) }
+    var panel by rememberSaveable { mutableStateOf<String?>(null) }
+    val mapOpen by vm.mapOpen.collectAsStateWithLifecycle()
+    val journey by vm.journey.state.collectAsStateWithLifecycle()
+    LaunchedEffect(journey.phase) { if (journey.phase == "walking") vm.mapOpen.value = false }
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        camera = granted(Manifest.permission.CAMERA); permissionReady = true; vm.journey.foreground()
     }
-    var askedForCamera by rememberSaveable { mutableStateOf(false) }
-    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        hasCamera = granted
-        askedForCamera = true
+    LaunchedEffect(loaded) {
+        if (loaded && !asked) { asked = true; launcher.launch(arrayOf(Manifest.permission.CAMERA, Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.RECORD_AUDIO)) }
+        else if (loaded) permissionReady = true
     }
-    var showSettings by rememberSaveable { mutableStateOf(false) }
-    var tab by rememberSaveable { mutableStateOf(Tab.ASSIST) }
-
-    // Re-check when returning from the system settings screen.
-    val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner) {
+    val owner = LocalLifecycleOwner.current
+    DisposableEffect(owner) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                hasCamera = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
-                    PackageManager.PERMISSION_GRANTED
-            }
+            if (event == Lifecycle.Event.ON_START) { camera = granted(Manifest.permission.CAMERA); vm.onForeground() }
+            if (event == Lifecycle.Event.ON_STOP) vm.onBackground()
         }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+        owner.lifecycle.addObserver(observer)
+        onDispose { owner.lifecycle.removeObserver(observer) }
     }
-
-    LaunchedEffect(settingsLoaded, settings.acceptedSafetyNotice) {
-        if (settingsLoaded && settings.acceptedSafetyNotice && !hasCamera) {
-            permissionLauncher.launch(Manifest.permission.CAMERA)
-        }
-    }
-    BackHandler(enabled = showSettings || tab != Tab.ASSIST) {
-        showSettings = false
-        tab = Tab.ASSIST
-    }
-
+    LaunchedEffect(panel, permissionReady) { vm.homeVisible(permissionReady && panel == null) }
+    BackHandler(panel != null || mapOpen) { if (panel != null) panel = null else vm.mapOpen.value = false }
+    if (!loaded) return
     Box(Modifier.fillMaxSize().background(CrossWiseColors.Background).safeDrawingPadding()) {
-        when {
-            !settingsLoaded -> Unit
-            !settings.acceptedSafetyNotice -> MessageScreen(
-                title = stringResource(R.string.safety_title),
-                body = stringResource(R.string.safety_body),
-                action = stringResource(R.string.safety_accept),
-                onAction = { viewModel.updateSettings { it.copy(acceptedSafetyNotice = true) } },
-            )
-            !hasCamera -> MessageScreen(
-                title = stringResource(R.string.app_name),
-                body = stringResource(R.string.camera_permission_needed),
-                action = stringResource(R.string.action_grant_camera),
-                onAction = {
-                    val activity = context as? Activity
-                    val canAskAgain = activity == null ||
-                        ActivityCompat.shouldShowRequestPermissionRationale(activity, Manifest.permission.CAMERA)
-                    if (askedForCamera && !canAskAgain) {
-                        // "Don't ask again" was chosen: the system dialog would not appear, so open app settings.
-                        context.startActivity(
-                            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null)),
-                        )
-                    } else {
-                        permissionLauncher.launch(Manifest.permission.CAMERA)
-                    }
-                },
-            )
-            else -> {
-                // Assist stays mounted under the other tabs so the camera, engine and announcements keep running
-                // while the traveler reads the guide or practises a cue. Only its semantics are hidden.
-                val assistVisible = tab == Tab.ASSIST && !showSettings
-                Column(Modifier.fillMaxSize()) {
-                    Box(Modifier.weight(1f)) {
-                        MainScreen(
-                            viewModel,
-                            settings,
-                            onOpenSettings = { showSettings = true },
-                            modifier = if (assistVisible) Modifier else Modifier.clearAndSetSemantics {},
-                        )
-                        if (!assistVisible) {
-                            Box(
-                                Modifier
-                                    .fillMaxSize()
-                                    .background(CrossWiseColors.Background)
-                                    .clickable(
-                                        interactionSource = remember { MutableInteractionSource() },
-                                        indication = null,
-                                    ) {},
-                            ) {
-                                when {
-                                    showSettings -> SettingsScreen(viewModel, onBack = { showSettings = false })
-                                    tab == Tab.NAVIGATE -> NavigateScreen(viewModel)
-                                    tab == Tab.PRACTICE -> PracticeScreen(viewModel)
-                                    tab == Tab.GUIDE -> GuideScreen(viewModel)
-                                    else -> Unit
-                                }
-                            }
-                        }
-                    }
-                    val notice by viewModel.notice.collectAsStateWithLifecycle()
-                    notice?.let { message ->
-                        // Announced as well as shown: a user who cannot read the chip still needs to know which
-                        // model just became active.
-                        LaunchedEffect(message) {
-                            kotlinx.coroutines.delay(4_000)
-                            viewModel.clearNotice()
-                        }
-                        Text(
-                            message,
-                            style = MaterialTheme.typography.titleMedium,
-                            color = CrossWiseColors.OnSurface,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = Dimens.gutter, vertical = Dimens.gapSmall)
-                                .background(CrossWiseColors.Crossing, RoundedCornerShape(Dimens.radiusRow))
-                                .padding(horizontal = Dimens.gapMedium, vertical = Dimens.gapSmall)
-                                .semantics { liveRegion = LiveRegionMode.Assertive },
-                        )
-                    }
-                    BottomTabs(
-                        current = if (showSettings) Tab.SETTINGS else tab,
-                        navigationEnabled = settings.navigationEnabled,
-                        onSelect = { selected ->
-                            showSettings = selected == Tab.SETTINGS
-                            if (selected != Tab.SETTINGS) tab = selected
-                        },
-                    )
+        MainScreen(vm, settings, onOpenSettings = { panel = "settings" }, onMap = { vm.mapOpen.value = true }, hasCamera = camera,
+            onPermission = { context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}"))) },
+            modifier = if (mapOpen || panel != null) Modifier.clearAndSetSemantics {} else Modifier)
+        if (mapOpen) NavigateScreen(vm, onClose = { vm.mapOpen.value = false })
+        if (panel != null) Column(Modifier.fillMaxSize().background(CrossWiseColors.Background)) {
+            when (panel) {
+                "settings" -> SettingsScreen(vm, { panel = null }, { panel = "guide" }, { panel = "practice" })
+                else -> {
+                    TextButton(onClick = { panel = "settings" }, modifier = Modifier.heightIn(min = 48.dp)) { Text("Back") }
+                    if (panel == "guide") GuideScreen(vm) else PracticeScreen(vm)
                 }
-            }
-        }
-    }
-}
-
-@Composable
-private fun MessageScreen(title: String, body: String, action: String, onAction: () -> Unit) {
-    Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(20.dp),
-    ) {
-        Text(
-            title,
-            style = MaterialTheme.typography.headlineMedium,
-            color = Color.White,
-            modifier = Modifier.semantics { heading() },
-        )
-        Text(body, color = Color.White, fontSize = 20.sp, lineHeight = 28.sp)
-        BigButton(text = action, color = CrossWiseColors.Crossing, onClick = onAction, modifier = Modifier.fillMaxWidth())
-    }
-}
-
-
-enum class Tab(val label: Int, val icon: ImageVector) {
-    ASSIST(R.string.tab_assist, Icons.Filled.LocationOn),
-    NAVIGATE(R.string.tab_navigate, Icons.Filled.Place),
-    PRACTICE(R.string.tab_practice, Icons.Filled.PlayArrow),
-    GUIDE(R.string.tab_guide, Icons.Filled.Info),
-    SETTINGS(R.string.tab_settings, Icons.Filled.Settings),
-}
-
-/**
- * Four destinations, always in the same place. Text labels rather than icons: an icon has to be learned, and the
- * people most likely to rely on this app are the least likely to see it clearly.
- */
-@Composable
-private fun BottomTabs(current: Tab, navigationEnabled: Boolean, onSelect: (Tab) -> Unit) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .background(CrossWiseColors.Surface)
-            .padding(horizontal = Dimens.gapSmall, vertical = Dimens.gapSmall),
-        horizontalArrangement = Arrangement.spacedBy(Dimens.gapSmall),
-    ) {
-        Tab.entries.filter { it != Tab.NAVIGATE || navigationEnabled }.forEach { entry ->
-            val selected = entry == current
-            val tint = if (selected) CrossWiseColors.Accent else CrossWiseColors.OnSurfaceMuted
-            Column(
-                Modifier
-                    .weight(1f)
-                    .heightIn(min = Dimens.touchTarget)
-                    .background(
-                        if (selected) CrossWiseColors.GlassLight else Color.Transparent,
-                        RoundedCornerShape(Dimens.radiusRow),
-                    )
-                    .selectable(selected = selected, role = Role.Tab, onClick = { onSelect(entry) })
-                    .padding(vertical = 6.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
-            ) {
-                Icon(entry.icon, contentDescription = null, tint = tint, modifier = Modifier.size(22.dp))
-                Text(
-                    stringResource(entry.label),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = tint,
-                    textAlign = TextAlign.Center,
-                )
             }
         }
     }

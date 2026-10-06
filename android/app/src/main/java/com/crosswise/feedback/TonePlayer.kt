@@ -57,9 +57,15 @@ class TonePlayer {
     }.onFailure { Log.e(TAG, "AudioTrack unavailable", it) }.getOrNull()
 
     private val writer = Thread({
-        while (running) {
-            val buffer = queue.poll(250, TimeUnit.MILLISECONDS) ?: continue
-            track?.write(buffer, 0, buffer.size)
+        try {
+            while (running) {
+                val buffer = queue.poll(250, TimeUnit.MILLISECONDS) ?: continue
+                if (running) track?.write(buffer, 0, buffer.size)
+            }
+        } catch (_: InterruptedException) {
+            // Activity teardown interrupts the queue wait; this is normal shutdown.
+        } finally {
+            track?.release()
         }
     }, "crosswise-tones").apply {
         isDaemon = true
@@ -80,10 +86,7 @@ class TonePlayer {
         running = false
         queue.clear()
         writer.interrupt()
-        track?.run {
-            runCatching { stop() }
-            release()
-        }
+        track?.let { runCatching { it.stop() } }
     }
 
     private fun scaled(buffer: ShortArray): ShortArray = ShortArray(buffer.size) { (buffer[it] * volume).toInt().toShort() }

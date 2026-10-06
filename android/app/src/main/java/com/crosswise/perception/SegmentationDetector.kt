@@ -84,9 +84,9 @@ class SegmentationDetector private constructor(
             Detection(
                 box = d.box,
                 classIndex = d.cls,
-                label = SegClasses.LABELS.getOrElse(d.cls) { "class_${d.cls}" },
+                label = info.labels.getOrElse(d.cls) { "class_${d.cls}" },
                 score = d.score,
-                category = SegClasses.categoryOf(d.cls),
+                category = SegClasses.categoryFor(info.labels.getOrElse(d.cls) { "class_${d.cls}" }),
             )
         }
         return FrameDetections(
@@ -221,7 +221,7 @@ class SegmentationDetector private constructor(
             val protoShape = interpreter.getOutputTensor(protos).shape()
 
             val classes = headShape[1] - BOX_FEATURES - MASK_COEFFS
-            val labels = metadata?.names?.takeIf { it.size == classes } ?: SegClasses.LABELS.take(classes)
+            val labels = SegClasses.labelsFor(classes, metadata?.names)
             val info = ModelInfo(
                 displayName = source.displayName,
                 inputWidth = inShape[2],

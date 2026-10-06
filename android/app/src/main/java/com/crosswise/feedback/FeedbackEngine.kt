@@ -56,6 +56,8 @@ class FeedbackEngine(context: Context) {
         }
     }
 
+    val speaking: Boolean get() = speaker.busy
+
     fun silence() {
         speaker.stop()
         haptics.cancel()

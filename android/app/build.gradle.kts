@@ -6,16 +6,28 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+// Build-time configuration; never display or log credential values.
+val serviceEnv = rootProject.file("../../capstone_ios/.env").takeIf { it.exists() }?.readLines()
+    ?.filter { it.contains("=") && !it.trim().startsWith("#") }
+    ?.associate { it.substringBefore("=").trim() to it.substringAfter("=").trim().trim('"', '\'') }.orEmpty()
+fun serviceKey(name: String) = System.getenv(name) ?: serviceEnv[name].orEmpty()
+fun quoted(value: String) = "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+
 android {
     namespace = "com.crosswise"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.crosswise.app"
+        applicationId = providers.gradleProperty("crosswiseApplicationId").getOrElse("com.crosswise.app")
         minSdk = 26
         targetSdk = 36
         versionCode = 1
-        versionName = "0.1.0"
+        versionName = "0.2.0"
+        buildConfigField("String", "MAPS_API_KEY", quoted(serviceKey("GOOGLE_MAP_API_KEY")))
+        buildConfigField("String", "GEMINI_API_KEY", quoted(serviceKey("GEMINI_API_KEY")))
+        manifestPlaceholders["appLabel"] = if (applicationId.orEmpty().endsWith(".preview")) "CrossWise Preview" else "CrossWise"
+        manifestPlaceholders["mapsApiKey"] = serviceKey("GOOGLE_MAP_API_KEY")
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
@@ -52,6 +64,13 @@ kotlin {
 }
 
 dependencies {
+    implementation("com.google.maps.android:maps-compose:6.12.0")
+    implementation("androidx.compose.material:material-icons-extended")
+    androidTestImplementation(platform(libs.androidx.compose.bom))
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test:rules:1.6.1")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.runtime.compose)

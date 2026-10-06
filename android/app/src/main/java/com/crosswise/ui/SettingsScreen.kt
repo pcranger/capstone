@@ -28,6 +28,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -35,13 +37,18 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.crosswise.R
 import com.crosswise.feedback.Verbosity
 import com.crosswise.perception.ModelSource
+import com.crosswise.settings.InterfaceMode
+import com.crosswise.BuildConfig
 import com.crosswise.settings.AppFont
 import com.crosswise.settings.AppSettings
 import java.util.Locale
 
 @Composable
-fun SettingsScreen(viewModel: CrossWiseViewModel, onBack: () -> Unit) {
+fun SettingsScreen(viewModel: CrossWiseViewModel, onBack: () -> Unit, onGuide: () -> Unit = {}, onPractice: () -> Unit = {}) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
+    var manual by remember { mutableStateOf(false) }
+    var precautions by remember { mutableStateOf(false) }
+    val developer = settings.interfaceMode == InterfaceMode.DEVELOPER
     val model by viewModel.model.collectAsStateWithLifecycle()
     val update: ((AppSettings) -> AppSettings) -> Unit = viewModel::updateSettings
     val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -52,7 +59,6 @@ fun SettingsScreen(viewModel: CrossWiseViewModel, onBack: () -> Unit) {
         Modifier
             .fillMaxSize()
             .background(CrossWiseColors.Background)
-            .verticalScroll(rememberScrollState())
             .padding(horizontal = Dimens.gutter, vertical = Dimens.gapMedium),
         verticalArrangement = Arrangement.spacedBy(Dimens.gapMedium),
     ) {
@@ -71,6 +77,32 @@ fun SettingsScreen(viewModel: CrossWiseViewModel, onBack: () -> Unit) {
             }
         }
 
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(Dimens.gapMedium)) {
+        SectionCard("Interface") {
+            Row {
+                InterfaceMode.entries.forEach { mode ->
+                    TextButton(onClick = { update { it.copy(interfaceMode = mode) } }, modifier = Modifier.weight(1f).semantics { selected = settings.interfaceMode == mode; role = Role.Tab }) {
+                        Text((if (settings.interfaceMode == mode) "● " else "") + mode.name.lowercase().replaceFirstChar { it.uppercase() })
+                    }
+                }
+            }
+        }
+        SectionCard("Manual") {
+            TextButton(onClick = { manual = !manual }) { Text(if (manual) "Commands and voice setup ▴" else "Commands and voice setup ▾") }
+            if (manual) {
+                TextButton(onClick = viewModel::readManual) { Text("Read instructions") }
+                Hint("Speak after the tone. Say manual or man for commands.")
+                Hint("Navigate to a place and suburb. Search only finds places. First, second or third chooses a result. Confirm starts the selected route.")
+                Hint("Save as Home saves the selected place. Navigate to Home uses the saved name. Repeat, pause, resume, stop navigation, cancel, retry.")
+                Hint("Stop listening turns voice off. Tap the microphone to restart. Voice pauses during speech, Settings and backgrounding. Android requires an installed offline English recognizer.")
+                Hint("Use the map to confirm completed instructions. Choose I’m crossing when crossing, and I’m on the footpath on the far side. Automatic crossing is not implemented in User mode.")
+            }
+            TextButton(onClick = onGuide) { Text("Guide") }; TextButton(onClick = onPractice) { Text("Practice cues") }
+        }
+        SectionCard("Precautions") {
+            TextButton(onClick = { precautions = !precautions }) { Text(if (precautions) "Hide limitations" else "Read limitations") }
+            if (precautions) { Hint(stringResource(R.string.safety_body)); Hint("Stereo headphones distinguish left and right tones. Detection can miss traffic.") }
+        }
         SectionCard(stringResource(R.string.settings_section_feedback)) {
             SwitchRow(stringResource(R.string.settings_speech), settings.speech) { v -> update { it.copy(speech = v) } }
             SwitchRow(stringResource(R.string.settings_tones), settings.tones) { v -> update { it.copy(tones = v) } }
@@ -113,66 +145,12 @@ fun SettingsScreen(viewModel: CrossWiseViewModel, onBack: () -> Unit) {
             }
         }
 
-        SectionCard(stringResource(R.string.settings_section_display)) {
-            Text(stringResource(R.string.settings_font), style = MaterialTheme.typography.titleMedium)
-            AppFont.entries.forEach { font ->
-                val label = when (font) {
-                    AppFont.MODERN -> stringResource(R.string.font_modern)
-                    AppFont.CLASSIC -> stringResource(R.string.font_classic)
-                    AppFont.HYPERLEGIBLE -> stringResource(R.string.font_hyperlegible)
-                }
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = Dimens.touchTarget)
-                        .selectable(
-                            selected = settings.appFont == font,
-                            role = Role.RadioButton,
-                            onClick = { update { it.copy(appFont = font) } },
-                        ),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    RadioButton(selected = settings.appFont == font, onClick = null)
-                    // Each option is drawn in its own face, so the choice is visible rather than described.
-                    Text(
-                        label,
-                        style = MaterialTheme.typography.titleMedium.copy(fontFamily = familyOf(font)),
-                        modifier = Modifier.padding(start = Dimens.gapMedium),
-                    )
-                }
-            }
-            SwitchRow(stringResource(R.string.settings_large_status), settings.largeStatus) { v ->
-                update { it.copy(largeStatus = v) }
-            }
-            SwitchRow(stringResource(R.string.settings_show_warnings), settings.showWarnings) { v ->
-                update { it.copy(showWarnings = v) }
-            }
-            SwitchRow(stringResource(R.string.settings_show_scene), settings.showScene) { v ->
-                update { it.copy(showScene = v) }
-            }
-            SwitchRow(stringResource(R.string.settings_show_model_line), settings.showModelLine) { v ->
-                update { it.copy(showModelLine = v) }
-            }
+        if (developer) {
+        SectionCard("Services") {
+            Hint("Google Maps: " + if (BuildConfig.MAPS_API_KEY.isNotBlank()) "configured" else "not configured")
+            Hint("Scene descriptions: " + if (BuildConfig.GEMINI_API_KEY.isNotBlank()) "configured" else "not configured")
+            Hint("Configuration comes from the computer at build time.")
         }
-
-        SectionCard(stringResource(R.string.settings_section_ai)) {
-            SwitchRow(stringResource(R.string.settings_gemini), settings.geminiEnabled) { v ->
-                update { it.copy(geminiEnabled = v) }
-            }
-            SwitchRow(stringResource(R.string.settings_navigation), settings.navigationEnabled) { v ->
-                update { it.copy(navigationEnabled = v) }
-            }
-            KeyRow(
-                label = stringResource(R.string.settings_gemini_key),
-                value = settings.geminiApiKey,
-            ) { v -> update { it.copy(geminiApiKey = v) } }
-            KeyRow(
-                label = stringResource(R.string.settings_maps_key),
-                value = settings.mapsApiKey,
-            ) { v -> update { it.copy(mapsApiKey = v) } }
-            Hint(stringResource(R.string.settings_key_hint, viewModel.configPath))
-        }
-
         SectionCard(stringResource(R.string.settings_section_guidance)) {
             SwitchRow(stringResource(R.string.settings_aim_sonar), settings.aimSonar) { v ->
                 update { it.copy(aimSonar = v) }
@@ -186,9 +164,7 @@ fun SettingsScreen(viewModel: CrossWiseViewModel, onBack: () -> Unit) {
             SwitchRow(stringResource(R.string.settings_auto_crossing), settings.autoDetectCrossing) { v ->
                 update { it.copy(autoDetectCrossing = v) }
             }
-            SwitchRow(stringResource(R.string.settings_volume_keys), settings.volumeKeys) { v ->
-                update { it.copy(volumeKeys = v) }
-            }
+
         }
 
         SectionCard(stringResource(R.string.settings_section_detection)) {
@@ -273,6 +249,8 @@ fun SettingsScreen(viewModel: CrossWiseViewModel, onBack: () -> Unit) {
             }
             Hint(stringResource(R.string.settings_log_location, viewModel.logDirectory))
         }
+        } // developer
+        } // scroll
     }
 }
 
@@ -294,46 +272,5 @@ private fun SliderRow(
             onValueChangeFinished = { onCommit(local) },
             valueRange = range,
         )
-    }
-}
-
-
-/** An API key field. Shown masked, because a key on screen at a bus stop is a key in someone else's notebook. */
-@Composable
-private fun KeyRow(label: String, value: String, onChange: (String) -> Unit) {
-    var editing by remember { mutableStateOf(false) }
-    Column(Modifier.fillMaxWidth()) {
-        Text(label, style = MaterialTheme.typography.titleMedium)
-        if (editing) {
-            var draft by remember { mutableStateOf(value) }
-            OutlinedTextField(
-                value = draft,
-                onValueChange = { draft = it },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(Dimens.gapSmall)) {
-                TextButton(onClick = { onChange(draft); editing = false }) {
-                    Text(stringResource(R.string.action_save), color = CrossWiseColors.Accent)
-                }
-                TextButton(onClick = { editing = false }) {
-                    Text(stringResource(R.string.action_cancel), color = CrossWiseColors.OnSurfaceMuted)
-                }
-            }
-        } else {
-            Row(
-                Modifier.fillMaxWidth().heightIn(min = Dimens.touchTarget),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Hint(
-                    if (value.isBlank()) stringResource(R.string.settings_key_missing)
-                    else "•".repeat(8) + value.takeLast(4),
-                    Modifier.weight(1f),
-                )
-                TextButton(onClick = { editing = true }) {
-                    Text(stringResource(R.string.action_edit), color = CrossWiseColors.Accent)
-                }
-            }
-        }
     }
 }

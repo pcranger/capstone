@@ -1,435 +1,140 @@
 package com.crosswise.ui
 
-import android.os.SystemClock
 import androidx.camera.view.PreviewView
-import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.*
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.*
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalView
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.semantics.*
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.crosswise.R
-import com.crosswise.crossing.AssistMode
-import com.crosswise.crossing.EngineSnapshot
-import com.crosswise.crossing.Side
-import com.crosswise.crossing.UserCommand
-import com.crosswise.crossing.VeerState
+import com.crosswise.crossing.*
 import com.crosswise.perception.ObjectCategory
-import com.crosswise.perception.YoloOutputFormat
-import com.crosswise.settings.AppSettings
+import com.crosswise.settings.*
 import com.crosswise.signal.SignalPhase
-import kotlin.math.abs
+import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
 @Composable
-fun MainScreen(
-    viewModel: CrossWiseViewModel,
-    settings: AppSettings,
-    onOpenSettings: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
+fun MainScreen(viewModel: CrossWiseViewModel, settings: AppSettings, onOpenSettings: () -> Unit,
+    onMap: () -> Unit, hasCamera: Boolean, onPermission: () -> Unit, modifier: Modifier = Modifier) {
     val ui by viewModel.ui.collectAsStateWithLifecycle()
     val model by viewModel.model.collectAsStateWithLifecycle()
+    val journey by viewModel.journey.state.collectAsStateWithLifecycle()
+    val voice by viewModel.voiceStatus.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
-    val previewView = remember {
-        PreviewView(context).apply {
-            scaleType = PreviewView.ScaleType.FILL_CENTER
-            implementationMode = PreviewView.ImplementationMode.COMPATIBLE
-        }
+    val owner = LocalLifecycleOwner.current
+    val view = androidx.compose.ui.platform.LocalView.current
+    DisposableEffect(view) { val previous = view.keepScreenOn; view.keepScreenOn = true; onDispose { view.keepScreenOn = previous } }
+    val preview = remember { PreviewView(context).apply { scaleType = PreviewView.ScaleType.FILL_CENTER; implementationMode = PreviewView.ImplementationMode.COMPATIBLE } }
+    var retry by remember { mutableIntStateOf(0) }
+    var cameraError by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(owner, hasCamera, settings.showPreview, retry) {
+        if (hasCamera) runCatching { viewModel.camera.bind(owner, preview.takeIf { settings.showPreview }, viewModel::onFrame) }
+            .onFailure { cameraError = "Camera unavailable. Retry." }
     }
-
-    DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            when (event) {
-                Lifecycle.Event.ON_START -> viewModel.onForeground()
-                Lifecycle.Event.ON_STOP -> viewModel.onBackground()
-                else -> Unit
+    var now by remember { mutableLongStateOf(android.os.SystemClock.elapsedRealtime()) }
+    LaunchedEffect(Unit) { while (true) { delay(1000); now = android.os.SystemClock.elapsedRealtime() } }
+    val fresh = hasCamera && viewModel.frameFresh(maxOf(now, android.os.SystemClock.elapsedRealtime()))
+    val dev = settings.interfaceMode == InterfaceMode.DEVELOPER
+    var details by remember { mutableStateOf(false) }
+    var controls by remember { mutableStateOf(false) }
+    val s = ui.snapshot
+    val active = s.mode != AssistMode.IDLE
+    val hazard = s.hazards.firstOrNull().takeIf { fresh && active }
+    val status = when {
+        !hasCamera -> "Allow camera access."
+        model !is ModelState.Ready -> if (model is ModelState.Loading) "Loading detection…" else "Detection unavailable. Check Developer settings."
+        cameraError != null || !fresh -> "Camera unavailable. Retry."
+        hazard != null -> "Vehicle ${hazard.side.name.lowercase()}."
+        active && ui.frameBrightness < 0.04f -> "Camera blocked or too dark. Check the lens."
+        active && ui.frameBrightness < 0.12f -> "Too dark. Improve the view."
+        active && (s.pitchDeg ?: 0f) < -35 -> "Raise phone. Point ahead."
+        active && (s.pitchDeg ?: 0f) > 50 -> "Lower phone. Point ahead."
+        !active -> "Camera assistance off"
+        journey.phase == "walking" && !journey.crossing -> "Watching nearby traffic"
+        s.signal.phase == SignalPhase.UNKNOWN -> "No signal verified"
+        !s.signal.trusted -> "Signal colour unverified"
+        else -> s.signal.phase.name.replace('_', ' ').lowercase()
+    }
+    BoxWithConstraints(modifier.fillMaxSize().background(Color.Black)) {
+        val detailHeight = maxHeight * 0.38f
+        if (hasCamera && settings.showPreview) Box(Modifier.fillMaxSize().clipToBounds().clearAndSetSemantics {}) {
+            AndroidView(factory = { preview }, modifier = Modifier.fillMaxSize())
+            if (dev && fresh) { SegmentationOverlay(ui.mask, Modifier.fillMaxSize()); if (settings.showOverlay) DetectionOverlay(s, ui.frameAspect, Modifier.fillMaxSize()) }
+        }
+        Column(Modifier.align(Alignment.TopCenter).fillMaxWidth()) {
+            Row(Modifier.fillMaxWidth().background(CrossWiseColors.Glass).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(if (dev) "CrossWise · Developer" else "CrossWise", modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+                IconPill(Icons.Default.Mic, if (viewModel.voiceActive) "Stop listening" else "Voice", onClick = viewModel::toggleVoice)
+                IconPill(Icons.Default.Settings, "Settings", onClick = onOpenSettings)
             }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-    }
-    LaunchedEffect(lifecycleOwner, settings.showPreview) {
-        viewModel.camera.bind(lifecycleOwner, previewView.takeIf { settings.showPreview }, viewModel::onFrame)
-    }
-
-    val assistOn = ui.snapshot.mode != AssistMode.IDLE
-    var detailsOpen by rememberSaveable { mutableStateOf(false) }
-    var showMask by rememberSaveable { mutableStateOf(true) }
-    // Dismissed warnings stay dismissed until the app is reopened: a warning you have read and acted on should
-    // not keep covering the street.
-    var dismissedWarnings by rememberSaveable { mutableStateOf(emptySet<String>()) }
-    val describing by viewModel.describing.collectAsStateWithLifecycle()
-    val segmentation = (model as? ModelState.Ready)?.info?.format == YoloOutputFormat.SEGMENTATION
-    val view = LocalView.current
-    DisposableEffect(assistOn) {
-        view.keepScreenOn = assistOn
-        onDispose { view.keepScreenOn = false }
-    }
-
-    // Camera-first: the viewfinder is the surface, everything else floats over it in the thumb zone.
-    // A scrim top and bottom keeps the chrome legible over a bright sky without hiding the street.
-    Box(modifier.fillMaxSize().background(CrossWiseColors.Background)) {
-        if (settings.showPreview) {
-            // clipToBounds is required — PreviewView scales its texture to FILL_CENTER and a Compose interop view
-            // is not clipped by default, so without it the preview paints over the chrome.
-            Box(Modifier.fillMaxSize().clipToBounds()) {
-                AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
-                if (showMask) SegmentationOverlay(ui.mask, Modifier.fillMaxSize())
-                if (settings.showOverlay) DetectionOverlay(ui.snapshot, ui.frameAspect, Modifier.fillMaxSize())
+            Text(voice, style = MaterialTheme.typography.bodySmall, modifier = Modifier.background(CrossWiseColors.Glass).fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp))
+            if (dev) Row(Modifier.align(Alignment.End).padding(8.dp).background(CrossWiseColors.Glass, RoundedCornerShape(24.dp)), verticalAlignment = Alignment.CenterVertically) {
+                IconPill(if (fresh) Icons.Default.Visibility else Icons.Default.VideocamOff, status, onClick = { details = !details })
+                for ((category, icon) in listOf(ObjectCategory.CAR to Icons.Default.DirectionsCar, ObjectCategory.MOTORCYCLE to Icons.Default.TwoWheeler)) {
+                    val count = if (fresh) s.tracks.count { it.category == category }.toString() else "—"
+                    IconButton(onClick = { details = true }, modifier = Modifier.semantics { contentDescription = "${category.name}: $count" }) {
+                        Row(verticalAlignment = Alignment.CenterVertically) { Icon(icon, null, Modifier.size(18.dp)); Text(count, style = MaterialTheme.typography.labelSmall) }
+                    }
+                }
+                IconPill(Icons.Default.Warning, "Alerts: ${if (fresh) s.hazards.size else "unavailable"}", onClick = { details = true })
+                IconPill(if (details) Icons.Default.Close else Icons.Default.Tune, if (details) "Close diagnostics" else "Open diagnostics", onClick = { details = !details })
             }
-        }
-
-        Box(Modifier.fillMaxWidth().height(140.dp).align(Alignment.TopCenter).background(CrossWiseColors.TopScrim))
-        Box(Modifier.fillMaxWidth().height(260.dp).align(Alignment.BottomCenter).background(CrossWiseColors.BottomScrim))
-
-        Row(
-            Modifier
-                .align(Alignment.TopCenter)
-                .fillMaxWidth()
-                .padding(horizontal = Dimens.gutter, vertical = Dimens.gapSmall),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text(
-                    stringResource(R.string.app_name),
-                    style = MaterialTheme.typography.titleLarge,
-                    modifier = Modifier.semantics { heading() },
-                )
-                if (settings.showModelLine) {
-                    Text(
-                        modelLabel(model, ui),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = CrossWiseColors.OnSurfaceMuted,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+            if (!dev || details) Column(Modifier.padding(horizontal = 12.dp).fillMaxWidth().heightIn(max = if (dev) detailHeight else 160.dp)
+                .background(CrossWiseColors.Glass, RoundedCornerShape(12.dp)).verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(status, style = MaterialTheme.typography.titleMedium)
+                if (!hasCamera) TextButton(onClick = onPermission) { Text("Allow camera") }
+                else if (!fresh) TextButton(onClick = { cameraError = null; retry++ }) { Text("Retry camera") }
+                if (!dev && journey.phase == "walking") Text(journey.route?.steps?.getOrNull(journey.step)?.instruction.orEmpty())
+                if (dev) {
+                    Text(if (fresh) "LIVE DIAGNOSTICS · ${s.mode}" else "STALE FRAME", style = MaterialTheme.typography.labelMedium)
+                    Text((model as? ModelState.Ready)?.info?.let { "${it.displayName} · ${it.backend} · ${it.inputWidth}px" } ?: "Model unavailable")
+                    if (fresh) {
+                        Text("${ui.fps.roundToInt()} FPS · ${ui.inferenceMs} ms · Light ${(ui.frameBrightness * 100).roundToInt()}%")
+                        Text("Pitch ${s.pitchDeg?.roundToInt() ?: "—"}° · Aim ${s.aimBearingDeg?.roundToInt() ?: "—"}°")
+                        Text("Signal ${s.signal.phase} · ${if (s.signal.trusted) "model evidence" else "unverified"}")
+                        s.veer?.let { Text("Drift ${it.deviationDeg.roundToInt()}°") }
+                        s.crossingElapsedMs?.let { Text("Crossing ${it / 1000}s") }
+                        Text("${s.tracks.count { it.category.isVehicle }} vehicles · ${s.tracks.count { it.category == ObjectCategory.PERSON }} people · ${s.hazards.size} alerts")
+                        s.tracks.forEach { t ->
+                            Text("#${t.id} ${t.category} ${(t.confidence * 100).roundToInt()}% · box ${(t.box.width * 100).roundToInt()}×${(t.box.height * 100).roundToInt()}%")
+                            s.hazards.find { it.trackId == t.id }?.let { Text("${it.side} · ${it.level} · optical TTC ${"%.1f".format(it.ttcSeconds)}s", color = CrossWiseColors.Caution) }
+                        }
+                        Text("Counts include stationary objects. Optical TTC is an image estimate, not measured speed or distance.", style = MaterialTheme.typography.bodySmall)
+                    }
                 }
             }
-            IconPill(
-                icon = Icons.Filled.Settings,
-                contentDescription = stringResource(R.string.action_settings),
-                onClick = onOpenSettings,
-            )
         }
-
-        // The detail stack can grow taller than the screen once the legend is open, so it scrolls within half the
-        // height instead of pushing the status card and controls off the top.
-        BoxWithConstraints(Modifier.align(Alignment.BottomCenter)) {
-        val detailMax = maxHeight * 0.5f
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = Dimens.gutter)
-                .padding(bottom = Dimens.gapMedium),
-            verticalArrangement = Arrangement.spacedBy(Dimens.gapSmall),
-        ) {
-            Column(
-                Modifier.heightIn(max = detailMax).verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(Dimens.gapSmall),
-            ) {
-            if (segmentation) {
-                // These only exist while a segmentation model is loaded, mirroring the AN-S3 controls.
-                Row(horizontalArrangement = Arrangement.spacedBy(Dimens.gapSmall)) {
-                    TogglePill(
-                        label = stringResource(R.string.seg_show_mask),
-                        checked = showMask,
-                        onChange = { showMask = it },
-                    )
-                    TogglePill(
-                        label = stringResource(R.string.seg_show_boxes),
-                        checked = settings.showOverlay,
-                        onChange = { value -> viewModel.updateSettings { it.copy(showOverlay = value) } },
-                    )
-                }
-                if (detailsOpen) SegmentationLegend()
+        Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(CrossWiseColors.Glass), horizontalAlignment = Alignment.CenterHorizontally) {
+            if (s.mode == AssistMode.CROSSING || journey.crossing) TextButton(onClick = { viewModel.finishCrossing() }) { Text("I’m on the footpath") }
+            if (dev || controls) Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
+                if (journey.phase != "idle") {
+                    TextButton(onClick = { if (journey.phase == "walking") viewModel.journey.pause() else viewModel.journey.start() }) { Text(if (journey.phase == "walking") "Pause" else "Resume") }
+                    TextButton(onClick = { viewModel.stopJourney() }) { Text("End journey") }
+                } else TextButton(onClick = { viewModel.command(if (active) UserCommand.STOP_ASSIST else UserCommand.START_ASSIST) }) { Text(if (active) "Stop assistance" else "Start camera assistance") }
+                if (active && s.mode != AssistMode.CROSSING) TextButton(onClick = { viewModel.beginCrossing() }) { Text("I’m crossing") }
+                IconPill(Icons.Default.Refresh, "Repeat", onClick = viewModel::repeatGuidance)
             }
-                if (settings.showWarnings) {
-                    WarningsPanel(
-                        ui = ui,
-                        model = model,
-                        expanded = detailsOpen,
-                        dismissed = dismissedWarnings,
-                        onDismiss = { dismissedWarnings = dismissedWarnings + it },
-                    )
-                }
-                if (settings.showScene || detailsOpen) ScenePanel(ui)
-            }
-            StatusPanel(
-                ui,
-                large = settings.largeStatus,
-                onToggleDetails = { detailsOpen = !detailsOpen },
-                detailsOpen = detailsOpen,
-            )
-            Controls(
-                mode = ui.snapshot.mode,
-                describeEnabled = settings.geminiEnabled,
-                describing = describing,
-                onDescribe = viewModel::describeSurroundings,
-                onCommand = viewModel::command,
-            )
-        }
+            if (!dev) TextButton(onClick = { controls = !controls }) { Text(if (controls) "Hide controls" else "More controls") }
+            IconPill(Icons.Default.KeyboardArrowUp, "Show map", onClick = onMap)
         }
     }
 }
-
-@Composable
-private fun modelLabel(model: ModelState, ui: UiState): String = when (model) {
-    ModelState.Loading -> stringResource(R.string.model_loading)
-    ModelState.Missing -> stringResource(R.string.model_missing)
-    is ModelState.Failed -> stringResource(R.string.model_failed, model.message)
-    // Short backend here ("GPU"), full detail in Settings: this line must stay one line and stay quiet.
-    is ModelState.Ready -> stringResource(
-        R.string.model_ready, model.info.displayName, model.info.inputWidth,
-        model.info.backend.substringBefore(" ("),
-    ) + " · " + stringResource(R.string.perf_stats, ui.fps, ui.inferenceMs.toInt())
-}
-
-@Composable
-private fun StatusPanel(
-    ui: UiState,
-    large: Boolean,
-    detailsOpen: Boolean,
-    onToggleDetails: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val snapshot = ui.snapshot
-    val signal = snapshot.signal
-    val accent = when {
-        snapshot.mode == AssistMode.IDLE -> CrossWiseColors.Unknown
-        !signal.trusted && signal.phase != SignalPhase.UNKNOWN -> CrossWiseColors.Caution
-        signal.phase == SignalPhase.WALK && signal.freshWalk -> CrossWiseColors.Walk
-        signal.phase.isWalk -> CrossWiseColors.Caution
-        signal.phase.isDontWalk -> CrossWiseColors.DontWalk
-        snapshot.mode == AssistMode.CROSSING -> CrossWiseColors.Crossing
-        else -> CrossWiseColors.Unknown
-    }
-    val title = when (signal.phase) {
-        SignalPhase.UNKNOWN -> stringResource(R.string.phase_unknown)
-        SignalPhase.WALK -> stringResource(R.string.phase_walk)
-        SignalPhase.WALK_FLASHING -> stringResource(R.string.phase_walk_flashing)
-        SignalPhase.DONT_WALK -> stringResource(R.string.phase_dont_walk)
-        SignalPhase.DONT_WALK_FLASHING -> stringResource(R.string.phase_dont_walk_flashing)
-    }
-    val mode = when (snapshot.mode) {
-        AssistMode.IDLE -> stringResource(R.string.mode_idle)
-        AssistMode.SEARCHING -> stringResource(R.string.mode_searching)
-        AssistMode.WAITING -> stringResource(R.string.mode_waiting)
-        AssistMode.CROSSING -> stringResource(R.string.mode_crossing)
-    }
-    val detail = when {
-        signal.phase == SignalPhase.UNKNOWN -> null
-        !signal.trusted -> stringResource(R.string.phase_detail_unverified)
-        signal.phase == SignalPhase.WALK && signal.freshWalk && signal.phaseOnsetMs != null -> {
-            val seconds = ((SystemClock.elapsedRealtime() - signal.phaseOnsetMs) / 1000L).toInt()
-            stringResource(R.string.phase_detail_fresh, seconds)
-        }
-        signal.phase == SignalPhase.WALK -> stringResource(R.string.phase_detail_unknown_age)
-        else -> null
-    }
-
-    Column(
-        modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(Dimens.radiusHero))
-            .background(CrossWiseColors.Glass)
-            .border(1.dp, CrossWiseColors.Hairline, RoundedCornerShape(Dimens.radiusHero))
-            .padding(Dimens.cardPadding)
-            .semantics(mergeDescendants = true) {},
-        verticalArrangement = Arrangement.spacedBy(Dimens.gapSmall / 2),
-    ) {
-        val hasPhase = signal.phase != SignalPhase.UNKNOWN
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            // The state colour reads as a lit indicator beside the words rather than a block behind them,
-            // so the panel can stay sheer enough to see the street through.
-            Box(Modifier.size(12.dp).clip(CircleShape).background(accent))
-            Text(
-                mode.uppercase(),
-                style = MaterialTheme.typography.labelLarge,
-                color = CrossWiseColors.OnSurfaceMuted,
-                modifier = Modifier.padding(start = Dimens.gapSmall),
-            )
-            // With no phase to announce there is nothing worth a second line, so the whole card is one row.
-            if (!hasPhase) {
-                Text(
-                    "  " + title,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = CrossWiseColors.OnSurfaceMuted,
-                    modifier = Modifier.weight(1f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            } else {
-                Box(Modifier.weight(1f))
-            }
-            TextButton(onClick = onToggleDetails, modifier = Modifier.heightIn(min = 40.dp)) {
-                Text(
-                    stringResource(if (detailsOpen) R.string.action_hide_details else R.string.action_details),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = CrossWiseColors.Accent,
-                )
-            }
-        }
-        // Size follows importance, not habit: a real phase is the one thing worth covering the street for.
-        if (hasPhase) {
-            Text(
-                title,
-                style = if (large) MaterialTheme.typography.displayLarge
-                else MaterialTheme.typography.displayMedium,
-                color = Color.White,
-            )
-        }
-        if (detail != null) {
-            Text(detail, style = MaterialTheme.typography.bodyLarge, color = CrossWiseColors.OnSurfaceMuted)
-        }
-        snapshot.veer?.let { veer ->
-            val degrees = abs(veer.deviationDeg).roundToInt()
-            Text(
-                when (veer.state) {
-                    VeerState.ON_COURSE -> stringResource(R.string.veer_on_course)
-                    VeerState.DRIFTED_LEFT -> stringResource(R.string.veer_drift_left, degrees)
-                    VeerState.DRIFTED_RIGHT -> stringResource(R.string.veer_drift_right, degrees)
-                },
-                style = MaterialTheme.typography.bodyLarge,
-            )
-        }
-        snapshot.hazards.firstOrNull()?.let { hazard ->
-            val side = when (hazard.side) {
-                Side.LEFT -> stringResource(R.string.side_left)
-                Side.AHEAD -> stringResource(R.string.side_ahead)
-                Side.RIGHT -> stringResource(R.string.side_right)
-            }
-            Text(
-                stringResource(R.string.hazard_banner, side),
-                style = MaterialTheme.typography.titleMedium,
-                color = CrossWiseColors.OnHazard,
-                modifier = Modifier
-                    .padding(top = Dimens.gapSmall / 2)
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(Dimens.radiusRow))
-                    .background(CrossWiseColors.Hazard)
-                    .padding(horizontal = Dimens.gapMedium, vertical = Dimens.gapSmall),
-            )
-        }
-        ui.caption?.let {
-            Text(
-                "\u201c$it\u201d",
-                style = MaterialTheme.typography.bodyMedium,
-                color = CrossWiseColors.OnSurfaceMuted,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-    }
-}
-
-@Composable
-private fun Controls(
-    mode: AssistMode,
-    describeEnabled: Boolean,
-    describing: Boolean,
-    onDescribe: () -> Unit,
-    onCommand: (UserCommand) -> Unit,
-) {
-    val assistOn = mode != AssistMode.IDLE
-    Row(
-        Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(Dimens.gapSmall),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        BigButton(
-            text = stringResource(if (assistOn) R.string.action_stop_short else R.string.action_start_short),
-            description = stringResource(if (assistOn) R.string.action_stop_assist else R.string.action_start_assist),
-            color = if (assistOn) CrossWiseColors.DontWalk else CrossWiseColors.Walk,
-            onClick = { onCommand(if (assistOn) UserCommand.STOP_ASSIST else UserCommand.START_ASSIST) },
-            modifier = Modifier.weight(1f),
-            primary = true,
-        )
-        BigButton(
-            text = stringResource(
-                if (mode == AssistMode.CROSSING) R.string.action_crossing_end_short else R.string.action_crossing_short,
-            ),
-            description = stringResource(
-                if (mode == AssistMode.CROSSING) R.string.action_end_crossing else R.string.action_start_crossing,
-            ),
-            color = CrossWiseColors.Crossing,
-            enabled = assistOn,
-            onClick = { onCommand(UserCommand.TOGGLE_CROSSING) },
-            modifier = Modifier.weight(1f),
-        )
-        IconPill(
-            icon = Icons.Filled.Refresh,
-            contentDescription = stringResource(R.string.action_repeat_status),
-            enabled = assistOn,
-            onClick = { onCommand(UserCommand.REPEAT_STATUS) },
-        )
-        if (describeEnabled) {
-            // An icon, not a banner: it is used occasionally, and a full-width button cost a tenth of the view.
-            IconPill(
-                icon = Icons.Filled.Search,
-                contentDescription = stringResource(
-                    if (describing) R.string.action_describing else R.string.action_describe,
-                ),
-                enabled = !describing,
-                onClick = onDescribe,
-            )
-        }
-    }
-}
-
 /** Draws tracked objects over the center-cropped preview (same crop as PreviewView FILL_CENTER). */
 @Composable
 private fun DetectionOverlay(snapshot: EngineSnapshot, frameAspect: Float, modifier: Modifier) {
@@ -456,6 +161,11 @@ private fun DetectionOverlay(snapshot: EngineSnapshot, frameAspect: Float, modif
                 else -> if (track.category.isVehicle) Color(0xFF00E5FF) else Color.Gray
             }
             val box = track.box
+            val left = (offsetX + box.left * contentWidth).coerceIn(0f, size.width)
+            val top = (offsetY + box.top * contentHeight).coerceIn(0f, size.height)
+            val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { textSize = 12.dp.toPx(); this.color = color.toArgb(); typeface = android.graphics.Typeface.DEFAULT_BOLD }
+            val label = "#${track.id} ${track.category.name.lowercase()} ${(track.confidence * 100).roundToInt()}%"
+            drawContext.canvas.nativeCanvas.drawText(label, left.coerceAtMost((size.width - paint.measureText(label)).coerceAtLeast(0f)), (top - 6f).coerceAtLeast(paint.textSize), paint)
             drawRect(
                 color = color,
                 topLeft = Offset(offsetX + box.left * contentWidth, offsetY + box.top * contentHeight),

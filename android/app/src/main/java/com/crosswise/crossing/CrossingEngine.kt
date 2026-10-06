@@ -85,7 +85,6 @@ class CrossingEngine(settings: EngineSettings = EngineSettings()) {
     private var geometry = CameraGeometry(hfovDeg = 60f, vfovDeg = 45f)
     private var walking = false
     private var walkingSinceMs: Long? = null
-    private var stillSinceMs: Long? = null
     private var crossingStartMs: Long? = null
     private var searchingSinceMs = 0L
     private var lastAnySignalSeenMs: Long? = null
@@ -160,11 +159,9 @@ class CrossingEngine(settings: EngineSettings = EngineSettings()) {
         when (mode) {
             AssistMode.IDLE -> Unit
             AssistMode.CROSSING -> {
+                // A refuge stop, elapsed time or sensor gap cannot establish arrival at the far footpath.
+                // Only an explicit end command (or stopping assistance) leaves crossing mode.
                 crossingGuidance(nowMs, cues)
-                val start = crossingStartMs ?: nowMs
-                val still = stillSinceMs
-                val arrived = nowMs - start >= 6_000 && still != null && nowMs - still >= 5_000
-                if (arrived || nowMs - start >= 120_000) endCrossing(nowMs, cues)
             }
             AssistMode.SEARCHING, AssistMode.WAITING -> curbGuidance(nowMs, cues)
         }
@@ -248,9 +245,7 @@ class CrossingEngine(settings: EngineSettings = EngineSettings()) {
     private fun updateWalking(nowMs: Long, isWalking: Boolean) {
         if (isWalking) {
             if (walkingSinceMs == null) walkingSinceMs = nowMs
-            stillSinceMs = null
         } else {
-            if (stillSinceMs == null) stillSinceMs = nowMs
             walkingSinceMs = null
         }
         walking = isWalking
@@ -260,7 +255,6 @@ class CrossingEngine(settings: EngineSettings = EngineSettings()) {
         if (mode != AssistMode.SEARCHING && mode != AssistMode.WAITING) return
         mode = AssistMode.CROSSING
         crossingStartMs = nowMs
-        stillSinceMs = null
         aim.reset()
         val heading = orientation
         if (heading != null && settings.veerGuidance) {

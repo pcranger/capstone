@@ -1,6 +1,39 @@
 # CrossWise — 4-week plan, scope cuts, and test protocol
 
+**Latest revision — 6 October 2026:** [Instruction-first research and scenario assessment](INSTRUCTION_FIRST_RESEARCH_AND_SCENARIOS.md). The user rejects routine environmental questions: automatic state estimation and explicit recovery replace roadside/landmark/completion question fallbacks in older plans. Three more repositories inspected; real-photo detector inference executed; conservative segmentation-label correction implemented. The full hands-free journey is not yet implemented.
+
+**Current comprehensive plan — 5 October 2026:** [Hands-free navigation and crossing perception](HANDS_FREE_NAVIGATION_IMPLEMENTATION_PLAN.md). Based on five pinned GitHub source checkouts; supersedes conflicting earlier proposals. Includes native Scene Semantics evaluation, roadside uncertainty, capture/model integration gates and one-feature-at-a-time acceptance. Planning only; no app functionality changed by this assessment.
+
+**Latest plan, 5 October 2026:** automatic foreground location acquisition/recovery, hands-free startup dialogue, automatic ordinary route progress and crossing preparation, plus optional contextual road-side confirmation. See [redesign plan section 13](BLINDHELPER_REVIEW_AND_REDESIGN.md#13-revised-plan-automatic-startup-location-recovery-and-crossing-preparation--5-october-2026). This supersedes earlier UI priorities and optimistic crossing-distance/step claims. Planning only; physical voice validation remains pending.
+
+**Redesign increment 1, 4 October 2026:** computer-side `.env` configuration is wired; phone key editors and volume-button
+interception are removed. All 126 tests, lint/typecheck and signed Release build pass; installed on the connected iPhone.
+Launch/physical acceptance is pending because the phone and Mac were locked. The split screen is the next increment.
+See [the implementation record](BLINDHELPER_REVIEW_AND_REDESIGN.md#8-implementation-record--configuration-and-volume-cleanup-4-october-2026).
+
+**Current plan, 4 October 2026:** replace separate Assist/Go screens with Google Maps above camera guidance, remove
+volume-button shortcuts and phone API-key editors, and selectively reimplement BlindHelperApp's useful functions.
+See [the feature review and staged plan](BLINDHELPER_REVIEW_AND_REDESIGN.md). Planning only; no app changes in this update.
+The usability reassessment recommends moving Developer access into Settings, predictable Repeat/Pause controls, adaptive
+panel sizes and recovery without restarting the journey. See section 7 of that plan for uncertainties and validation tasks.
+
+
+**Latest implementation, 4 October 2026:** iPhone macro navigation now has destination/address confirmation, route preview,
+a single foreground journey, explicit instruction progress and a crossing handoff that pauses route speech. See
+[CROSSING_PLAN.md §10.9](CROSSING_PLAN.md#109-increment-macro-navigation-journey--implemented-4-october-2026).
+Live routing still needs a configured Google Maps key and a known-route field check; automatic mapped crossings remain pending.
+
+
 Start: Thu 17 Sep 2026 · Code freeze: Tue 13 Oct · Demo/report: Thu 15 Oct.
+
+**Updated planning reference, 4 October 2026:** The agreed User/Developer mode overhaul, accessible pedestrian journey,
+scenario replay, recovery behaviour and implementation priorities are tracked in
+[CROSSING_PLAN.md section 8](CROSSING_PLAN.md#8-interface-overhaul-and-pedestrian-journey). The historical week-by-week
+status below predates the iOS port; use that section for the new backlog and capability limits.
+
+**Latest scope:** micro-navigation phone testing is deferred by the user. The map research, scope reduction and
+proposed journey coordinator are in [CROSSING_PLAN.md section 10](CROSSING_PLAN.md#10-one-journey-simpler-controls-and-map-assisted-crossing-preparation).
+Only the User tab simplification is implemented in that increment; automatic map-triggered crossing handoff remains planned.
 
 ## What is already built (week 0)
 
