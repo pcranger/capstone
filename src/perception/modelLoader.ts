@@ -114,7 +114,7 @@ export function listModels(): ModelSource[] {
   return [...assets, ...files];
 }
 
-export const BUNDLED_MODEL = 'yolo26n-bdd640.tflite';
+export const BUNDLED_MODEL = 'crosswise.tflite';
 
 /** Resolves a settings reference to a source, falling back to the bundled model like the Android app. */
 export function resolveSource(reference: string | null, library: ModelSource[]): ModelSource | null {

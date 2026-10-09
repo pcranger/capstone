@@ -15,7 +15,7 @@ reference only.
 - On-device voice commands: `manual`, `man`, `navigate to …`, `search …`, `first/second/third`, `save as …`, `confirm`, `repeat`, `pause`, `resume`, `stop navigation`. Offline English recognition must be available on the device.
 - Settings contains mode selection, the manual, precautions, practice cues and developer controls. Volume keys retain normal volume behavior.
 
-YOLO26n is bundled and selected by default; the custom CrossWise model is also bundled. Detection does not establish that crossing is safe. Models and optical motion estimates still require outdoor evaluation.
+The custom CrossWise model (crosswise.tflite: pedestrian signals, crosswalks, people and vehicles) is bundled and selected by default; the YOLO26n BDD100K vehicle model is also bundled and selectable in Developer mode. Detection does not establish that crossing is safe. Models and optical motion estimates still require outdoor evaluation.
 
 ## Build and run
 
