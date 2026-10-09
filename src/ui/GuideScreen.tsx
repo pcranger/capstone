@@ -6,7 +6,7 @@ import { Text } from './ScaledText';
 import { controller } from '../state/controller';
 import { useStore } from '../state/store';
 import { S } from '../strings';
-import { Hint, SectionCard, StatRow, TextButton } from './components';
+import { BackButton, Hint, SectionCard, StatRow, TextButton } from './components';
 import { Dimens, useType } from './theme';
 import { VoiceHelp } from './VoiceHelp';
 
@@ -25,13 +25,14 @@ export function GuideScreen({ onBack }: { onBack?: () => void }) {
   const body = (text: string) => <Text style={type.bodyMedium}>{text}</Text>;
 
   return (
+    <View style={{ flex: 1 }}>
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: Dimens.gapSmall, paddingHorizontal: Dimens.gutter, paddingVertical: 8 }}>
+      {onBack && <BackButton label={S.actionBackToSettings} onPress={onBack} />}
+      <Text style={[type.headlineMedium, { flex: 1 }]} accessibilityRole="header">
+        {S.guideTitle}
+      </Text>
+    </View>
     <ScrollView contentContainerStyle={{ padding: Dimens.gutter, gap: Dimens.gapMedium }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-        <Text style={[type.headlineMedium, { flex: 1 }]} accessibilityRole="header">
-          {S.guideTitle}
-        </Text>
-        {onBack && <TextButton label={S.actionBackToSettings} onPress={onBack} />}
-      </View>
 
       <SectionCard title="Voice help"><VoiceHelp /></SectionCard>
       <SectionCard title={S.guideSectionSafety}>{body(S.safetyBody)}</SectionCard>
@@ -96,6 +97,7 @@ export function GuideScreen({ onBack }: { onBack?: () => void }) {
         <Hint>{S.guideAboutLicenses}</Hint>
       </SectionCard>
     </ScrollView>
+    </View>
   );
 }
 

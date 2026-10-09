@@ -284,6 +284,11 @@ export const S = {
   fieldDestination: 'Destination',
   fieldPlaceName: 'Saved place name',
 
+  // UI P1b
+  voiceStart: 'Start voice commands',
+  voiceStop: 'Stop listening',
+  voiceRetry: 'Retry voice',
+  noticeDismissHint: 'Tap to dismiss',
 };
 
 /** Everyday speech: observations, short confirmations and recoverable failures. Tutorials stay in Help. */

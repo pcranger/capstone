@@ -32,5 +32,17 @@ test('listening state exposes stop and stop state exposes restart', async () => 
   controller.voice.state.set({ phase: 'listening', text: 'Listening' }); await render();
   await act(async () => button('Stop listening').props.onPress()); expect(controller.stopVoice).toHaveBeenCalled();
   await act(async () => controller.voice.state.set({ phase: 'off', text: '' }));
-  await act(async () => button('Voice').props.onPress()); expect(controller.startVoice).toHaveBeenCalledWith(true);
+  await act(async () => button('Start voice commands').props.onPress()); expect(controller.startVoice).toHaveBeenCalledWith(true);
+});
+
+test('J6/J13 the mic names say what they do, and the voice status is a polite live region', async () => {
+  controller.voice.state.set({ phase: 'listening', text: 'Listening' }); await render();
+  const status = tree.root.findAll((n: any) => n.type === 'Text' && n.props.children === 'Listening…')[0];
+  expect(status.props.accessibilityLiveRegion).toBe('polite');
+  expect(button('Stop listening')).toBeDefined(); expect(button('Voice')).toBeUndefined();
+  await act(async () => controller.voice.state.set({ phase: 'off', text: '' }));
+  expect(button('Start voice commands')).toBeDefined();
+  await act(async () => controller.voice.state.set({ phase: 'error', text: 'Microphone permission is off.' }));
+  expect(button('Retry voice')).toBeDefined();
+  for (const n of tree.root.findAll((n: any) => n.props.accessibilityLiveRegion)) expect(n.props.accessibilityLiveRegion).toBe('polite');
 });

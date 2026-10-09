@@ -7,15 +7,21 @@ import { controller } from '../state/controller';
 import { useStore } from '../state/store';
 import { Verbosity } from '../feedback/cue';
 import { BUNDLED_MODEL, displayNameOf, referenceOf } from '../perception/modelLoader';
-import { InterfaceMode, type AppSettings } from '../settings/settings';
+import { AppFont, InterfaceMode, type AppSettings } from '../settings/settings';
 import { InterfaceModeSelector } from './InterfaceModeSelector';
 import { S } from '../strings';
 import { services, nativeMapConfigured } from '../config/services';
-import { BigButton, Hint, RadioRow, SectionCard, SliderRow, SwitchRow, TextButton } from './components';
-import { Colors, Dimens, useType } from './theme';
+import { BackButton, BigButton, Hint, RadioRow, SectionCard, SliderRow, SwitchRow, TextButton } from './components';
+import { Colors, Dimens, familyOf, useType } from './theme';
 import { SpeechPreview } from './SpeechPreview';
 import { VehicleVisibilityControls } from './VehicleVisibilityControls';
 import { VoiceHelp } from './VoiceHelp';
+
+const FONT_CHOICES: [AppFont, string][] = [
+  [AppFont.MODERN, S.fontModern],
+  [AppFont.CLASSIC, S.fontClassic],
+  [AppFont.HYPERLEGIBLE, S.fontHyperlegible],
+];
 
 export function SettingsScreen({ onBack, onOpenGuide, onOpenPractice }: {
   onBack: () => void;
@@ -59,11 +65,11 @@ export function SettingsScreen({ onBack, onOpenGuide, onOpenPractice }: {
 
   return (
     <View style={{ flex: 1 }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: Dimens.gutter, paddingVertical: 8 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: Dimens.gapSmall, paddingHorizontal: Dimens.gutter, paddingVertical: 8 }}>
+        <BackButton onPress={onBack} />
         <Text style={[type.headlineMedium, { flex: 1 }]} accessibilityRole="header">
           {S.settingsTitle}
         </Text>
-        <TextButton label={S.actionBack} onPress={onBack} />
       </View>
 
       <ScrollView contentContainerStyle={{ padding: Dimens.gutter, gap: Dimens.gapMedium }}>
@@ -71,7 +77,7 @@ export function SettingsScreen({ onBack, onOpenGuide, onOpenPractice }: {
         <InterfaceModeSelector value={settings.interfaceMode} onChange={set('interfaceMode')} />
       </SectionCard>
       <SectionCard title="Manual">
-        <Pressable accessibilityRole="button" accessibilityLabel="Voice manual" accessibilityState={{ expanded: manualOpen }}
+        <Pressable accessibilityRole="button" accessibilityLabel="Commands and voice setup" accessibilityState={{ expanded: manualOpen }}
           onPress={() => setManualOpen(v => !v)} style={{ minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
           <Text style={type.titleMedium}>Commands and voice setup</Text>
           <MaterialIcons name={manualOpen ? 'expand-less' : 'expand-more'} size={24} color={Colors.OnSurface} />
@@ -95,7 +101,7 @@ export function SettingsScreen({ onBack, onOpenGuide, onOpenPractice }: {
         {previewOpen && <SpeechPreview />}
       </SectionCard>}
       <SectionCard title="Precautions and limitations">
-        <Pressable accessibilityRole="button" accessibilityLabel="Precautions" accessibilityState={{ expanded: precautionsOpen }}
+        <Pressable accessibilityRole="button" accessibilityLabel="Read limitations" accessibilityState={{ expanded: precautionsOpen }}
           onPress={() => setPrecautionsOpen(v => !v)} style={{ minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
           <Text style={type.titleMedium}>Read limitations</Text>
           <MaterialIcons name={precautionsOpen ? 'expand-less' : 'expand-more'} size={24} color={Colors.OnSurface} />
@@ -119,6 +125,7 @@ export function SettingsScreen({ onBack, onOpenGuide, onOpenPractice }: {
           onCommit={set('speechRate')}
         />
         <Text style={[type.titleMedium, { marginTop: Dimens.gapSmall }]}>{S.settingsVerbosity}</Text>
+        <View accessibilityRole="radiogroup">
         {[
           [Verbosity.MINIMAL, S.verbosityMinimal],
           [Verbosity.NORMAL, S.verbosityNormal],
@@ -131,13 +138,29 @@ export function SettingsScreen({ onBack, onOpenGuide, onOpenPractice }: {
             onPress={() => set('verbosity')(level as Verbosity)}
           />
         ))}
+        </View>
       </SectionCard>
 
 
-      {developer && <SectionCard title={S.settingsSectionDisplay}>
-        <SwitchRow label={S.settingsPreview} value={settings.showPreview} onChange={set('showPreview')} />
-        <SwitchRow label={S.settingsOverlay} value={settings.showOverlay} onChange={set('showOverlay')} />
-      </SectionCard>}
+      <SectionCard title={S.settingsSectionDisplay}>
+        <Text style={type.titleMedium}>{S.settingsFont}</Text>
+        <View accessibilityRole="radiogroup">
+          {FONT_CHOICES.map(([font, label]) => (
+            <RadioRow
+              key={font}
+              label={label}
+              selected={settings.appFont === font}
+              onPress={() => set('appFont')(font)}
+              labelStyle={{ fontFamily: familyOf(font) }}
+            />
+          ))}
+        </View>
+        <SwitchRow label={S.settingsLargeStatus} value={settings.largeStatus} onChange={set('largeStatus')} />
+        {developer && <>
+          <SwitchRow label={S.settingsPreview} value={settings.showPreview} onChange={set('showPreview')} />
+          <SwitchRow label={S.settingsOverlay} value={settings.showOverlay} onChange={set('showOverlay')} />
+        </>}
+      </SectionCard>
 
       {developer && <SectionCard title="Services">
         <Hint>Google map: {nativeMapConfigured ? 'configured' : 'not configured'}</Hint>

@@ -9,7 +9,7 @@ import { usableFix } from '../nav/navigation';
 import { controller } from '../state/controller';
 import { useStore } from '../state/store';
 import { IconPill, TextButton } from './components';
-import { useType } from './theme';
+import { Colors, useType } from './theme';
 
 /** Own subscription to GPS, never to per-frame perception. Native Google attribution stays unobstructed. */
 export const MapPanel = memo(function MapPanel({ height, fullScreen = false, onExpand, bottomInset = 12, onInteract, toolsHidden = false, preview, onCandidate, onPlaceId }: { height: number; fullScreen?: boolean; onExpand?: () => void; bottomInset?: number; onInteract?: () => void; toolsHidden?: boolean; preview?: PlannerState; onCandidate?: (place: PlaceCandidate) => void; onPlaceId?: (id: string) => void }) {
@@ -99,7 +99,7 @@ export const MapPanel = memo(function MapPanel({ height, fullScreen = false, onE
     </View> : <Text style={[type.bodyLarge, styles.message]}>Map unavailable in this build. Camera assistance remains available.</Text>}
     <ScrollView accessibilityElementsHidden={toolsHidden} importantForAccessibility={toolsHidden ? 'no-hide-descendants' : 'auto'} style={[toolsHidden && { display: 'none' }, fullScreen ? [styles.floatingTools, { maxHeight: height * 0.3 }] : undefined]}>
     <View style={[styles.tools, stacked && styles.toolsStacked]}>
-      <Text style={[type.labelMedium, { width: '100%', paddingTop: 8 }]}>
+      <Text style={[type.bodyMedium, { width: '100%', paddingTop: 8, color: Colors.OnSurfaceMuted }]}>
         {locating ? 'Checking location…' : fix ? `Location accuracy: about ${Math.round(fix.accuracy ?? 0)} m` : 'Current location unavailable'}
       </Text>
       <IconPill icon="explore" label="North up" onPress={() => map.current?.animateCamera({ heading: 0, pitch: 0 })} />
@@ -117,7 +117,7 @@ export const MapPanel = memo(function MapPanel({ height, fullScreen = false, onE
 });
 
 const styles = StyleSheet.create({
-  tools: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', paddingHorizontal: 12, gap: 4 },
+  tools: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', paddingHorizontal: 12, gap: 12 },
   toolsStacked: { flexDirection: 'column', alignItems: 'stretch', flexWrap: 'nowrap' },
   message: { padding: 12 },
   floatingTools: { position: 'absolute', top: 12, left: 12, right: 84, borderRadius: 12, backgroundColor: '#161C21' },

@@ -277,7 +277,7 @@ test('first launch goes straight to the journey; general precautions are in Sett
   await press('Settings');
   expect(renderedText()).toContain('Precautions and limitations');
   expect(renderedText()).not.toContain(S.safetyBody);
-  await press('Precautions');
+  await press('Read limitations');
   expect(renderedText()).toContain(S.safetyBody);
 });
 
@@ -295,7 +295,7 @@ test('compact crossing controls never hide unfinished-crossing recovery', async 
 test('in-app help teaches exact voice turns, search versus start, fallback and recovery', async () => {
   await render(<SettingsScreen onBack={() => {}} />);
   expect(renderedText()).not.toContain('Navigate to Sydney Town Hall');
-  await press('Voice manual');
+  await press('Commands and voice setup');
   const text = renderedText();
   for (const phrase of ['Manual', 'Navigate to Sydney Town Hall', 'Save as Home', 'cannot hear commands', 'finish crossing', 'Enable Dictation']) expect(text).toContain(phrase);
   expect(button('Read voice instructions')).toBeDefined(); expect(button('Open app settings')).toBeDefined();
@@ -306,7 +306,7 @@ test('voice help enables spoken guidance when speech was disabled', async () => 
   controller.settings.set({ ...DEFAULT_SETTINGS, speech: false });
   await render(<SettingsScreen onBack={() => {}} />);
   expect(button('Read voice instructions')).toBeUndefined();
-  await press('Voice manual');
+  await press('Commands and voice setup');
   await press('Enable spoken guidance');
   expect(controller.settings.value.speech).toBe(true);
   expect(button('Read voice instructions')).toBeDefined();

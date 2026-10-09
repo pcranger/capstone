@@ -303,7 +303,7 @@ export function BackButton({ onPress, label = S.actionBack }: { onPress: () => v
       accessibilityRole="button"
       accessibilityLabel={label}
       hitSlop={8}
-      style={({ pressed }) => [styles.backButton, { opacity: pressed ? 0.7 : 1 }]}
+      style={styles.backButton}
     >
       <MaterialIcons name="arrow-back" size={24} color={Colors.Accent} />
       <Text style={[type.titleMedium, { color: Colors.Accent }]}>{label}</Text>
@@ -366,6 +366,7 @@ export const styles = StyleSheet.create({
   },
   backButton: {
     minHeight: Dimens.touchTarget,
+    minWidth: Dimens.touchTarget,
     alignSelf: 'flex-start',
     flexDirection: 'row',
     alignItems: 'center',
