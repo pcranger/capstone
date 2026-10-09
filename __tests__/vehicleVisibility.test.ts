@@ -8,7 +8,7 @@ import { P } from '../src/strings';
 
 test('motion box switches persist independently without disabling alerts',()=>{
   let s={...DEFAULT_SETTINGS};
-  const track=(motion:string)=>({category:ObjectCategory.CAR,motion} as any);
+  const track=(motion:string)=>({category:ObjectCategory.CAR,motion,motionSupported:true} as any);
   expect(visibleVehicle(track('STATIONARY'),s)).toBe(false);
   s=mergeSettings(s,{showStationaryVehicles:true,showMovingVehicles:false});
   expect(visibleVehicle(track('STATIONARY'),s)).toBe(true);
@@ -16,6 +16,11 @@ test('motion box switches persist independently without disabling alerts',()=>{
   expect(visibleVehicle(track(undefined as any),s)).toBe(false);
   expect(s.vehicleAlerts).toBe(true);
   expect(mergeSettings(s,{showStationaryVehicles:'false'}).showStationaryVehicles).toBe(true);
+});
+test('a STATIONARY track without motion evidence is shown with default settings',()=>{
+  const car=(motionSupported:boolean)=>({category:ObjectCategory.CAR,motion:'STATIONARY',motionSupported} as any);
+  expect(visibleVehicle(car(false))).toBe(true);
+  expect(visibleVehicle(car(true))).toBe(false);
 });
 test('slow detection is not reported as camera failure, and stale measurements do not revive a stream',()=>{
   const slow={...EMPTY_PIPELINE,receivedAt:1000,latencyMs:900,slowFrames:4};

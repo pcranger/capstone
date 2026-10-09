@@ -36,13 +36,15 @@ function scene(cx: number, cy: number, s: number): { img: GrayFrame; box: BoxF }
   return { img: { width: W, height: H, pixels: px }, box: new BoxF((cx - hw) / W, (cy - hh) / H, (cx + hw) / W, (cy + hh) / H) };
 }
 
+// Constant closing speed: size ~ 1/(time to contact), so growth starts at ~6% per 100 ms and speeds up (contact at 1.67 s).
+const TTC0 = 1 / 0.6;
 test('a car driving straight at the phone keeps its hazard and gets an ahead warning', () => {
   const engine = new CrossingEngine();
   engine.command(UserCommand.START_ASSIST, 0);
   const perFrame: string[] = [];
   const phrases: Phrase[] = [];
   for (let i = 0; i < 10; i++) {
-    const t = i * 100, { img, box } = scene(96, 55, Math.pow(1.06, i));
+    const t = i * 100, { img, box } = scene(96, 55, TTC0 / (TTC0 - i / 10));
     engine.onSensors(t, { timestampMs: t, headingDeg: 0, pitchDeg: 0 }, false);
     const out = engine.onFrame({ ...frame(t, det(ObjectCategory.CAR, box)), motionImage: img, brightness: 0.7 }, { hfovDeg: 60, vfovDeg: 90 });
     const id = out.snapshot.tracks[0]?.id;

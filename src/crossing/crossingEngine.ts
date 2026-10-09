@@ -276,20 +276,20 @@ export class CrossingEngine {
     this.lastTrafficFrameMs=now;
     this.trafficUsable = this.vehicleMotion.reliable && (frame.brightness ?? 0)>.12;
     const looming = this.hazardMonitor.assess(tracks, now, frameAspect, this.mode === AssistMode.CROSSING);
-    this.hazards = this.settings.vehicleAlerts ? tracks.filter(t => t.group === TrackGroup.VEHICLE && t.isSeenAt(now) && (motion.get(t.id)?.state === 'MOVING' || !motion.get(t.id)?.supported)).map(t => {
+    this.hazards = this.settings.vehicleAlerts ? tracks.filter(t => t.group === TrackGroup.VEHICLE && t.isSeenAt(now) && (motion.get(t.id)?.state === 'MOVING' || !motion.get(t.id)?.supported || looming.some(h => h.trackId === t.id))).map(t => {
       const estimate = motion.get(t.id);
       const urgent = looming.find(h => h.trackId === t.id);
       // Direction is camera-relative. During a scan or stale orientation, do not claim a body-relative side.
       const steady = current && previous && this.directionAnchor!==null && Math.abs(Angles.wrap180(current.headingDeg-this.directionAnchor))<12 && Math.abs(Angles.wrap180(current.headingDeg-previous.headingDeg)) < 2 && Math.abs(now-current.timestampMs)<300;
       const direction = steady ? estimate?.direction : 'UNKNOWN';
-      return { trackId:t.id, category:t.category, uncertain:estimate?.state!=='MOVING' || !estimate.supported, approaching:estimate?.state==='MOVING' && estimate.supported && !!urgent, level:urgent?.level ?? HazardLevel.WARNING,
+      return { trackId:t.id, category:t.category, uncertain:!estimate?.supported, approaching:!!urgent && !!estimate?.supported, level:urgent?.level ?? HazardLevel.WARNING,
         side:direction==='LEFT_TO_RIGHT'?Side.LEFT:direction==='RIGHT_TO_LEFT'?Side.RIGHT:Side.AHEAD,
         ttcSeconds:urgent?.ttcSeconds ?? Infinity, heightFraction:t.box.height };
     }).sort((a,b)=>a.ttcSeconds-b.ttcSeconds || b.heightFraction-a.heightFraction) : [];
     if (this.mode !== AssistMode.IDLE) cues.push(...this.hazardCues(now));
     if(this.mode===AssistMode.SEARCHING || this.mode===AssistMode.WAITING) {
       const usable=this.settings.vehicleAlerts && this.vehicleMotion.reliable && !this.walking && !!current && Math.abs(now-current.timestampMs)<300 && Math.abs(current.pitchDeg)<30 && (frame.brightness ?? 0)>.12;
-      const blocked=(signalSnapshot.trusted && isDontWalkPhase(signalSnapshot.phase)) || tracks.some(t=>t.group===TrackGroup.VEHICLE && now-t.lastSeenMs<900 && (motion.get(t.id)?.state!=='STATIONARY' || !motion.get(t.id)?.supported));
+      const blocked=(signalSnapshot.trusted && isDontWalkPhase(signalSnapshot.phase)) || tracks.some(t=>t.group===TrackGroup.VEHICLE && now-t.lastSeenMs<900 && (motion.get(t.id)?.state!=='STATIONARY' || !motion.get(t.id)?.supported || looming.some(h=>h.trackId===t.id)));
       this.scanBlocked=blocked || !usable;
       if(this.scanBlocked && this.scanInstruction) {
         this.scanInstruction=null;this.scanSequence++;this.trafficScan.interrupt(now);
