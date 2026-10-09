@@ -40,7 +40,8 @@ test('build configuration maps existing env names and supports separately restri
     GOOGLE_MAPS_IOS_API_KEY: 'ios-fixture', GOOGLE_MAPS_ANDROID_API_KEY: '', GOOGLE_MAPS_REST_API_KEY: '' };
   try {
     const config = configure({ config: { name: 'Test', slug: 'test', ios: { bundleIdentifier: 'test.app' } } } as any);
-    expect(config.plugins).toContainEqual(['react-native-maps', { iosGoogleMapsApiKey: 'ios-fixture', androidGoogleMapsApiKey: 'common-fixture' }]);
+    expect(config.plugins).toContainEqual(['react-native-maps', { iosGoogleMapsApiKey: 'ios-fixture', androidGoogleMapsApiKey: '${googleMapsApiKey}' }]);
+    expect(JSON.stringify(config.plugins)).not.toContain('common-fixture');
     expect(config.extra?.services.mapsRestApiKey).toBe('common-fixture');
     expect(config.extra?.services.geminiApiKey).toBe('ai-fixture');
     process.env.GOOGLE_MAPS_REST_API_KEY = 'rest-fixture';

@@ -24,6 +24,10 @@ voice requires Android 12+ and an installed recognizer.
 
 Build configuration reads `GOOGLE_MAP_API_KEY` and `GEMINI_API_KEY` from environment variables or this repository's local `.env` file. Keys are not entered on the phone. The Google project must enable Maps SDK for Android, Places API and Routes API; Android key restrictions must match the installed package and signing certificate. Keys compiled into a mobile app are not secrets and need provider restrictions.
 
+The Android Maps key never lives in `android/`. The manifest holds only the placeholder `${googleMapsApiKey}`, and
+Gradle fills it at build time from `GOOGLE_MAPS_ANDROID_API_KEY` (or `GOOGLE_MAP_API_KEY`) in the environment or in the
+repo-root `.env`. Put the key in `.env`, never in a tracked file; `expo prebuild` keeps the placeholder in place.
+
 ```bash
 npm install
 npm run android                 # development build; Metro is required
