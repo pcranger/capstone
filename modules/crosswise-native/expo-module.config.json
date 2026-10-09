@@ -1,0 +1,16 @@
+{
+  "platforms": [
+    "apple",
+    "android"
+  ],
+  "apple": {
+    "modules": [
+      "CrossWiseNativeModule"
+    ]
+  },
+  "android": {
+    "modules": [
+      "expo.modules.crosswise.CrossWiseNativeModule"
+    ]
+  }
+}

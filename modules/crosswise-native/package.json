@@ -1,0 +1,9 @@
+{
+  "name": "crosswise-native",
+  "version": "1.0.0",
+  "description": "CrossWise platform adapters: device attitude, vibration patterns, audio route, battery and camera field of view",
+  "main": "index.ts",
+  "license": "AGPL-3.0-only",
+  "author": "CrossWise",
+  "homepage": "https://github.com/"
+}

@@ -1,0 +1,31 @@
+9 October 2026 — user-requested rollback
+
+Latest instruction supersedes the ongoing road/depth experiments: remove road detection and restore the earlier binary moving/stationary classifier for vehicle warnings.
+
+Final intended app source:
+- Retains yolo26n-bdd640.tflite vehicle detector, selected on CPU for the phone.
+- Restores src/tracking/vehicleMotion.ts byte-for-byte from research/2026-10-09-indra/candidate-src/tracking/vehicleMotion.ts. pixelFlow.ts already matches that snapshot.
+- Removes BiSeNet road loader, worklet integration, road overlay/toggle/settings, auxiliary asset registration and the bundled BiSeNet asset. Removed code archived under reverted-road-source; model exports remain research artifacts.
+- Vehicle controls have Moving / Stationary only. Removes the Uncertain toggle and visible/spoken 'uncertain motion' terminology. Generic observation phrase remains 'Vehicle detected.'
+- Propagates classifier supported flag into crossing logic. Binary fallback STATIONARY with supported=false must not suppress observation warnings or let a scan complete. It is an estimate, not proof of a parked car. Stationary with support suppresses its vehicle warning. Supported movement uses side warnings only with stable heading; otherwise 'Moving vehicle detected.' or an approach warning when optical approach evidence exists.
+- Original speech enum identifiers renamed VEHICLE_DETECTED / STATUS_DETECTED. Other navigation/signal confidence concepts are unchanged.
+
+Evidence:
+- This is the earlier daytime candidate, NOT a new validated night-motion model. Prior small INDRA point audit: 25/26 moving, 12/12 parked correct. Prior actual BDD night-cache audit: 2/13 moving correctly labelled moving, 10 moving labelled stationary, 1 missed; 12/32 parked labelled stationary, 18 parked labelled moving, 2 missed. Repeated point observations are not independent benchmark objects. Support gating protects against unsupported defaults but does not repair wrong supported classifications.
+- 271 tests / 30 suites pass, including actual synthetic pixel-motion direction tests and five new alert-integration tests (left, right, unknown direction, supported stationary silence, unsupported stationary still alertable/scan blocked). Typecheck and lint pass.
+- Build/install/live status recorded below after completion.
+
+Earlier deployment in this turn (now reverted):
+- BiSeNet640 TFLite float16 conversion agreed with ONNX road masks by 99.6–99.9% IoU on four frames.
+- CPU overlay did run on phone, but was too slow (~612–699ms). Core ML attempt fell back to CPU. An asynchronous variant was edited but NOT deployed before the user requested rollback.
+- BDD detector live CPU measurement was ~188ms before extra-model contention. A later snapshot with road overlay reported 392ms (too old for live guidance).
+- A 320-resolution alternative was explored; first checked night frame had only 92.1% road-mask IoU with its same-resolution ONNX reference, while overall class agreement was 99.8%. Its asserted parity check failed. It was NOT deployed. No 320 model remains registered in the app.
+
+Research before user's rollback request:
+- Epipolar geometry with 960px sparse flow ran all 15 clips / 1,453 sampled frames. Night point audit: parked 26 stationary, 1 moving, 3 unsupported, 2 missed; moving 0 moving, 3 stationary, 9 unsupported, 1 missed. This is not successful motion detection.
+- RAFT small C_T_V2 dense flow at existing audit timestamp pairs: night parked 26 stationary, 2 moving, 2 unsupported, 2 missed; moving 1 moving, 9 stationary, 2 unsupported, 1 missed. Day moving 19 moving, 6 stationary, 1 unsupported; parked 12 stationary. Low epipolar residual does not prove a stationary object: motion along an epipolar line is a known degeneracy. None deployed.
+- Depth Anything V2 repository cloned at a561b849ebae10a6f5ef49e26c83cbbcd36c71bf and metric VKITTI-small weights downloaded. Depth inference / reprojection experiments were NOT run; user requested rollback first.
+- Research location: ../2026-10-09-epipolar. Original videos unchanged.
+
+FINAL DEPLOYMENT VERIFIED
+Release build succeeded; installed and launched on iPhone 15 Pro. Fresh capture 2026-10-09T01:45:55.068Z identifies local-background-binary-v1, BDD640 CPU, camera running, recentFrame=true, latency 274ms, no current pipeline error. Four slow frames accumulated since launch; sustained outdoor performance is not established by this snapshot. No road model/status is present. Phone settings preserve existing preferences except selecting BDD640 CPU and removing road/uncertain-toggle keys. No physical road test was performed.

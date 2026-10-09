@@ -1,0 +1,176 @@
+CrossWise speech revision plan — 8 October 2026
+Status: proposed; source audit completed. This document does not claim implementation or phone validation.
+Target: /Users/hieu/Desktop/capstone/capstone_ios (shared React Native source).
+
+1. Speech policy
+Every spoken message must serve an observation, immediate instruction, action confirmation, or actionable failure. Prefer one short sentence. Usually 2–8 words; preserve necessary meaning rather than enforcing a word limit. No branding, greetings, software state narration, repeated command tutorials, rhetorical questions, or generic caution paragraphs during daily use. Speak only facts supported by current inputs. Keep explanations and commands in Settings > Voice help and Manual. Make short speech and its caption agree. Screen-reader access to controls and error recovery remains available.
+
+2. Startup and listening
+Remove VOICE_WELCOME in full, including “Welcome to CrossWise” and “After the tone”. Remove the forced-restart sentence “After the tone, say navigate to a place, or manual.” Auto listening continues after permissions and actual microphone readiness. Use a distinct brief listening cue and optional haptic when audio capture is actually ready. Do not reuse the CENTERED navigation/signal chime. Silent timeout/rearming stays silent; no welcome or listening explanation on each restart or after a vehicle alert. Explain the listening cue in Manual and let users preview it. Respect tones/haptics settings; expose Listening / Working / Voice unavailable as accessible status. A normal app launch must not announce model loading, location checks or app internals. A real permission/recognition failure is an exception and needs one brief actionable message.
+
+3. Voice commands: complete replacement decisions
+Current -> proposed behavior / words
+Command not recognised. Say navigate to a place, or manual. -> “Command not recognised.” First actionable help hint only on explicit help or repeated failures: “Say manual for commands.” Never respond to silence as a bad command.
+No journey is running. Say navigate to a place. -> “No active route.”
+Journey paused. Say resume to continue. -> “Navigation paused.”
+Navigation is already running. [full route] -> “Navigation already running.” Repeat current instruction only for Repeat.
+No paused journey. Say navigate to a place. -> “No paused route.”
+Journey ended. Say navigate to your next destination. -> “Navigation stopped.”
+Cancelled. Say navigate to a place, or manual. -> “Cancelled.”
+Search for a place before saving. -> “Choose a place before saving.”
+Destination changes paused during crossing. -> “Finish crossing before changing destination.” Preserve the deliberate far-footpath completion mechanism; do not imply crossing has ended from camera silence or GPS alone.
+Finding [query]. -> remove immediate progress narration; announce “Searching.” once only if a request is noticeably delayed (initial target 2 seconds).
+Finding a walking route. -> “Planning route.” only for delayed work, not every quick request.
+[rank]. [place], [full address]. Say first/second/third. -> up to three results with name and enough street/suburb to distinguish them; “Say first or second” / “Say first, second, or third” only when a choice is necessary. Retain more address detail when omission would leave indistinguishable results. For one result, speak its identifiable name/suburb and avoid redundant selection chatter.
+No matching result. Say search and a place name. -> “That result is unavailable. Search again.”
+Say navigate to a place. / Say a destination first. -> “Say navigate to, then a place.” only in response to a command needing a destination, not on startup.
+[place/address]. Say start to navigate, or save. -> “[Place, distinguishing address]. Say start or save.” Only after Search; Navigate to retains its existing explicit-navigation behavior.
+Route unavailable. Say retry. -> “Route unavailable. Say retry.” Keep.
+Journey could not start. Say retry. -> “Navigation couldn’t start. Say retry.”
+Navigating to [place]. [instruction] -> “[Place]. [First instruction].” Exactly one route-start response; prevent duplicate Journey.repeat and voice-handler narration.
+Saved. / Saved as [alias]. / Already saved. -> keep.
+Removed from saved places. Undo available. -> “Place removed. Undo available.” Only for the explicit remove action.
+Restored. -> “Place restored.”
+Couldn’t save/remove/restore. Try again. -> keep specific short failure; do not speak raw exception text.
+Stop listening -> stop quietly, optionally one distinct exit cue. Do not automatically restart against the user’s command.
+Manual -> concise examples grouped by purpose; no “after the tone”, welcome or “what can I say”. Suggested spoken guide: “Navigate to Town Hall. Search for a place. Choose first, second, or third. Save as Home. Repeat. Pause. Resume. Stop navigation.” Add further commands only after they are actually supported.
+
+4. Vehicle phrases
+Vehicle detected. -> keep for uncertain motion. It must not be relabelled as approaching.
+Vehicle coming from the left/right. -> keep only with usable motion direction and reliable phone orientation; suppress side claims during turning or stale orientation.
+Vehicle approaching. -> reserve for evidence of approach. If only movement is established and approach is unknown: “Moving vehicle detected.” Horizontal motion alone does not establish closing distance or collision risk.
+Vehicle close, left/ahead/right. -> do not claim measured distance from image size alone. Use “Caution. Vehicle from the left/right.” only with supported direction, otherwise “Caution. Vehicle detected.” If later calibrated proximity becomes available, distance wording can be reconsidered.
+[number] approaching vehicle(s) detected. -> replace with evidence-aware status: “[number] moving vehicles” and/or “[number] vehicles with uncertain motion.” Never count all hazards as confirmed approach.
+No moving vehicles detected. (Repeat) -> “No moving vehicles in view.” Only with fresh usable frames, enabled/working detection and no unresolved vehicle uncertainty. Otherwise “Traffic assessment unavailable” or “Vehicle detected. Motion uncertain.” Disabling alerts must never create a false clear report.
+Keep vibration for warnings; coalesce multiple vehicles into one relevant warning instead of overlapping per-object speech. Stationary vehicles remain silent once supported by motion evidence. Do not infer clearance from detector silence.
+
+5. Guided scan
+Keep your body facing forward. Point the phone left and hold. -> “Face forward. Point the phone left. Hold still.” Once when a scan starts; explain phone-only turning in Manual.
+Point the phone right and hold. -> “Point the phone right. Hold still.” Only when valid left-side evidence has completed.
+Scan complete. No moving vehicles detected. -> keep as a completed observation summary, once, never “Cross now”. Requires fresh usable evidence from both sides and no unresolved moving/uncertain vehicle or blocking signal.
+Interrupted scan -> hazard warning first; after the warning and once rescan is possible, “Scan again. Point the phone left.” Do not silently invalidate the scan while the user waits on the right. Distinguish a first scan from a restart.
+Bad aim -> “Raise the phone.” / “Lower the phone.” Only after sustained incorrect positioning and verified sensor-to-camera mapping. Do not prompt repeatedly during an intentional scan movement.
+Missing/stale/dark camera -> one specific failure, e.g. “Camera view too dark.” / “Camera blocked.” / “Traffic assessment unavailable.” Never produce a clear-scan result from unusable frames. Avoid an unending hold with no explanation.
+
+6. Pedestrian signals and legacy aiming
+Walk signal just appeared. -> “Pedestrian walk signal just started.” Preserve onset information; this is an observation, not a crossing permission.
+Walk signal on. Start time unknown. -> “Pedestrian walk signal. Start time unknown.”
+Walk signal flashing. -> “Pedestrian walk signal flashing.”
+Don’t-walk signal. -> keep.
+Don’t-walk signal flashing. -> keep.
+Signal changed to don’t walk. -> keep; do not issue an abrupt instruction to stop in the roadway.
+Caution. Don’t-walk signal. -> “Don’t-walk signal.” Avoid duplicate alerts for the same transition.
+Green/Red light. Pedestrian signal unverified. -> remove from everyday speech for generic traffic-light color heuristics. Retain unverified color only as developer diagnostic information. Never promote vehicle signals to pedestrian guidance.
+Signal lost. -> “Pedestrian signal out of view.” Only when the observation becomes unavailable and matters. Preserve suppression when the far signal naturally exits view during crossing.
+Signal was left/right. -> remove from live routine speech: it describes an old location, not a current target. Detailed manual diagnostics can show last-seen location.
+Signal ahead. -> “Pedestrian signal ahead.” Optional detailed/manual aiming cue only.
+Crosswalk ahead. -> keep only when the selected model actually detects a crosswalk; optional aiming cue. YOLO26s COCO has no crosswalk class.
+No signal. Scan slowly. -> remove recurring search tutorial.
+No pedestrian signal detected. -> “No pedestrian signal in view.” On explicit status request only, and only when a suitable detector is running. With YOLO26s alone, do not imply a pedestrian-signal detector searched and found nothing: disclose unsupported signal recognition in Help/developer diagnostics, and in an explicit request for that capability.
+Pedestrian signals unverified. (BASELINE_MODEL) -> remove unused/dead routine phrase; retain precise capability explanation in Settings.
+Walk signal, on for [n] seconds. -> “Pedestrian walk signal started [n] seconds ago.” Only for a truly observed onset; never estimated remaining crossing time.
+
+7. Crossing state and heading
+Assistance on. Point the phone forward. -> “Point the phone forward.” When a user explicitly enables camera help and alignment is needed. Remove automatic assistance-state announcements during route transitions.
+Assistance off. -> “Camera help off.” Only after explicit user disable; do not announce it redundantly during backgrounding, route pause or navigation stop.
+Crossing mode on. / Crossing detected. -> “Crossing guidance started.” Only when the guidance state really begins; never present this as proof that a road crossing was visually recognized.
+Crossing mode off. -> “Crossing guidance ended.” Only on explicit completed-crossing action, with route resumption handled by one next instruction. No duplicate mode and route announcements.
+Crossing mode on. Direction guidance unavailable. -> “Direction guidance unavailable.” Once for an actual failure of an enabled capability.
+Bear left/right. / On course. / Drifted left/right. -> withhold claims of walking direction from phone heading alone. Turning the phone during a scan is not body drift. Before restoring these phrases, establish that heading is a valid walking-direction estimate. Do not solve this by confidently renaming inaccurate steering advice.
+Crossing help. Route speech paused. -> “Crossing guidance.” Once on the handoff; explain route speech pause in Manual.
+Confirm the far footpath first. -> “Finish crossing before changing the route.” Far-footpath versus refuge-island explanation belongs in crossing Manual and explicit completion instructions.
+Crossing ended. Journey paused. -> “Crossing guidance ended. Navigation paused.” Do not claim the person has reached the footpath merely because guidance is disabled.
+
+8. Route phrases
+Journey paused. -> “Navigation paused.”
+Journey ended. -> “Navigation stopped.”
+Location uncertain. Distance paused. -> “Location inaccurate. Distance unavailable.” Once per degraded-location episode during a route; no pause/off-route warning just because the app is backgrounded. Keep a meaningful once-only recovery confirmation: “Location restored.” when useful distance updates actually resume.
+Possibly off route. Check your position. -> “You may be off route.” Do not issue an unsupported rerouting/road-crossing instruction.
+Near this step’s end. Confirm when complete. -> “End of this instruction nearby.” Current voice Confirm starts a planned journey; it does not advance a route step. Remove the ambiguous instruction immediately from the planned vocabulary. For full voice use, add deliberate context-specific “next instruction”, “arrived” and “finish crossing” support, test guards, THEN document these exact commands. Never advertise nonexistent commands or accept generic yes/no as completion.
+Near destination. Confirm the entrance. -> “Destination nearby.” Do not claim the correct entrance or exact arrival from GPS proximity.
+[n] places. Check the address. -> speak distinguishable results or “No places found. Try another name.” Avoid count-only chatter plus another full result list.
+[name]. About [metres] metres. Review before starting. -> “[Name]. About [metres] metres.” Only for explicit route review. Keep route-specific direction text as needed.
+Step [n]. [Instruction]. About [metres] metres remaining. -> “[Instruction]. About [metres] metres remaining.” Remove routine step number and repeated distance from every small location update. Keep full status on Repeat.
+Distance unavailable. -> say once when the loss matters, not as a suffix on every route instruction while already reported.
+Journey complete. [name]. -> “Arrived at [name].” Only after deliberate arrival confirmation, not automatic proximity.
+You moved away from the start. Find a new route. -> “Route start has changed. Replan the route.” Retain the actual start-distance guard.
+
+9. Failures and optional scene description
+Camera unavailable. No traffic assessment. / Detection unavailable. Check Settings. / Detection unavailable. -> “Camera unavailable.” or “Vehicle detection unavailable.” according to the actual failure. One actionable recovery sentence only if needed. Keep failures audible once even with routine startup silence. Speak a useful once-only recovery when normal service resumes.
+Voice recognition is unavailable. Open Settings, then Voice help, for recovery steps. -> “Voice unavailable. Open Voice help in Settings.” Once; retain full technical detail in Voice help.
+Allow microphone and speech recognition for CrossWise in iPhone Settings. -> “Enable microphone and speech recognition in iPhone Settings.” Keep platform-specific Android equivalent.
+Voice still stopping/interrupted/did not stop/timed out/no speech/Voice off/audio failure -> handle routine silence and deliberate cancellation quietly. Recover internally where possible. For a real recoverable failure: “Voice unavailable. Retry voice.” For a poisoned audio session requiring reopening: “Voice unavailable. Reopen the app.” Do not instruct Retry voice when that cannot recover the failure.
+Map/API/HTTP/geometry/duration/configuration errors -> map typed failures to short actionable wording; never speak status codes, API keys, model names or raw exception text. Examples: “Route unavailable. Try again.” / “No walking route found.” / “Check your internet connection.” / “Location permission is off.” Preserve detailed diagnostics in developer Settings/logs.
+Point camera left/ahead/right. (Gemini) -> “Point the phone left/forward/right.” Use the same terminology as vehicle scan; explain purpose in optional Describe help.
+Looking at your surroundings. -> remove unused/progress chatter; optional “Describing.” only after a delayed explicitly requested description.
+Scene descriptions unavailable. -> keep on explicit request only.
+Description unavailable. Try again. -> keep.
+Gemini generated description -> require short concrete observable facts; no inferred safe gap, crossing permission, estimated steps or unsupported distance. Cancel stale requests and suppress description speech during traffic warnings/crossing guidance.
+Heard [text]. Voice check complete. -> “Heard: [text].” Only within the explicitly launched Settings microphone test. Retain test completion as accessible status; never execute the spoken fixture as a real navigation command.
+
+10. Delivery rules and known trigger defects
+- Centralize all speech text, including strings currently embedded in controller/nativeSpeech/navigation; define ID, trigger, priority, repetition policy, capability and sample values.
+- Traffic warnings and loss of traffic assessment outrank route directions, scan prompts, confirmations and help. Deferred route/scan speech must be checked against current state before playback; discard stale items.
+- A fresh hazard cancels a queued no-vehicle/scan-complete observation. A scan completion cannot outlive its supporting evidence or play after a camera/model interruption.
+- Deduplicate identical events across controller, Journey and voice handler. No repeated startup lines after TTS/listening handoffs. No searching/planning/saved confirmation interrupting a hazard.
+- Start scan timers/instructions in the correct order. The user must hear the required action; if urgent speech suppresses an instruction, retry it once appropriate, rather than advancing the scan without it.
+- Restrict route-distance-loss announcements to active journeys. Separate intentional route pause from degraded GPS.
+- Keep one restrained listening cue; avoid playing it after every silent recognition timeout. Never begin recognition until app speech has ended. This plan does not add voice interruption/wake-word support.
+- Track counts in Repeat must reflect motion evidence and detector/alert state; current hazards.length can misrepresent both motion and disabled alerts.
+- Manual and Practice must mirror current capabilities. Trained-signal demos are demonstrations, not proof the default COCO detector recognizes pedestrian walk signals.
+
+11. Implementation order
+A. Remove welcome and after-the-tone speech, recurring command tutorials and automatic mode announcements; centralize remaining phrases. Keep actual microphone-ready confirmation distinct and accessible.
+B. Correct vehicle, status, scan and signal wording/capability gates. Fix interruption/restart prompts and stale observation playback.
+C. Simplify destination search, route instructions, saved-place feedback and failure messages; eliminate duplicate confirmations. Resolve completion-command mismatch before speaking commands.
+D. Update Manual, captions and Practice. Add Developer > Speech preview: every phrase with sample values, trigger and Play / Stop; optional matching tone/haptic; Play all and Next for a controlled review. Preview must be isolated from live route/perception commands.
+E. Verify timing and transitions, then build/install on the iPhone. Road perception accuracy remains a separate evaluation.
+
+12. Acceptance checks
+Opening app: no welcome, branding, after-the-tone, model-loaded or routine location narration; microphone cue only when genuinely ready. Silence/rearm and return from Settings/background do not restart tutorials.
+Search: one result, multiple indistinguishable results, no result, delayed request, cancel, duplicate save, route failure. Every spoken command must work in the current context.
+Route: start once, Repeat, pause/resume once, inaccurate GPS once, recovery, off-route, nearby destination, explicit arrival. No wrong step or automatic crossing/arrival claim.
+Traffic: moving left/right/unknown direction, uncertain motion, stationary vehicle, multiple vehicles, alert disabled, unsupported/dark/stale camera. No false clear report.
+Scan: left hold, right hold, scan interruption, prompt preemption, camera failure and later hazard. No stale completion played after a hazard.
+Signals: supported pedestrian classes versus generic COCO lights; lost signal during and outside crossing. No generic light announced as verified pedestrian permission.
+Phone/body distinction: turning the phone alone must not produce “Bear left/right” steering.
+Speech preview: all fixed phrases and dynamic examples covered; no real route/device command executed by Play; Stop cancels queue; preferences and accessibility remain effective.
+Run focused behavioral tests for these changes plus repository lint/typecheck and existing regression suite; test microphone/listening cue and warning interruption on the actual iPhone. Record physical checks separately from unit tests. Do not claim generated fixture tests establish outdoor detection accuracy.
+
+Source audit
+src/strings.ts
+src/state/controller.ts
+src/voice/navigationVoice.ts
+src/voice/nativeSpeech.ts
+src/voice/audioCheck.ts
+src/voice/speechStatus.ts
+src/crossing/crossingEngine.ts
+src/crossing/trafficScan.ts
+src/nav/journey.ts
+src/nav/navigation.ts
+src/nav/location.ts
+src/nav/savedPlaces.ts
+src/nav/feedbackPolicy.ts
+src/feedback/feedbackEngine.ts
+src/feedback/speaker.ts
+src/ui/PracticeScreen.tsx
+
+Implementation record — 8 October 2026
+Implemented in the shared React Native source at /Users/hieu/Desktop/capstone/capstone_ios (Android mobile symlinks here).
+- Removed the welcome/after-the-tone message, model announcements, search tutorials and phone-heading steering speech.
+- Shortened route, place search/save, confirmation, status and recovery speech. Searching/planning is announced only for a request exceeding two seconds. Raw service errors remain diagnostic data.
+- Added explicit “next instruction”, “arrived” and “finish crossing” commands, with route/crossing guards. Confirm starts a reviewed destination, including replacement of a paused older route.
+- Added a distinct two-beep microphone-ready cue; silent recognition rearming stays quiet. Updated the in-app Manual and Practice explanations.
+- Differentiated uncertain motion, confirmed movement and supported approach/direction. Removed unsupported proximity claims. Repeat does not report no moving vehicles when observation is unusable, stale or vehicle alerts are disabled.
+- Generic traffic lights cannot announce pedestrian walk phases or pedestrian-signal loss. Pedestrian prompts require actual model capability and trusted pedestrian observations.
+- Scan evidence does not advance while its instruction is pending. Interrupted scans restart; hazards, walking, disabled alerts and unusable camera evidence invalidate pending summaries. Model/camera interruptions clear perception history.
+- Added Settings > Developer mode > Speech preview > Open speech preview, with every fixed catalog entry, dynamic examples, trigger descriptions, individual Play, Play all, Next, Stop, matching tones/haptics and the microphone-ready cue. Playback is isolated from real navigation commands and disabled during active guidance.
+- Optional generated scene descriptions are cancelled by vehicle warnings/backgrounding/crossing and are prompted for short observable descriptions without walking/crossing permissions or distance/step estimates.
+
+Verification
+- TypeScript: passed.
+- ESLint: passed, no warnings.
+- Jest: 28 suites, 262 tests passed. Includes scan delivery/invalidation, stale/disabled observations, generic-light speech gating, explicit completion commands, destination replacement, preview coverage/isolation and preview UI availability.
+- Final signed iOS Release build: BUILD SUCCEEDED, workspace ios/CrossWise.xcworkspace, scheme CrossWise, generic iOS device destination.
+- Build output: /Users/hieu/Library/Developer/Xcode/DerivedData/CrossWise-fpbbpewdiqapltambcmltjsiafpt/Build/Products/Release-iphoneos/CrossWise.app
+- Physical installation/listening/road checks were not performed: devicectl reports Hiếu’s iPhone (00008130-000C4514247A8D3A) unavailable. These remain pending; unit tests and compilation do not establish real-road perception accuracy or physical microphone/voice quality.

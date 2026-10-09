@@ -1,0 +1,27 @@
+jest.mock('@react-native-async-storage/async-storage',()=>({getItem:jest.fn(),setItem:jest.fn()}));
+jest.mock('expo-file-system',()=>({File:class {},Paths:{}}));
+import { visibleVehicle } from '../src/ui/vehicleVisibility';
+import { DEFAULT_SETTINGS,mergeSettings } from '../src/settings/settings';
+import { ObjectCategory } from '../src/perception/detection';
+import { perceptionMessage,EMPTY_PIPELINE } from '../src/perception/pipelineHealth';
+import { P } from '../src/strings';
+
+test('motion box switches persist independently without disabling alerts',()=>{
+  let s={...DEFAULT_SETTINGS};
+  const track=(motion:string)=>({category:ObjectCategory.CAR,motion} as any);
+  expect(visibleVehicle(track('STATIONARY'),s)).toBe(false);
+  s=mergeSettings(s,{showStationaryVehicles:true,showMovingVehicles:false});
+  expect(visibleVehicle(track('STATIONARY'),s)).toBe(true);
+  expect(visibleVehicle(track('MOVING'),s)).toBe(false);
+  expect(visibleVehicle(track(undefined as any),s)).toBe(false);
+  expect(s.vehicleAlerts).toBe(true);
+  expect(mergeSettings(s,{showStationaryVehicles:'false'}).showStationaryVehicles).toBe(true);
+});
+test('slow detection is not reported as camera failure, and stale measurements do not revive a stream',()=>{
+  const slow={...EMPTY_PIPELINE,receivedAt:1000,latencyMs:900,slowFrames:4};
+  expect(perceptionMessage('running',false,slow,1200)).toBe(P.detectionTooSlow);
+  expect(perceptionMessage('running',false,slow,7000)).toBe(P.detectionUnavailable);
+  expect(perceptionMessage('unavailable',false,slow,1200)).toBe(P.cameraUnavailable);
+  expect(perceptionMessage('starting',false,slow,1200)).toBe(P.cameraStarting);
+  expect(perceptionMessage('running',true,{...slow,latencyMs:90},1200)).toBeNull();
+});

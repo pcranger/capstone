@@ -1,0 +1,81 @@
+CrossWise recorded-road evaluation — 8 October 2026
+
+Status: better vehicle detection found; walking-camera motion classification is NOT solved.
+
+Material
+Nine useful original night/wet-road handheld clips in road_test, plus IMG_8511 (0.16 seconds, too short for motion). 1,083 sampled frames including the two from IMG_8511, at approximately 8–10 Hz. No original recordings changed. Most useful clips include walking, camera rotation, blur and headlight glare. No synchronized phone IMU is available in these recordings.
+
+Detection experiment
+45 manually reviewed vehicle-centre points: 13 moving, 32 parked. A detection is counted when a vehicle box contains the point. This is a small exploratory audit, NOT box-IoU mAP, an independent test set, a false-positive benchmark, or evidence of road-crossing safety. Check annotations.json and the videos: some targets are small/glare-obscured. Repeated views of the same vehicle are not independent examples.
+
+Model                       Moving found    Parked found
+Current COCO YOLO26s 960       9 / 13           31 / 32
+COCO 960 gamma enhancement     8 / 13           30 / 32
+BDD100K YOLO26n 960           12 / 13           30 / 32
+BDD100K YOLO26n 640           12 / 13           30 / 32
+COCO YOLO26m 960               8 / 13           30 / 32
+BDD nano 640 exported TFLite  12 / 13           30 / 32
+
+Threshold .08, class-aware NMS where required. The exported TFLite model has float32 NHWC [1,640,640,3] input, raw [1,11,8400] output and seven embedded class names. App decoder already supports raw YOLO heads. Approximate Mac median inference: current TFLite 75 ms, BDD nano TFLite 14 ms (4 CPU threads). These are not iPhone speed measurements. PyTorch/MPS comparison timings are in detector-comparison.json. Image resizing differs slightly between full replay and selected-frame audit; do not equate these counts with every-frame performance.
+
+Motion experiments — current detector held fixed
+1. Baseline exact mobile JS algorithm: one affine background transform plus object flow/box histories.
+2. Improvement attempt 1: gamma enhancement before sparse flow.
+3. Attempt 2: homography instead of affine and relaxed background spatial gates.
+4. Attempt 3: stronger temporal voting and removal of bbox-only fallback.
+5. After three attempts: cloned and executed Norfair camera-motion estimator, combined with OpenCV forward/back LK and robust fundamental-matrix residuals.
+6. Ground-region homography with bottom-centre history.
+7. Replayed all recordings with the BDD detector and unchanged motion algorithm.
+
+Results of point audit, current detector:
+Baseline: parked 4 incorrectly moving / 27 uncertain / 1 missed; moving 1 correctly moving / 8 uncertain / 4 missed.
+Attempt 1: parked 2 incorrectly moving; moving 1 correctly moving.
+Attempt 2: parked 13 incorrectly moving; moving 1 correctly moving.
+Attempt 3: parked 7 incorrectly moving; moving 0 correctly moving.
+Norfair + epipolar: no parked points incorrectly moving, but all detected moving points uncertain. This is conservative abstention, not successful motion recognition.
+Ground homography: parked 7 incorrectly moving; moving 0 correctly moving.
+All variants retain uncertainty in poor texture; none proves parked status on this walking night sample. Detailed audit-summary.json includes misses and uncertain counts, plus BDD full-replay point audit.
+
+Why it fails
+A walking camera makes near and far stationary objects move by different amounts. One affine/homography cannot explain a non-planar street. Bounding-box shifts add detector jitter and identity changes. Low light and glare remove trackable texture. Epipolar inliers are not proof of stationarity: vehicles can move along epipolar lines. A better detector helps locate vehicles, but is not a replacement for ego-motion/depth evidence.
+
+App changes
+- BDD nano 640 is bundled as the new default for unset model selections; explicit custom model choices are preserved. The connected phone was explicitly selected to use a copy of the same model with CPU backend for diagnosis.
+- Seven labels mapped, including rider -> person. This model has NO crosswalk or traffic-signal classes; it must not be treated as such a model.
+- Walking IMU state now forces vehicle motion and direction to UNCERTAIN and resets history. Detections/uncertain alerts remain. Stationary evidence must be rebuilt after stopping. This avoids known false motion claims, but is not a solution for walking-camera motion classification. The recorded replay has no IMU and does not simulate this gate.
+- Developer moving / stationary / uncertain box icons, selected states and slashes; persistent settings; independent of alerts. Defaults show moving and uncertain only. Also accessible under Settings > Vehicle boxes.
+- Developer track list shows motion and direction.
+- Camera session failure, waiting for inference, slow inference, and inference errors are separate states. Real native error and timing are visible in Developer diagnostics. Frames older than 350 ms still cannot guide the user.
+- Explicit starting screen, camera interruption resume fix, resized-buffer release on exceptions.
+- Hardened native model weight ownership for imported JS buffers through scripts/patch-tflite-lifetime.cjs and postinstall. Borrowed JS model bytes now copy to native-owned memory. This fixes a lifetime hazard; the existing device crash is not proven to have this cause.
+
+Phone investigation
+An actual device crash report from 21:15 shows EXC_BAD_ACCESS in TensorFlow Lite invoke on com.margelo.camera.frame. It is a native inference crash, not simply no car or darkness. Later launch requests time out before a running CrossWise process is observable. Installation and file transfer work. Asked user to restart/unlock phone and open app. Black-screen recovery and sustained inference remain unverified until the phone launches. Do not claim the camera bug is resolved based only on a build.
+
+Validation
+266 Jest tests in 29 suites passed, including box settings and walking-state invalidation. Typecheck and lint passed. Release build/install status recorded below after completion. Synthetic flow tests cover static texture, camera translation and both directions; they are not substitutes for real night traffic validation.
+
+Repositories and provenance
+https://github.com/tryolabs/norfair
+  e517b4236f6b67a6ecf342f5df1fccb7788dbc54, BSD-3-Clause. camera_motion.py executed in experiment; no Norfair code copied into app.
+https://github.com/michalneoral/Raptor
+  f2b914e9f032a6e0b13185f5813fd6a28ae7e865. Studied only, not run: older CUDA/MMCV/RAFT dependencies. Combines flow/depth/ego-motion for moving-object segmentation. CC BY-NC-SA and repository patent notice; not an iPhone drop-in.
+https://github.com/lochuan/yolo26n-bdd100k
+  7c7c10be1628dffdd026fa8efd72e0c7556be2e1. Downloaded checkpoint, evaluated and exported through Ultralytics 8.4.24. Upstream repository lacks an obvious standalone LICENSE; exporter metadata says AGPL-3.0. Preserve attribution; distribution rights need review before public distribution. Used here as a research prototype.
+
+Artifacts / reproduction
+road-comparison.mp4: side-by-side current vs BDD detections with original mobile motion estimates across all nine clips. Red = moving estimate, yellow = uncertain, green = stationary; labels are predictions, not ground truth. Offline sampled replay, not actual iPhone rendering or timing.
+IMG_*.jsonl: exact current TFLite detections and grayscale inputs.
+bdd640/IMG_*.jsonl: BDD PyTorch full-clip detections and grayscale.
+*-tracks.json, *-audit.json, detector-comparison.json: detailed predictions and counts.
+Scripts: detect.py, variants.py, replay.cjs, geometry_experiment.py, ground_experiment.py, detector_compare.py, bdd_full.py, check_tflite.py, audit.py, make_comparison.py.
+Python: research/2026-10-07-vehicle-motion/export-env/bin/python. Run from /Users/hieu/Desktop/capstone. replay.cjs accepts SOURCE, DATA and TAG environment variables. check_tflite.py uses absolute paths for this workspace.
+
+Next unresolved work
+1. Confirm startup and fresh on-device inference after phone restart; collect new timestamps, backend and frame age; run portrait/rotate/background/resume tests.
+2. Capture stationary-curb recordings with synchronized gyro/accelerometer and moving + parked traffic. Current recordings cannot test the phone's full sensor-fused pipeline.
+3. For camera translation, investigate calibrated visual-inertial pose + depth/ground-plane contact geometry; use that geometry to predict parked-object motion before classifying residuals. Raptor is a research reference, not a mobile-ready implementation.
+4. Annotate complete tracks with boxes/direction on held-out clips and measure missed moving vehicles, false moving parked vehicles, direction errors, abstention, and alert latency. Do not optimize only these 45 points.
+5. No monocular detector result alone proves that a road is safe to cross. Current changes do not add a “cross now” instruction.
+
+Final local checks: Release BUILD SUCCEEDED and installed on the connected iPhone. Subsequent launch still timed out (15 seconds); no successful new runtime capture. Device reports booted with Developer Mode enabled. Waiting for phone restart, so startup recovery is NOT verified. Actual app TypeScript decoder also matched all 4 vehicle boxes in an exported TFLite road-frame fixture (IMG_8513 at 4 s).

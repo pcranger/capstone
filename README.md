@@ -1,6 +1,10 @@
-# CrossWise
+# CrossWise Android
 
-Native Android implementation of the CrossWise camera-first design, ported from `../capstone_ios`.
+This repository contains the React Native Android app. The source, screens,
+navigation, voice commands, vehicle model and crossing logic are now checked
+into this repository; it no longer depends on a symlink to the iOS checkout.
+The former Kotlin/Compose implementation is retained in `android-legacy/` for
+reference only.
 
 ## Current interface
 
@@ -15,25 +19,32 @@ YOLO26n is bundled and selected by default; the custom CrossWise model is also b
 
 ## Build and run
 
-Open `android/` in Android Studio. JDK 17+, Android SDK 36 and Android 8+ are required; on-device voice requires Android 12+ and an installed recognizer.
+JDK 17 and Android SDK 36 are required. Android 8+ is supported; on-device
+voice requires Android 12+ and an installed recognizer.
 
-Build configuration reads `GOOGLE_MAP_API_KEY` and `GEMINI_API_KEY` from environment variables or `../capstone_ios/.env` relative to this repository. Keys are not entered on the phone. The Google project must enable Maps SDK for Android, Places API and Routes API; Android key restrictions must match the installed package and signing certificate. Keys compiled into a mobile app are not secrets and need provider restrictions.
+Build configuration reads `GOOGLE_MAP_API_KEY` and `GEMINI_API_KEY` from environment variables or this repository's local `.env` file. Keys are not entered on the phone. The Google project must enable Maps SDK for Android, Places API and Routes API; Android key restrictions must match the installed package and signing certificate. Keys compiled into a mobile app are not secrets and need provider restrictions.
 
 ```bash
-cd android
-bash gradlew :app:assembleDebug :app:testDebugUnitTest :app:lintDebug
-# Separate installation when the existing app has a different signing certificate:
-bash gradlew -PcrosswiseApplicationId=com.crosswise.app.preview :app:assembleDebug
-# Connected-device tests, using the same application ID:
-bash gradlew -PcrosswiseApplicationId=com.crosswise.app.preview :app:connectedDebugAndroidTest
+npm install
+npm run android                 # development build; Metro is required
+npm run android:preview         # standalone ARM64 preview APK
+npm test
+npm run typecheck
+npm run lint
 ```
+
+For a standalone build, use `android/app/build/outputs/apk/release/` after the
+preview script completes. Release builds embed the JavaScript bundle and do not
+need Metro on the phone.
 
 The separate package is labelled **CrossWise Preview**. It preserves the old CrossWise installation and its data. APK: `android/app/build/outputs/apk/debug/app-debug.apk`.
 
 ## Repository
 
-- `android/`: Kotlin, Compose, CameraX and LiteRT app.
-- `../capstone_ios/`: iOS app and source design.
+- `android/`: React Native Android host and native adapters.
+- `src/`: shared TypeScript app source.
+- `assets/models/`: bundled YOLO vehicle models.
+- `android-legacy/`: superseded Kotlin/Compose implementation.
 - `ml/`: datasets, training and exports.
 - `docs/`: research, plans and implementation records; older plans may describe superseded interfaces.
 

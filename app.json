@@ -1,0 +1,102 @@
+{
+  "expo": {
+    "name": "CrossWise",
+    "slug": "crosswise",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0B0F12",
+    "ios": {
+      "bundleIdentifier": "com.tq98g3wfgs.crosswise",
+      "supportsTablet": false,
+      "requireFullScreen": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "CrossWise uses the camera to see pedestrian signals and traffic. Detection runs on the phone. Optional scene descriptions send requested images to Google Gemini.",
+        "NSLocationWhenInUseUsageDescription": "CrossWise uses your location only for walking navigation, when you ask for a route.",
+        "UIFileSharingEnabled": true,
+        "LSSupportsOpeningDocumentsInPlace": true,
+        "UIRequiredDeviceCapabilities": [
+          "arm64",
+          "gyroscope"
+        ],
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "appleTeamId": "TQ98G3WFGS"
+    },
+    "plugins": [
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "16.4"
+          },
+          "android": {
+            "minSdkVersion": 26
+          }
+        }
+      ],
+      [
+        "react-native-fast-tflite",
+        {
+          "enableCoreMLDelegate": true,
+          "enableAndroidGpuLibraries": true
+        }
+      ],
+      [
+        "react-native-audio-api",
+        {
+          "iosBackgroundMode": false,
+          "disableFFmpeg": true
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "CrossWise uses your location only for walking navigation, when you ask for a route.",
+          "locationAlwaysAndWhenInUsePermission": false,
+          "locationAlwaysPermission": false,
+          "isIosBackgroundLocationEnabled": false
+        }
+      ],
+      [
+        "expo-font",
+        {
+          "fonts": [
+            "./assets/fonts/inter_regular.ttf",
+            "./assets/fonts/inter_bold.ttf",
+            "./assets/fonts/tinos_regular.ttf",
+            "./assets/fonts/tinos_bold.ttf",
+            "./assets/fonts/atkinson_regular.ttf",
+            "./assets/fonts/atkinson_bold.ttf"
+          ]
+        }
+      ],
+      "expo-sharing",
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "CrossWise listens for navigation commands while the app is open. Audio is not saved. You can stop listening at any time.",
+          "speechRecognitionPermission": "CrossWise recognises spoken navigation commands on this iPhone."
+        }
+      ],
+      "./plugins/withAndroidPreview",
+      "expo-asset"
+    ],
+    "android": {
+      "package": "com.crosswise.app.preview",
+      "versionCode": 2,
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.VIBRATE"
+      ],
+      "blockedPermissions": [
+        "android.permission.READ_MEDIA_AUDIO",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.SYSTEM_ALERT_WINDOW"
+      ]
+    }
+  }
+}

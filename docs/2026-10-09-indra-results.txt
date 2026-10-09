@@ -1,0 +1,66 @@
+CrossWise INDRA evaluation — 9 October 2026
+
+Outcome
+Ran the actual current bundled BDD100K YOLO26n 640 float32 TFLite detector on five selected INDRA clips: video1, video8, video17, video43, video57. Inspected thumbnail overviews of the 104-file folder. These five clips cover several viewpoints, near parked cars, passing traffic, approaching vehicles, and camera tilt. This is not a test of all 104 videos.
+370 sampled frames at approximately 10 Hz. Executed the existing mobile TypeScript tracker/motion code and two experimental binary classifiers, then regression-tested binary approaches on the previous night recordings.
+
+User request
+Test videos under /Users/hieu/Desktop/capstone/INDRA/Videos/Videos, explain pervasive uncertainty, remove the uncertain category and identify moving versus stationary vehicles.
+Implemented the requested two-label output in reproducible research candidates and the comparison demo. Did NOT replace the phone's production warning/classification code, because regression testing demonstrated false-stationary moving vehicles. No app deployment occurred this turn. No claim of black-screen recovery is made.
+
+Why so much uncertainty
+YOLO detects vehicle appearance; it does not classify physical motion. That comes from tracking and camera-compensated optical flow.
+The existing classifier requires >=6 coherent points within a vehicle, a valid background affine fit, temporal votes, and at least about 1 second of sustained evidence for stationary. Failures reset histories. The live app additionally forces uncertainty while its walking detector reports walking. Recorded videos have no synchronized IMU; this replay does NOT turn on that walking gate.
+INDRA baseline: 360/370 frames had a reliable background fit. Across 5,233 vehicle-track observations: 1,417 moving, 56 stationary, 3,760 uncertain (71.85%). Of uncertain observations, 2,997 (79.7%) had fewer than 6 local features; 130 had no per-track diagnostics. These are observations across time, not independent vehicles or accuracy counts. Therefore simply relaxing global camera fitting is not the main INDRA fix. Distant/small or texture-poor boxes and strict local evidence requirements dominate.
+Night adds glare, blur and camera translation/parallax. A single background transform cannot perfectly account for near/far stationary objects when the camera walks.
+
+Experiments
+A. Existing app: JSFeat LK, global background affine, temporal flow and box-centre history. Frozen source from current app is read by replay.cjs.
+B. Dense local-flow binary: OpenCV DIS backward flow (sign reversed to represent previous-to-current), vehicle interior flow compared with nearby masked background; robust median and temporal majority.
+C. Mobile-compatible sparse binary: existing JSFeat flow, nearest 40 background points, median subtraction, relaxed local support (3 points), noise-relative moving threshold, 700 ms temporal votes. Source is candidate-src/tracking/vehicleMotion.ts. All vehicle outputs are MOVING or STATIONARY; supported=false flags insufficient evidence separately. Unsupported/default stationary hypotheses must NOT suppress alerts or establish a clear road.
+D. Night regression improvement: dense local affine fit, iteratively reweighted least squares to compensate nearby camera rotation/translation rather than just subtracting a median. Still insufficient.
+
+Small visual audit
+38 manually reviewed vehicle-centre points in 640x360 frames: 26 moving, 12 stationary. Vehicle here includes cars, motorcycles and other detected road vehicles, not only passenger cars. Annotations chosen by inspection across adjacent times; no independent human verification. Some are repeated observations of the same object. A containing tracked box is matched, smallest if overlapping; this is not IoU mAP or a full false-positive/direction benchmark. High scores must not be generalized to all traffic or unseen clips. Previous work may have used some same-number INDRA/archive clips, so do not call these a held-out dataset.
+
+                          Moving correctly / 26    Parked correctly / 12    Uncertain
+Existing app                       23                       4                  11
+Dense binary                       25                      12                   0
+Sparse binary                      25                      12                   0
+
+Both binary methods mislabelled one moving reviewed example as stationary. Sparse mismatch: video1 at 3s, selected overlapping tractor/trailer region. Current residual was moving but recent majority lagged; association/overlapping boxes and temporal smoothing require closer review. All 38 sparse matched points had supported=true; support is not a calibrated correctness guarantee.
+
+Night regression (45 previously reviewed points: 13 moving, 32 parked)
+                        Moving correct  Moving wrongly stationary  Moving missed  Parked correct  Parked wrongly moving  Parked missed
+Sparse binary                  2                  10                    1              11                 19                2
+Dense local-affine binary       4                   8                    1              15                 15                2
+These failures are why binary classification was not promoted into the live app. Renaming uncertain to stationary would hide a warning for actual moving traffic; renaming it all moving creates parked-car alerts. Neither solves the user's complaint.
+The night audit uses previous BDD PyTorch detection caches, whereas new INDRA uses the actual TFLite detector. It is a motion-method regression check, not a new exact-detector parity study. Previous selected-frame TFLite parity checks are in the October 8 report.
+
+Demo
+/Users/hieu/Desktop/capstone/research/2026-10-09-indra/indra-comparison.mp4
+37-second H.264 MP4, 370 frames, 10 fps, 1280x410.
+Left: existing app motion labels (including uncertainty). Right: experimental mobile-compatible binary labels. Red moving, green stationary, yellow uncertain. Asterisk means insufficient support. For legibility the movie only draws tracks whose smoothed detector confidence >=.25; the audit and inference caches include lower-confidence tracks down to .08. This display threshold is not a production threshold change. Predictions are not ground truth. No movie output feeds live alerts.
+Decoded a middle frame successfully and saved demo-preview.jpg. Per-video contact sheets are baseline-video*.jpg, binary-video*.jpg and sparse-video*.jpg.
+
+Reproducibility
+Run from /Users/hieu/Desktop/capstone.
+Python: research/2026-10-07-vehicle-motion/export-env/bin/python (OpenCV, LiteRT, NumPy installed).
+1. inspect_videos.py -> inventory.json, overview-*.jpg
+2. detect.py -> video*.jsonl (overwrites selected outputs; originals untouched)
+3. node research/2026-10-09-indra/replay.cjs -> baseline-*.json
+4. Python binary.py -> dense binary results
+5. SOURCE="$PWD/research/2026-10-09-indra/candidate-src" TAG=sparse node research/2026-10-09-indra/replay.cjs
+6. Python audit.py -> annotations.json, *-audit.json, audit-summary.json
+7. SOURCE="$PWD/research/2026-10-09-indra/candidate-src" DATA="$PWD/research/2026-10-08-road-test/bdd640" TAG=binary-sparse node research/2026-10-08-road-test/replay.cjs
+8. Python night_audit.py
+9. NIGHT=1 Python local_affine.py, then evaluate_affine.py
+10. Python make_demo.py
+
+Implementation/test notes
+INDRA detector output [1,11,8400], class-aware NMS .45, detection threshold .08. RGB /255 640-square letterbox. Gray point sampling matches the model-input approach, long edge 384. Uses real TFLite, no new downloaded model.
+Early NumPy matrix-product runtime warnings were eliminated by explicit channel sums / einsum and affected experiments rerun. Latest logs were clean. Original recordings and production app source unchanged.
+No app lint/build/device test was necessary because changes are isolated research scripts/candidates. The unresolved iPhone issue is still documented in CROSSWISE_HANDOFF_2026-10-08.md.
+
+Recommended next implementation work
+Do not adopt a binary classifier until its stationary errors on moving traffic are controlled. Improve temporal association/occlusion handling and texture sampling (including glare edges and small targets), then evaluate longer-baseline camera-compensated tracks. For walking scenes, use synchronized visual-inertial pose and depth/ground geometry rather than assuming one image transform is enough. Keep the classifier's binary hypothesis distinct from evidence validity; a forced label cannot be treated as a measured fact. Need independent full-track annotations, false-positive review, direction accuracy, latency, and stationary-curb/night videos with IMU before live promotion.

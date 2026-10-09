@@ -1,0 +1,34 @@
+Vehicle motion integration — iOS — 8 October 2026
+
+Target: capstone_ios, shared React Native source. Android deployment is out of scope for this test.
+
+Pipeline
+YOLO26s 960 FP16 TFLite -> existing mobile association -> JSFeat pyramidal Lucas–Kanade forward/backward flow -> background affine RANSAC -> temporal moving/stationary/uncertain estimates. This is a mobile adaptation, not the identical desktop BoT-SORT/OpenCV implementation. Mobile box-center compensation uses median background translation; feature residuals use the affine model.
+
+UI and speech
+Developer boxes show only moving (red) and uncertain (yellow) vehicles. Confirmed stationary vehicles are hidden. User mode retains its minimal presentation. Moving vehicles may produce left/right warnings only with consistent motion evidence and a steady phone near its initial forward heading. Otherwise moving vehicles receive a generic approaching warning. Uncertain vehicles receive “Vehicle detected.” Existing proximity escalation remains. Vibration accompanies alerts, with repeat suppression.
+
+Guided scan
+Instructions ask the user to keep their body facing forward and point the phone left, then right. Each side requires two continuous seconds of fresh, usable frames. Moving/uncertain tracks, insufficient texture, darkness, stale orientation, missing frames and walking invalidate scan evidence. Dont-walk signals also block completion. Interruptions after the left scan require a fresh left scan. The phrase is “Scan complete. No moving vehicles detected.” It is not permission to cross. The camera cannot establish unseen traffic, a safe gap, road priority or crossing distance from an absence of detections.
+
+Development validation
+253 Jest tests; TypeScript and Expo lint. Includes camera-motion-only cases, both vehicle directions, low-texture uncertainty and interrupted scans.
+Export parity against matching square PyTorch inputs: video1 mean best vehicle IoU 0.997, video8 0.987. This compares conversion output, not detection accuracy.
+Five-video replay uses sampled cached detector boxes and 384x216 grayscale images, not the full physical camera pipeline. Latest run: moving samples 30 moving / 6 uncertain / 0 stationary; stationary samples 8 stationary / 12 uncertain / 0 moving. Direction: 9 correct / 27 unknown / 0 reversed. Earlier runs gave 29 moving / 7 uncertain. Affine RANSAC is stochastic. These are development samples used during tuning, not independent validation.
+The stricter direction gate removed one reversed direction, at a significant loss of directional coverage. This limitation must remain explicit.
+
+Device validation
+Release build and installation succeeded on the connected iPhone 15 Pro. Diagnostic test loading extra model interpreters triggered memory pressure and process termination. Live CPU testing is being used to isolate camera delivery. Installation alone does not verify live motion, speech or haptics. Further results appended below.
+
+Files
+capstone_ios/src/tracking/vehicleMotion.ts
+capstone_ios/src/tracking/pixelFlow.ts
+capstone_ios/src/crossing/trafficScan.ts
+capstone_ios/src/crossing/crossingEngine.ts
+capstone_ios/src/camera/CameraSurface.tsx
+research/2026-10-07-vehicle-motion/mobile-evaluation/{replay.cjs,summary.json,audit.json,direction-summary.json}
+research/2026-10-07-vehicle-motion/mobile-model-parity-square.json
+
+Dependencies: JSFeat 0.0.8 (MIT), YOLO26s exported with Ultralytics. Existing model licensing requirements continue to apply.
+
+Deployment update: final Release app installed and launched on iPhone 15 Pro. YOLO26s-960 selected; acceleration restored after CPU diagnostics. CPU live-frame processing measured 1157 ms, too slow for the 350 ms freshness gate, so CPU is not a usable guidance configuration for this model. Accelerated live latency and road behavior remain unverified. User requested deployment only and will road-test tomorrow. No additional road-test confirmation requested. Final app includes capture-status and pipeline diagnostics for troubleshooting.

@@ -1,0 +1,13 @@
+Research prototype: YOLO26n trained on BDD100K (7 road-user classes)
+Upstream: https://github.com/lochuan/yolo26n-bdd100k
+Revision: 7c7c10be1628dffdd026fa8efd72e0c7556be2e1
+Source: weights/yolo26n-bdd100k-fp32.pt
+Export: Ultralytics 8.4.24, format=tflite imgsz=640 half=False int8=False nms=False device=cpu
+Date: 2026-10-08
+Input: float32 RGB /255, NHWC [1,640,640,3], aspect-preserving letterbox.
+Output: raw channels-first [1,11,8400], normalized xywh plus seven class scores; class-aware NMS required.
+Classes: person, rider, car, bus, truck, bicycle, motorcycle.
+No crosswalk, traffic-light or pedestrian-signal classes. No motion classes.
+Exporter metadata declares AGPL-3.0 (https://ultralytics.com/license).
+Upstream checkpoint repository has no obvious standalone LICENSE; retain attribution and review rights before public distribution.
+Evaluation and limitations: ../../../research/2026-10-08-road-test/RESULTS.txt

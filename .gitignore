@@ -1,42 +1,52 @@
-# Secrets — never commit. steps.md and .env both hold the Roboflow API key.
-.env
-steps.md
+# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
+
+# dependencies
+node_modules
+
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Native
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
 *.key
+*.mobileprovision
 
-# Datasets: tens of gigabytes, and VIDVIP/DTLD may not be redistributed.
-DTLD/
-VIDVIP/
-ml/data/
-ml/runs/
-ml/.kaggle_build/
+# Metro
+.metro-health-check*
 
-# Kaggle training output, including crosswise_v1_best.tflite, is tracked.
-!ml/kaggle_output/**
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
 
-# Model binaries are produced by ml/ (see ml/README.md to build or download one).
-*.tflite
-*.pt
-*.onnx
-android/app/src/main/assets/models/*.tflite
-
-# Android / Gradle
-android/build/
-android/app/build/
-android/.gradle/
-android/local.properties
-android/.kotlin/
-.gradle/
-build/
-*.apk
-*.aab
-
-# IDE
+# macOS
+.DS_Store
+*.pem
 .idea/
-*.iml
-.vscode/
+.claude/
 
-# Python
-__pycache__/
-*.pyc
-.pytest_cache/
-.venv/
+# local env files
+.env*.local
+
+# typescript
+*.tsbuildinfo
+
+# iOS is kept out of this Android repository. The Android project is the
+# React Native target and must remain versioned.
+/ios
+/android/build/
+/android/app/build/
+/android/.gradle/
+/android/local.properties
+/android/app/debug.keystore
+/android-legacy/build/
+
+# Build-time service credentials
+.env
