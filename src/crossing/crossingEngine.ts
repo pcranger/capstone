@@ -531,7 +531,8 @@ export class CrossingEngine {
   }
 
   private hazardCues(nowMs: number): Cue[] {
-    const speakable = this.hazards.filter((h) => !h.pending);
+    // CW-14: a far, unsure car that is not growing (box under hazardMonitor's 5% height floor) is shown, not spoken.
+    const speakable = this.hazards.filter((h) => !h.pending && !(h.uncertain && !Number.isFinite(h.ttcSeconds) && h.heightFraction < 0.05));
     const firstApproach = (h: VehicleHazard) => h.approaching && !this.approachHeard.has(h.trackId);
     if(nowMs-this.lastVehicleCueMs<3000 && !speakable.some(h=>h.level===HazardLevel.CRITICAL || firstApproach(h))) return [];
     for (const [id, value] of [...this.announcedHazards.entries()]) {

@@ -43,12 +43,12 @@ function scene(cars: Car[]): { img: GrayFrame; boxes: BoxF[] } {
 
 type Spoken = { frame: number; phrase: Phrase };
 /** Run frames of 100 ms; makeCars(i) gives the cars of frame i. Returns every phrase spoken. */
-function run(n: number, walking: boolean, makeCars: (i: number) => Car[]): Spoken[] {
+function run(n: number, walking: boolean, makeCars: (i: number) => Car[], dt = 100): Spoken[] {
   const engine = new CrossingEngine();
   engine.command(UserCommand.START_ASSIST, 0);
   const spoken: Spoken[] = [];
   for (let i = 0; i < n; i++) {
-    const t = i * 100, { img, boxes } = scene(makeCars(i));
+    const t = i * dt, { img, boxes } = scene(makeCars(i));
     engine.onSensors(t, { timestampMs: t, headingDeg: 0, pitchDeg: 0 }, walking);
     const dets: Detection[] = boxes.map(b => det(ObjectCategory.CAR, b));
     const out = engine.onFrame({ ...frame(t, ...dets), motionImage: img, brightness: 0.7 }, { hfovDeg: 60, vfovDeg: 90 });
@@ -79,6 +79,13 @@ describe('bug 1: a car standing at the line is not announced again and again', (
     });
     dump('standing+arrival', spoken);
     expect(spoken.some(x => x.frame >= 50 && x.frame <= 55)).toBe(true);
+  });
+
+  test('far unsure cars that keep getting new track ids are not spoken (clip 04)', () => {
+    // Small far cars (box under 5% of the frame height) vanish and come back elsewhere every 1.5 s, as tracks 9/10/14/20 did.
+    const spoken = run(80, false, i => (i % 15 < 10 ? [{ cx: 30 + 40 * Math.floor(i / 15) % 140, cy: 30, s: 0.12, flat: true }] : []));
+    dump('far unsure', spoken);
+    expect(spoken).toEqual([]);
   });
 });
 
@@ -126,5 +133,12 @@ describe('guard: a car that really closes in is still warned', () => {
       dump(`steady growth walking=${walking}`, spoken);
       expect(spoken.filter(x => x.frame >= 5).length).toBeGreaterThan(0);
     }
+  });
+
+  test('slow phone (3.3 fps): a closing car still gets an approaching or "Caution" phrase', () => {
+    // 300 ms frames (slowest the motion classifier accepts is 350 ms); contact at 6 s, so growth is visible for many frames.
+    const spoken = run(18, false, i => [{ cx: 96, cy: 55, s: 6 / (6 - i * 0.3) * 0.5 }], 300);
+    dump('closing slow', spoken);
+    expect(urgentPhrases(spoken).length).toBeGreaterThan(0);
   });
 });

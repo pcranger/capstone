@@ -41,7 +41,7 @@ export class HazardMonitor {
     private readonly minFitQuality = 0.6,
     private readonly minHits = 4,
     private readonly minFramesToConfirm = 3,
-    private readonly maxGapMs = 400,
+    private readonly maxGapMs = 1000, // keep the streak at slow phones (2-3 fps)
   ) {}
 
   /** For each track that was looming at the last assessment: how many assessments in a row, and when. */
