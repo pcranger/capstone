@@ -189,7 +189,7 @@ test('User mode keeps warnings even when developer presentation hides them', asy
 test('shared controls have a single crossing action, Repeat and Stop', async () => {
   controller.ui.set({ ...controller.ui.value, snapshot: { ...EMPTY_SNAPSHOT, mode: AssistMode.SEARCHING } });
   await render(<JourneyControls stacked={false} />);
-  await press('I’m crossing'); await press('Repeat'); await press('Stop assistance');
+  await press('I’m crossing'); await press('Repeat'); await press('Stop camera help');
   expect(controller.crossingAction).toHaveBeenCalledWith('start');
   expect(controller.repeatGuidance).toHaveBeenCalledTimes(1);
   expect(controller.command).toHaveBeenCalledWith(UserCommand.STOP_ASSIST, true);
@@ -207,7 +207,8 @@ test('camera denial leaves destination planning and permission recovery availabl
   const request = jest.fn();
   await render(<MainScreen height={200} hasPermission={false} canRequestPermission requestPermission={request} />);
   expect(mockCameraMount).not.toHaveBeenCalled();
-  expect(renderedText()).toContain('Route guidance remains available');
+  expect(renderedText()).toContain('Camera is off');
+  expect(renderedText()).toContain('Routes still work without it');
   await press('Allow camera'); expect(request).toHaveBeenCalledTimes(1);
 });
 
@@ -224,7 +225,7 @@ test('rapid queued mode changes persist the final choice', async () => {
 test('idle controls have one full, wrapping start label', async () => {
   await render(<JourneyControls stacked={false} />);
   expect(button(S.actionDetails)).toBeUndefined();
-  const label = tree.root.findAll((n: any) => n.props.children === 'Start camera assistance' && n.props.style)[0];
+  const label = tree.root.findAll((n: any) => n.props.children === 'Start camera help' && n.props.style)[0];
   expect(label.props.numberOfLines).toBeUndefined();
   expect(button('I’m crossing')).toBeUndefined();
 });
@@ -281,11 +282,13 @@ test('first launch goes straight to the journey; general precautions are in Sett
   expect(renderedText()).toContain(S.safetyBody);
 });
 
-test('User camera keeps routine buttons behind More controls while retaining the fallback', async () => {
+test('User camera keeps one primary button in view and the routine buttons behind More controls', async () => {
   await render(<CrossWiseApp />);
-  expect(button('Start camera assistance')).toBeUndefined();
-  await press('More controls'); expect(button('Start camera assistance')).toBeDefined();
-  await press('Hide controls'); expect(button('Start camera assistance')).toBeUndefined();
+  expect(button('Start camera help')).toBeDefined(); expect(button('More controls')).toBeUndefined();
+  await act(async () => controller.ui.set({ ...controller.ui.value, snapshot: { ...EMPTY_SNAPSHOT, mode: AssistMode.SEARCHING } }));
+  expect(button('I’m crossing')).toBeDefined(); expect(button('Stop camera help')).toBeUndefined();
+  await press('More controls'); expect(button('Stop camera help')).toBeDefined(); expect(button('I’m crossing')).toBeDefined();
+  await press('Hide controls'); expect(button('Stop camera help')).toBeUndefined();
 });
 test('compact crossing controls never hide unfinished-crossing recovery', async () => {
   controller.journey.state.set({ phase: 'paused', crossing: true } as any);

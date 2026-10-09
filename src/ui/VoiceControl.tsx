@@ -20,8 +20,10 @@ export function VoiceStatus({ onHelp }: { onHelp: () => void }) {
   const state = useStore(controller.voice.state);
   const settings = useStore(controller.settings);
   const type = useType();
+  // The line appears only when there is something to say: listening, working, an error, or speech switched off.
+  if (settings.speech && !['listening', 'working', 'error'].includes(state.phase)) return null;
   const text = !settings.speech ? 'Voice commands are off. Enable Speech in Settings.' : state.phase === 'listening' ? 'Listening…' : state.phase === 'working' ? 'Working…'
-    : state.phase === 'off' ? 'Voice off' : state.text;
+    : state.text;
   return <View style={{ paddingHorizontal: 12, paddingBottom: 8, gap: 4 }}>
     <Text style={type.bodyMedium} accessibilityLiveRegion="polite">{text}</Text>
     {(state.phase === 'error' || !settings.speech) && <TextButton label="Voice help" onPress={onHelp} />}

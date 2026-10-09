@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { type ReactElement, useEffect, useState } from 'react';
 import { MaterialIcons } from '@expo/vector-icons';
 import { BackHandler, Keyboard, PanResponder, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -31,7 +31,7 @@ export function JourneyScreen({ onSettings, hidden, onDockHeight, hasPermission,
   const setMapOpen = (value: boolean) => { if (value) controller.openMap(); else controller.closeMap(); };
   const setExpanded = (value: boolean) => controller.presentation.update(s => ({ ...s, expanded: value }));
   const [height, setHeight] = useState(window.height - 90);
-  const [headerHeight, setHeaderHeight] = useState(52);
+  const [headerHeight, setHeaderHeight] = useState(56);
   const [dockHeight, setDockHeight] = useState(114);
   const [keyboard, setKeyboard] = useState(0);
   const [sheetHeight, setSheetHeight] = useState(200);
@@ -121,7 +121,7 @@ export function RouteSummary({ onDestination }: { onDestination: () => void }) {
   const active = s.phase === 'walking' || s.phase === 'paused';
   return <View style={styles.summary}>
     {active && route ? <>
-      <Text style={[type.titleLarge, { color: Colors.Accent }]} accessibilityRole="header">{s.phase === 'paused' ? 'Journey paused' : s.crossing ? 'Crossing help' : `Step ${s.stepIndex + 1} of ${route.steps.length}`}</Text>
+      <Text style={[type.titleLarge, { color: Colors.Accent }]} accessibilityRole="header">{s.phase === 'paused' ? 'Journey paused' : s.crossing ? 'Crossing' : `Step ${s.stepIndex + 1} of ${route.steps.length}`}</Text>
       <Text style={type.bodyMedium}>To {route.destination}</Text>
       {s.crossing ? <>
         <Text style={type.titleMedium}>Route speech is paused.</Text>
@@ -140,7 +140,8 @@ export function RouteSummary({ onDestination }: { onDestination: () => void }) {
         color={Colors.Crossing} onPress={() => { if (s.phase === 'arrived') controller.journey.end(); onDestination(); }} />
     </>}
     {s.error && <Text style={[type.bodyMedium, { color: '#FFD87A' }]} accessibilityRole="alert">{s.error}</Text>}
-    {route && <Text style={type.bodyMedium}>{WALKING_WARNING}</Text>}
+    {/* The beta warning is shown once, under Start journey in the destination sheet; not again while walking. */}
+    {route && !active && <Text style={type.bodyMedium}>{WALKING_WARNING}</Text>}
   </View>;
 }
 
@@ -150,38 +151,41 @@ export function JourneyControls({ stacked, compact = false }: { stacked: boolean
   const [expanded, setExpanded] = useState(false);
   const s = useStore(controller.journey.state);
   const { snapshot } = useStore(controller.ui);
-  const mode = snapshot.mode;
-  const assistOn = mode !== AssistMode.IDLE;
+  const assistOn = snapshot.mode !== AssistMode.IDLE;
   const paused = s.phase === 'paused';
-  const active = s.phase === 'walking' || paused;
-  const crossing = mode === AssistMode.CROSSING || (paused && s.crossing);
-  const action = crossing ? 'finish' : s.phase === 'walking' && !s.crossing ? 'help' : 'start';
-  const label = action === 'finish' ? 'I’m on the footpath' : action === 'help' ? 'Crossing help' : 'I’m crossing';
-  const button = (text: string, onPress: () => void, color = Colors.SurfaceVariant, enabled = true) =>
-    <BigButton text={text} onPress={onPress} multiline color={color} enabled={enabled} style={stacked ? undefined : { flex: 1 }} />;
+  const walking = s.phase === 'walking';
+  const crossing = snapshot.mode === AssistMode.CROSSING || (paused && s.crossing);
+  const button = (text: string, onPress: () => void, color = Colors.SurfaceVariant, enabled = true, primary = false) =>
+    <BigButton key={text} text={text} onPress={onPress} multiline color={color} enabled={enabled} primary={primary}
+      style={stacked || primary ? undefined : { flex: 1 }} />;
 
-  if (compact && !expanded) return <View style={styles.footer}>
-    {crossing && button(label, () => controller.crossingAction(action), Colors.Crossing, !s.busy)}
-    <TextButton label="More controls" onPress={() => setExpanded(true)} />
-  </View>;
+  // One primary button (56 dp), always in the same place, that walks through the states. (ui-p2c J2)
+  const primary = crossing ? button(S.actionEndCrossing, () => controller.crossingAction('finish'), Colors.Crossing, !s.busy, true)
+    : paused ? button(S.actionResume, () => { void controller.startJourney(); }, Colors.Crossing, !s.busy, true)
+    : walking ? button(S.actionStartCrossing, () => controller.crossingAction('help'), Colors.Crossing, !s.busy, true)
+    : assistOn ? button(S.actionStartCrossing, () => controller.crossingAction('start'), Colors.Crossing, !s.busy, true)
+    : button(S.actionStartAssist, () => controller.command(UserCommand.START_ASSIST, true), Colors.Crossing, true, true);
+  const more = [
+    (assistOn || walking || paused) && button('Repeat', () => controller.repeatGuidance(), Colors.SurfaceVariant, assistOn || walking),
+    walking && button('Pause', () => controller.pauseJourney()),
+    paused && button('End journey', () => controller.stopNavigation(), Colors.DontWalk),
+    !walking && !paused && assistOn && button(S.actionStopAssist, () => controller.command(UserCommand.STOP_ASSIST, true), Colors.DontWalk),
+  ].filter(Boolean) as ReactElement[];
+  // At most two buttons share a row; a lone button, or the larger text sizes, take the full width. (ui-p2c J11)
+  const rows: ReactElement[][] = [];
+  for (let i = 0; i < more.length; i += stacked ? 1 : 2) rows.push(more.slice(i, i + (stacked ? 1 : 2)));
+  const showMore = more.length > 0 && (!compact || expanded);
 
   return <View style={styles.footer}>
-    {compact && <TextButton label="Hide controls" onPress={() => setExpanded(false)} />}
     {s.busy === 'starting' && <Text style={type.bodyMedium} accessibilityLiveRegion="polite">Checking location…</Text>}
-    <View style={[styles.controls, stacked && { flexDirection: 'column', alignItems: 'stretch' }]}>
-      {(!paused || s.crossing) && (assistOn || active) && button(label, () => controller.crossingAction(action), Colors.Crossing, !s.busy && (assistOn || action === 'finish'))}
-      {(assistOn || active) && button('Repeat', () => controller.repeatGuidance(), Colors.SurfaceVariant, assistOn || s.phase === 'walking')}
-      {s.phase === 'walking' && button('Pause', () => controller.pauseJourney())}
-      {paused && !s.crossing && button('Resume', () => { void controller.startJourney(); }, Colors.Crossing, !s.busy)}
-      {paused && button('End journey', () => controller.stopNavigation(), Colors.DontWalk)}
-      {!active && button(assistOn ? 'Stop assistance' : 'Start camera assistance',
-        () => controller.command(assistOn ? UserCommand.STOP_ASSIST : UserCommand.START_ASSIST, true), assistOn ? Colors.DontWalk : Colors.Crossing)}
-    </View>
+    {showMore && rows.map((row, i) => <View key={i} style={styles.controls}>{row}</View>)}
+    {primary}
+    {compact && more.length > 0 && <TextButton size="large" label={expanded ? S.actionHideControls : S.actionMoreControls} onPress={() => setExpanded(!expanded)} />}
   </View>;
 }
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.Background, overflow: 'hidden' },
-  header: { position: 'absolute', top: 0, left: 0, right: 0, paddingHorizontal: 12, backgroundColor: Colors.Glass },
+  header: { position: 'absolute', top: 0, left: 0, right: 0, minHeight: 56, paddingHorizontal: 12, backgroundColor: Colors.Glass },
   sheet: { position: 'absolute', left: 0, right: 0, backgroundColor: Colors.Surface, borderTopLeftRadius: 18, borderTopRightRadius: 18, overflow: 'hidden' },
   sheetHandle: { minHeight: 56, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
   exitMap: { position: 'absolute', right: 12, gap: 12 },

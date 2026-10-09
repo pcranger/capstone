@@ -84,16 +84,16 @@ describe('J1/J6 journey status row', () => {
     expect(flat(textOf(message))).toMatchObject({ color: Colors.OnHazard, fontSize: 20 });
     expect(flat(textOf(message)).fontFamily).toMatch(/Bold$/);
   });
-  test('without a hazard the row is not filled but is still a polite live region', async () => {
+  test('without a hazard the row takes its state colour and is still a polite live region', async () => {
     await mainScreen();
-    const row = byLabel('Camera assistance is off.').find((n: any) => n.props.accessibilityLiveRegion);
+    const row = byLabel(S.cameraHelpOff).find((n: any) => n.props.accessibilityLiveRegion);
     expect(row.props.accessibilityLiveRegion).toBe('polite');
-    expect(flat(row).backgroundColor).toBeUndefined();
+    expect(flat(row).backgroundColor).toBe(Colors.Unknown);
   });
   test('Large status text makes the status line 26 sp', async () => {
     controller.settings.set({ ...controller.settings.value, largeStatus: true });
     await mainScreen();
-    expect(flat(textOf('Camera assistance is off.')).fontSize).toBe(26);
+    expect(flat(textOf(S.cameraHelpOff)).fontSize).toBe(26);
   });
 });
 
