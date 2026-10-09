@@ -9,7 +9,7 @@ import { usableFix } from '../nav/navigation';
 import { controller } from '../state/controller';
 import { useStore } from '../state/store';
 import { IconPill, TextButton } from './components';
-import { Colors, useType } from './theme';
+import { Colors, Dimens, useType } from './theme';
 
 /** Own subscription to GPS, never to per-frame perception. Native Google attribution stays unobstructed. */
 export const MapPanel = memo(function MapPanel({ height, fullScreen = false, onExpand, bottomInset = 12, onInteract, toolsHidden = false, preview, onCandidate, onPlaceId }: { height: number; fullScreen?: boolean; onExpand?: () => void; bottomInset?: number; onInteract?: () => void; toolsHidden?: boolean; preview?: PlannerState; onCandidate?: (place: PlaceCandidate) => void; onPlaceId?: (id: string) => void }) {
@@ -89,10 +89,10 @@ export const MapPanel = memo(function MapPanel({ height, fullScreen = false, onE
         accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
         {preview?.page === 'results' && preview.candidates.map((place, i) => <Marker key={place.id} coordinate={place.point}
           title={`${i + 1}. ${place.name}`} description={place.address} onPress={() => onCandidate?.(place)} />)}
-        {route && <Polyline coordinates={route.points} strokeColor="#1464C0" strokeWidth={5} />}
+        {route && <Polyline coordinates={route.points} strokeColor={Colors.RouteLine} strokeWidth={5} />}
         {destination && <Marker coordinate={destination.point} title={destination.name} />}
-        {fix && <Circle center={fix} radius={fix.accuracy ?? 0} fillColor="rgba(20,100,192,0.14)" strokeColor="#1464C0" />}
-        {fix && <Marker coordinate={fix} title="Approximate current location" pinColor="#1464C0" />}
+        {fix && <Circle center={fix} radius={fix.accuracy ?? 0} fillColor={Colors.RouteFill} strokeColor={Colors.RouteLine} />}
+        {fix && <Marker coordinate={fix} title="Approximate current location" pinColor={Colors.RouteLine} />}
       </MapView>
       {!fullScreen && onExpand && <Pressable style={StyleSheet.absoluteFill} accessibilityRole="button"
         accessibilityLabel="Open full-screen map" onPress={onExpand} />}
@@ -120,5 +120,5 @@ const styles = StyleSheet.create({
   tools: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', paddingHorizontal: 12, gap: 12 },
   toolsStacked: { flexDirection: 'column', alignItems: 'stretch', flexWrap: 'nowrap' },
   message: { padding: 12 },
-  floatingTools: { position: 'absolute', top: 12, left: 12, right: 84, borderRadius: 12, backgroundColor: '#161C21' },
+  floatingTools: { position: 'absolute', top: 12, left: 12, right: 84, borderRadius: Dimens.radiusRow, backgroundColor: Colors.Surface },
 });

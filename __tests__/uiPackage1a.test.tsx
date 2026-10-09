@@ -83,12 +83,12 @@ test('BackButton is 56 dp, named by its label and calls onPress', async () => {
   expect(back).toHaveBeenCalled();
 });
 
-test('TextField shows its name above, is 56 dp and 18 sp, and its accessibility name starts with the visible word', async () => {
+test('TextField shows its name above, is 56 dp and 20 sp, and its accessibility name starts with the visible word', async () => {
   await render(<TextField label="Destination" accessibilityLabel="Destination name and suburb" value="" onChangeText={() => undefined} />);
   expect(allText()).toContain('Destination');
   const input = tree.root.findAll((n: any) => n.type === 'TextInput')[0];
   expect(input.props.accessibilityLabel.startsWith('Destination')).toBe(true);
-  expect(style(input)).toMatchObject({ minHeight: 56, fontSize: 18 });
+  expect(style(input)).toMatchObject({ minHeight: 56, fontSize: 20 });
 });
 
 test('Practice page: Practice only line, 56 dp Back button wired to onBack, hint on every practice button', async () => {

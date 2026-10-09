@@ -327,6 +327,10 @@ export const S = {
     '“Finish crossing” only on the far footpath, beyond any refuge island.',
     '“Confirm” starts a reviewed route; it does not complete a crossing.',
   ],
+
+  // UI P3e
+  actionClose: 'Close',
+  startingApp: 'Starting CrossWise…',
 };
 
 /** Everyday speech: observations, short confirmations and recoverable failures. Tutorials stay in Help. */

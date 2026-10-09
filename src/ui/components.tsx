@@ -2,6 +2,8 @@ import { MaterialIcons } from '@expo/vector-icons';
 import Slider from '@react-native-community/slider';
 import { type ReactNode, useState } from 'react';
 import {
+  Animated,
+  Easing,
   Pressable,
   type StyleProp,
   StyleSheet,
@@ -15,6 +17,30 @@ import {
 import { S } from '../strings';
 import { Text } from './ScaledText';
 import { Colors, Dimens, useType } from './theme';
+import { useReducedMotion } from './useReducedMotion';
+
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
+/**
+ * J17: press feedback for buttons. Scales to 0.97 over 120 ms ease-out and dips to 0.8 opacity; with Reduce Motion the
+ * scale is skipped and only the opacity dip remains, applied at once.
+ */
+function usePressFeedback() {
+  const reduceMotion = useReducedMotion();
+  const [pressed] = useState(() => new Animated.Value(0));
+  const to = (toValue: number) => {
+    if (reduceMotion) pressed.setValue(toValue);
+    else Animated.timing(pressed, { toValue, duration: 120, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
+  };
+  return {
+    onPressIn: () => to(1),
+    onPressOut: () => to(0),
+    style: {
+      opacity: pressed.interpolate({ inputRange: [0, 1], outputRange: [1, 0.8] }),
+      transform: reduceMotion ? [] : [{ scale: pressed.interpolate({ inputRange: [0, 1], outputRange: [1, 0.97] }) }],
+    },
+  };
+}
 
 /** A group of related settings. One heading, one surface, rows inside — instead of a flat wall of switches. */
 export function SectionCard({ title, children }: { title: string; children: ReactNode }) {
@@ -133,29 +159,32 @@ export function BigButton({
   multiline?: boolean;
 }) {
   const type = useType();
+  const feedback = usePressFeedback();
   // Amber is the one state color that white text cannot sit on (1.1:1); it always takes black.
   const content = color === Colors.Hazard ? Colors.OnHazard : '#FFFFFF';
   // A quiet (SurfaceVariant) button is 1.3:1 against the dock, so it gets a 2 dp outline. A disabled one loses its
   // fill and gets a dashed outline at half strength, so "off" is a shape, not just a shade.
   const quiet = color === Colors.SurfaceVariant;
   return (
-    <Pressable
+    <AnimatedPressable
       onPress={onPress}
+      onPressIn={feedback.onPressIn}
+      onPressOut={feedback.onPressOut}
       disabled={!enabled}
       accessibilityRole="button"
       accessibilityLabel={description ?? text}
       accessibilityHint={hint}
       accessibilityState={{ disabled: !enabled }}
-      style={({ pressed }) => [
+      style={[
         styles.button,
         {
           minHeight: primary ? Dimens.primaryButton : Dimens.secondaryButton,
           backgroundColor: enabled ? color : 'transparent',
           borderColor: enabled && !quiet ? color : Colors.OnSurfaceMuted,
           borderStyle: enabled ? 'solid' : 'dashed',
-          opacity: !enabled ? 0.5 : pressed ? 0.8 : 1,
         },
         style,
+        enabled ? feedback.style : { opacity: 0.5 },
       ]}
     >
       <Text
@@ -164,7 +193,7 @@ export function BigButton({
       >
         {text}
       </Text>
-    </Pressable>
+    </AnimatedPressable>
   );
 }
 
@@ -180,17 +209,20 @@ export function IconPill({
   onPress: () => void;
   enabled?: boolean;
 }) {
+  const feedback = usePressFeedback();
   return (
-    <Pressable
+    <AnimatedPressable
       onPress={onPress}
+      onPressIn={feedback.onPressIn}
+      onPressOut={feedback.onPressOut}
       disabled={!enabled}
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ disabled: !enabled }}
-      style={({ pressed }) => [styles.iconPill, { opacity: pressed ? 0.7 : 1 }]}
+      style={[styles.iconPill, feedback.style]}
     >
       <MaterialIcons name={icon} size={24} color={enabled ? Colors.OnSurface : Colors.OnSurfaceMuted} />
-    </Pressable>
+    </AnimatedPressable>
   );
 }
 
@@ -412,8 +444,8 @@ export const styles = StyleSheet.create({
   },
   input: {
     minHeight: Dimens.touchTarget,
-    fontSize: 18,
-    lineHeight: 24,
+    fontSize: 20,
+    lineHeight: 26,
     borderWidth: 1,
     borderColor: Colors.Hairline,
     borderRadius: Dimens.radiusRow,

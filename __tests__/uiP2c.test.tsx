@@ -85,7 +85,8 @@ describe('J2 the dock keeps one 56 dp primary button that follows the state', ()
     await press('I’m crossing');
     expect(controller.crossingAction).toHaveBeenCalledWith('start');
     await press('More controls');
-    expect(labels()).toEqual(['Repeat', 'Stop camera help', 'I’m crossing', 'Hide controls']);
+    // UI P3e J12: More controls opens a sheet (Repeat, Stop camera help, Close) after the dock's own two buttons.
+    expect(labels()).toEqual(['I’m crossing', 'More controls', 'Repeat', 'Stop camera help', 'Close']);
     await press('Stop camera help');
     expect(controller.command).toHaveBeenCalledWith(UserCommand.STOP_ASSIST, true);
   });

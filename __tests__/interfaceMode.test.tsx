@@ -288,7 +288,7 @@ test('User camera keeps one primary button in view and the routine buttons behin
   await act(async () => controller.ui.set({ ...controller.ui.value, snapshot: { ...EMPTY_SNAPSHOT, mode: AssistMode.SEARCHING } }));
   expect(button('I’m crossing')).toBeDefined(); expect(button('Stop camera help')).toBeUndefined();
   await press('More controls'); expect(button('Stop camera help')).toBeDefined(); expect(button('I’m crossing')).toBeDefined();
-  await press('Hide controls'); expect(button('Stop camera help')).toBeUndefined();
+  await press('Close'); expect(button('Stop camera help')).toBeUndefined(); // UI P3e J12: the sheet's Close button
 });
 test('compact crossing controls never hide unfinished-crossing recovery', async () => {
   controller.journey.state.set({ phase: 'paused', crossing: true } as any);

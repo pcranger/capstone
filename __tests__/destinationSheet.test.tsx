@@ -56,11 +56,11 @@ test('accessibility activation stops voice before destination mutation without r
 });
 
 const hostStyle = (node: any) => require('react-native').StyleSheet.flatten(node.props.style);
-test('destination box has a visible label, is 56 dp and 18 sp, and its spoken name starts with the visible word', async () => {
+test('destination box has a visible label, is 56 dp and 20 sp, and its spoken name starts with the visible word', async () => {
   expect(text()).toContain('Destination');
   const input = tree.root.findAll((n: any) => n.type === 'TextInput' && n.props.accessibilityLabel === 'Destination name and suburb')[0];
   expect(input.props.accessibilityLabel.startsWith('Destination')).toBe(true);
-  expect(hostStyle(input)).toMatchObject({ minHeight: 56, fontSize: 18 });
+  expect(hostStyle(input)).toMatchObject({ minHeight: 56, fontSize: 20 });
 });
 
 test('Confirm place and Start journey are primary (56 dp); busy text is a polite live region', async () => {

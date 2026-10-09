@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { BackHandler, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, BackHandler, Pressable, StyleSheet, View } from 'react-native';
 import { Text } from './ScaledText';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useCameraPermission } from 'react-native-vision-camera';
@@ -10,7 +10,7 @@ import { GuideScreen } from './GuideScreen';
 import { JourneyScreen } from './JourneyScreen';
 import { PracticeScreen } from './PracticeScreen';
 import { SettingsScreen } from './SettingsScreen';
-import { Colors, useType } from './theme';
+import { Colors, Dimens, useType } from './theme';
 
 const NOTICE_MS = 8_000;
 type Panel = 'settings' | 'guide' | 'practice' | null;
@@ -53,7 +53,13 @@ export function CrossWiseApp() {
     const timer = setTimeout(() => controller.clearNotice(), NOTICE_MS);
     return () => clearTimeout(timer);
   }, [notice]);
-  if (!loaded) return <SafeAreaView style={styles.root}><Text style={[type.bodyMedium, { padding: 24 }]}>Starting CrossWise…</Text></SafeAreaView>;
+  // J19: a spinner plus the words, announced politely as one progress element.
+  if (!loaded) return <SafeAreaView style={styles.root}>
+    <View accessible accessibilityRole="progressbar" accessibilityLabel={S.startingApp} accessibilityLiveRegion="polite" style={styles.loading}>
+      <ActivityIndicator size="large" color={Colors.Accent} />
+      <Text style={type.bodyLarge}>{S.startingApp}</Text>
+    </View>
+  </SafeAreaView>;
   return <SafeAreaView style={styles.root}>
     <View style={{ flex: 1 }}>
       <JourneyScreen onSettings={() => setPanel('settings')}
@@ -74,5 +80,6 @@ export function CrossWiseApp() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.Background },
-  notice: { position: 'absolute', left: 12, right: 12, minHeight: 56, justifyContent: 'center', padding: 12, borderRadius: 12, backgroundColor: Colors.Crossing },
+  notice: { position: 'absolute', left: 12, right: 12, minHeight: 56, justifyContent: 'center', padding: 12, borderRadius: Dimens.radiusRow, backgroundColor: Colors.Crossing },
+  loading: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: Dimens.gapMedium, padding: Dimens.gapLarge },
 });

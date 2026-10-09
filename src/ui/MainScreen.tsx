@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { MaterialIcons } from '@expo/vector-icons';
+import { deviceWarnings, useDeviceState } from './AssistPanels';
 import { DeveloperTelemetry } from './DeveloperTelemetry';
 import { VehicleVisibilityControls } from './VehicleVisibilityControls';
 import { perceptionMessage } from '../perception/pipelineHealth';
@@ -32,6 +33,7 @@ export function MainScreen({ height, topInset = 0, bottomInset = 0, hidden = fal
   const pipeline=useStore(controller.pipeline);
   const cameraDetail=useStore(controller.cameraDetail);
   const journey = useStore(controller.journey.state);
+  const warnings = deviceWarnings(useDeviceState());
   const [attempt, setAttempt] = useState(0);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [, tick] = useState(0);
@@ -90,7 +92,7 @@ export function MainScreen({ height, topInset = 0, bottomInset = 0, hidden = fal
     {developer && <View style={[styles.strip, { top: topInset + 8 }]}>
       <Pressable accessibilityRole="button" accessibilityLabel={message + '. Show details'}
         onPress={() => setDetailsOpen(v => !v)} style={styles.iconButton}>
-        <MaterialIcons name={icon} size={24} color={unavailable || posture || hazard ? '#FFD87A' : '#80DEEA'} />
+        <MaterialIcons name={icon} size={24} color={unavailable || posture || hazard ? Colors.Warn : Colors.Info} />
       </Pressable>
       <VehicleVisibilityControls compact />
       <Pressable accessibilityRole="button" accessibilityLabel={detailsOpen ? 'Close diagnostics' : 'Open diagnostics'}
@@ -118,6 +120,11 @@ export function MainScreen({ height, topInset = 0, bottomInset = 0, hidden = fal
           {hint && <Text style={[type.bodyMedium, { color: onTone }]}>{hint}</Text>}
         </View>
       </View>}
+      {/* J16: one slim line for headphones and battery; the label carries every warning. */}
+      {hasPermission && warnings.length > 0 && <View accessible accessibilityLabel={warnings.map(w => w[1]).join(' ')} accessibilityLiveRegion="polite" style={styles.warnLine}>
+        <MaterialIcons name={warnings[0][0] === 'battery' ? 'battery-alert' : 'headset-off'} size={24} color={Colors.Warn} />
+        <Text style={[type.bodyMedium, { flex: 1 }]} numberOfLines={2}>{warnings[0][1]}{warnings.length > 1 ? ` (+${warnings.length - 1} more)` : ''}</Text>
+      </View>}
       {extras && <View style={styles.extras}>
         {!settings.showPreview && <Text style={type.bodyMedium}>Preview hidden.</Text>}
         {hasPermission && camera === 'unavailable' &&
@@ -132,9 +139,10 @@ export function MainScreen({ height, topInset = 0, bottomInset = 0, hidden = fal
 
 const styles = StyleSheet.create({
   panel: { backgroundColor: '#000' },
-  strip: { position: 'absolute', right: 12, flexDirection: 'row', backgroundColor: Colors.Glass, borderRadius: 24, paddingHorizontal: 4 },
+  strip: { position: 'absolute', right: 12, flexDirection: 'row', backgroundColor: Colors.Glass, borderRadius: Dimens.radiusPill, paddingHorizontal: 4 },
   iconButton: { minWidth: 44, minHeight: 44, paddingHorizontal: 5, flexDirection: 'row', gap: 3, alignItems: 'center', justifyContent: 'center' },
   banner: { flexDirection: 'row', alignItems: 'center', gap: Dimens.gapMedium, minHeight: Dimens.touchTarget, paddingHorizontal: Dimens.gutter, paddingVertical: 10 },
+  warnLine: { flexDirection: 'row', alignItems: 'center', gap: Dimens.gapMedium, minHeight: 40, paddingHorizontal: Dimens.gutter, paddingVertical: Dimens.gapSmall, backgroundColor: Colors.Glass },
   extras: { padding: Dimens.gapMedium, gap: Dimens.gapSmall, backgroundColor: Colors.Glass },
   status: { position: 'absolute', left: 0, right: 0 },
   cardWrap: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: Dimens.gutter },

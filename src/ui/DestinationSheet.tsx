@@ -22,7 +22,7 @@ export function PlaceRow({ place, index, saved, busy, onSelect, onSave }: {
     <Pressable style={{ width: 52, minHeight: 52, alignItems: 'center', justifyContent: 'center' }} disabled={busy}
       accessibilityRole="button" accessibilityLabel={saved ? `Remove ${place.name} from saved places` : `Save ${place.name}`}
       accessibilityState={{ selected: saved, disabled: busy }} onPress={onSave}>
-      <MaterialIcons name={saved ? 'star' : 'star-border'} size={28} color={saved ? '#FFD87A' : Colors.OnSurface} />
+      <MaterialIcons name={saved ? 'star' : 'star-border'} size={28} color={saved ? Colors.Warn : Colors.OnSurface} />
     </Pressable>
   </View>;
 }
@@ -62,7 +62,7 @@ export function DestinationSheet({ visible }: { visible: boolean }) {
     {s.page === 'entry' && !!s.query.trim() && button('Search places', search, !!s.query.trim() && !s.busy)}
     {s.busy && <View><Text accessibilityLiveRegion="polite" style={type.bodyMedium}>{s.busy === 'searching' ? 'Finding places…' : s.busy === 'details' ? 'Checking place…' : s.busy === 'routing' ? 'Finding route…' : 'Checking location…'}</Text>
       <TextButton label="Cancel request" onPress={() => { controller.stopVoice(); controller.planner.cancel(); }} /></View>}
-    {s.error && <Text accessibilityRole="alert" style={[type.bodyMedium, { color: '#FFD87A' }]}>{s.error}</Text>}
+    {s.error && <Text accessibilityRole="alert" style={[type.bodyMedium, { color: Colors.Warn }]}>{s.error}</Text>}
     {savedMode && saved.status === 'loading' && <Text accessibilityLiveRegion="polite" style={type.bodyMedium}>Loading saved places…</Text>}
     {saved.error && <Text accessibilityRole="alert" style={type.bodyMedium}>{saved.error}</Text>}
     {savedMode && saved.status === 'error' && <TextButton label="Retry saved places" onPress={() => { void controller.savedPlaces.load(); }} />}
