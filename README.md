@@ -15,7 +15,7 @@ reference only.
 - On-device voice commands: `manual`, `man`, `navigate to …`, `search …`, `first/second/third`, `save as …`, `confirm`, `repeat`, `pause`, `resume`, `stop navigation`. Offline English recognition must be available on the device.
 - Settings contains mode selection, the manual, precautions, practice cues and developer controls. Volume keys retain normal volume behavior.
 
-YOLO26n is bundled and selected by default; the custom CrossWise model is also bundled. Detection does not establish that crossing is safe. Models and optical motion estimates still require outdoor evaluation.
+The custom CrossWise model (crosswise.tflite: pedestrian signals, crosswalks, people and vehicles) is bundled and selected by default; the YOLO26n BDD100K vehicle model is also bundled and selectable in Developer mode. Detection does not establish that crossing is safe. Models and optical motion estimates still require outdoor evaluation.
 
 ## Build and run
 
@@ -23,6 +23,10 @@ JDK 17 and Android SDK 36 are required. Android 8+ is supported; on-device
 voice requires Android 12+ and an installed recognizer.
 
 Build configuration reads `GOOGLE_MAP_API_KEY` and `GEMINI_API_KEY` from environment variables or this repository's local `.env` file. Keys are not entered on the phone. The Google project must enable Maps SDK for Android, Places API and Routes API; Android key restrictions must match the installed package and signing certificate. Keys compiled into a mobile app are not secrets and need provider restrictions.
+
+The Android Maps key never lives in `android/`. The manifest holds only the placeholder `${googleMapsApiKey}`, and
+Gradle fills it at build time from `GOOGLE_MAPS_ANDROID_API_KEY` (or `GOOGLE_MAP_API_KEY`) in the environment or in the
+repo-root `.env`. Put the key in `.env`, never in a tracked file; `expo prebuild` keeps the placeholder in place.
 
 ```bash
 npm install

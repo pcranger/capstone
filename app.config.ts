@@ -11,7 +11,8 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     slug: config.slug ?? 'crosswise',
     plugins: [...(config.plugins ?? []), ['react-native-maps', {
       iosGoogleMapsApiKey: iosKey,
-      androidGoogleMapsApiKey: androidKey,
+      // Gradle manifest placeholder: the real key is read at build time (plugins/withAndroidPreview.js), never written into android/.
+      androidGoogleMapsApiKey: androidKey ? '${googleMapsApiKey}' : '',
     }]],
     extra: {
       ...config.extra,

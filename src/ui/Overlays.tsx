@@ -54,7 +54,7 @@ export function DetectionOverlay({ snapshot, frameAspect, resizeMode = 'cover', 
               width: t.box.width * rect.width,
               height: t.box.height * rect.height,
               borderWidth: t.isPrimarySignal ? 4 : 2,
-              borderColor: t.motion === 'MOVING' ? '#FF5252' : t.motion === 'STATIONARY' ? '#69DB92' : '#FFD600',
+              borderColor: t.motion === 'MOVING' ? '#FF5252' : t.motion === 'STATIONARY' && t.motionSupported ? '#69DB92' : '#FFD600',
             }}
           >
             <Text style={[type.labelMedium, { backgroundColor: '#071318E8', color: colorOf(t.category), alignSelf: 'flex-start', paddingHorizontal: 3 }]}>
