@@ -58,3 +58,27 @@ test('a car driving straight at the phone keeps its hazard and gets an ahead war
   console.info(perFrame.join(' '), 'spoken frames 4-9:', JSON.stringify(phrases));
   expect(phrases.some(p => p === Phrase.VEHICLE_AHEAD || p === Phrase.VEHICLE_CLOSE_AHEAD)).toBe(true);
 });
+
+test('a car first heard as "Vehicle detected" is announced as approaching once, at WARNING level', () => {
+  const engine = new CrossingEngine();
+  engine.command(UserCommand.START_ASSIST, 0);
+  const spoken: { frame: number; phrase: Phrase }[] = [];
+  const approachingFrames: number[] = [];
+  let firstApproaching = -1;
+  // 6% growth per 100 ms for ~3.8 s: time to contact stays ~1.7 s, so it never reaches CRITICAL.
+  for (let i = 0; i < 40; i++) {
+    const t = i * 100, { img, box } = scene(96, 55, 0.3 * Math.pow(1.06, i));
+    engine.onSensors(t, { timestampMs: t, headingDeg: 0, pitchDeg: 0 }, false);
+    const out = engine.onFrame({ ...frame(t, det(ObjectCategory.CAR, box)), motionImage: img, brightness: 0.7 }, { hfovDeg: 60, vfovDeg: 90 });
+    if (out.snapshot.hazards.some(h => h.approaching)) { approachingFrames.push(i); if (firstApproaching < 0) firstApproaching = i; }
+    for (const c of out.cues) if (c.kind === 'speak') spoken.push({ frame: i, phrase: c.phrase });
+  }
+  console.info('firstApproaching', firstApproaching, 'spoken', JSON.stringify(spoken));
+  expect(firstApproaching).toBeGreaterThan(0);
+  expect(spoken.some(s => s.phrase === Phrase.VEHICLE_CLOSE_AHEAD)).toBe(false); // never CRITICAL
+  const heard = spoken.filter(s => s.frame >= firstApproaching && s.phrase === Phrase.VEHICLE_AHEAD);
+  expect(heard.length).toBeGreaterThan(0);
+  expect(heard[0].frame).toBeLessThanOrEqual(firstApproaching + 2);
+  // Spoken exactly once in the 3 s after it turned approaching (wait for the first one to be allowed first).
+  expect(heard.filter(s => s.frame < firstApproaching + 30)).toHaveLength(1);
+});
