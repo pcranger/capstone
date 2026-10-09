@@ -41,7 +41,7 @@ export function DeveloperTelemetry({ snapshot: s, fresh, fps, inferenceMs, brigh
       return <View key={t.id} style={styles.track}>
         <Text style={type.labelLarge}>#{t.id} {t.category.replaceAll('_', ' ')} · {Math.round(t.confidence * 100)}% · {side}</Text>
         <Text style={type.labelMedium}>Box {Math.round(t.box.width * 100)} × {Math.round(t.box.height * 100)}% of frame{t.isPrimarySignal ? ' · PRIMARY' : ''}</Text>
-        {isVehicle(t.category) && <Text style={type.labelMedium}>{t.motion ?? 'VEHICLE'} · {t.direction ?? 'UNKNOWN'}</Text>}
+        {isVehicle(t.category) && <Text style={type.labelMedium}>{t.motion ?? 'VEHICLE'}{t.motionSupported ? '' : ' (unsure)'} · {t.direction ?? 'UNKNOWN'}</Text>}
         {isVehicle(t.category) && <Text style={[type.labelMedium, hazard && { color: '#FFD87A' }]}>{hazard
           ? `${hazard.level} · optical TTC ${hazard.ttcSeconds.toFixed(1)} s`
           : 'Motion / approach unconfirmed'}</Text>}
