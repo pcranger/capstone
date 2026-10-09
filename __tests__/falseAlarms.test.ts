@@ -53,7 +53,6 @@ function run(n: number, walking: boolean, makeCars: (i: number) => Car[]): Spoke
     const dets: Detection[] = boxes.map(b => det(ObjectCategory.CAR, b));
     const out = engine.onFrame({ ...frame(t, ...dets), motionImage: img, brightness: 0.7 }, { hfovDeg: 60, vfovDeg: 90 });
     for (const c of out.cues) if (c.kind === 'speak') spoken.push({ frame: i, phrase: c.phrase });
-    if (process.env.CW14_DEBUG) console.info(i, JSON.stringify(out.snapshot.hazards.map(h => [h.level, h.approaching, h.uncertain, h.ttcSeconds])), JSON.stringify(out.snapshot.tracks.map(x => [x.id, x.motion, x.motionSupported, +x.box.height.toFixed(3)])));
   }
   return spoken;
 }
