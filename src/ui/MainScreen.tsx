@@ -62,6 +62,7 @@ export function MainScreen({ height, topInset = 0, bottomInset = 0, hidden = fal
   const pitch = ui.snapshot.pitchDeg;
   const posture = fresh && assistOn && pitch !== null ? pitch < -35 ? 'Raise phone. Point the camera ahead.' : pitch > 50 ? 'Lower phone. Point the camera ahead.' : null : null;
   const message = unavailable ?? (hazard && assistOn ? status : posture ?? status);
+  const hazardShown = !unavailable && !!hazard && assistOn;
   const icon = unavailable ? 'videocam-off' : hazard && assistOn ? 'warning' : posture ? 'screen-rotation' : assistOn ? 'visibility' : 'pause-circle-outline';
 
   return <View style={[styles.panel, height === undefined ? StyleSheet.absoluteFill : { height }]}
@@ -86,9 +87,11 @@ export function MainScreen({ height, topInset = 0, bottomInset = 0, hidden = fal
     </View>}
     {(!developer || detailsOpen) && <ScrollView style={[styles.status, { top: topInset + (developer ? 60 : 8), maxHeight: Math.max(80, Math.min(window.height * (developer ? 0.38 : 0.28), window.height - topInset - bottomInset - 160)) }]}
       contentContainerStyle={{ padding: 12, gap: 8 }}>
-      <View accessible accessibilityLabel={message} style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-        <MaterialIcons name={icon} size={28} color={unavailable || posture || hazard ? '#FFD87A' : '#80DEEA'} />
-        <Text style={[type.titleMedium, { flex: 1 }, (unavailable || posture) && { color: '#FFD87A' }]}>{message}</Text>
+      <View accessible accessibilityLabel={message} accessibilityLiveRegion="polite"
+        style={[styles.statusRow, hazardShown && styles.hazardRow]}>
+        <MaterialIcons name={icon} size={28} color={hazardShown ? Colors.OnHazard : unavailable || posture || hazard ? '#FFD87A' : '#80DEEA'} />
+        <Text style={[settings.largeStatus ? type.headlineMedium : hazardShown ? type.titleLarge : type.titleMedium, { flex: 1 },
+          (unavailable || posture) && { color: '#FFD87A' }, hazardShown && { color: Colors.OnHazard }]}>{message}</Text>
       </View>
       {ui.snapshot.mode === AssistMode.CROSSING && !['walking', 'paused'].includes(journey.phase) &&
         <Text style={type.bodyMedium}>{S.crossingFinishHint}</Text>}
@@ -112,5 +115,7 @@ const styles = StyleSheet.create({
   panel: { backgroundColor: '#000' },
   strip: { position: 'absolute', right: 12, flexDirection: 'row', backgroundColor: Colors.Glass, borderRadius: 24, paddingHorizontal: 4 },
   iconButton: { minWidth: 44, minHeight: 44, paddingHorizontal: 5, flexDirection: 'row', gap: 3, alignItems: 'center', justifyContent: 'center' },
+  statusRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  hazardRow: { backgroundColor: Colors.Hazard, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8 },
   status: { position: 'absolute', left: 12, right: 12, backgroundColor: Colors.Glass, borderRadius: 12 },
 });

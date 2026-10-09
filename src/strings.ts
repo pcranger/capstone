@@ -276,6 +276,11 @@ export const S = {
   settingsSectionAi: 'Assistant',
   settingsGemini: 'Describe surroundings (Gemini)',
 
+  // UI P1b
+  voiceStart: 'Start voice commands',
+  voiceStop: 'Stop listening',
+  voiceRetry: 'Retry voice',
+  noticeDismissHint: 'Tap to dismiss',
 };
 
 /** Everyday speech: observations, short confirmations and recoverable failures. Tutorials stay in Help. */

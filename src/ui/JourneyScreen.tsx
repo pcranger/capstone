@@ -17,8 +17,8 @@ import { Colors, useType } from './theme';
 import { VoiceControl, VoiceStatus } from './VoiceControl';
 
 /** Two views; neither map interaction nor the keyboard resizes the camera. */
-export function JourneyScreen({ onSettings, hidden, hasPermission, canRequestPermission, requestPermission }: {
-  onSettings: () => void; hidden: boolean;
+export function JourneyScreen({ onSettings, hidden, onDockHeight, hasPermission, canRequestPermission, requestPermission }: {
+  onSettings: () => void; hidden: boolean; onDockHeight?: (height: number) => void;
   hasPermission: boolean; canRequestPermission: boolean; requestPermission: () => unknown;
 }) {
   const type = useType();
@@ -104,7 +104,7 @@ export function JourneyScreen({ onSettings, hidden, hasPermission, canRequestPer
     </View>
     <View style={[styles.dock, mapOpen && { opacity: 0 }]} pointerEvents={mapOpen ? 'none' : 'auto'}
       accessibilityElementsHidden={mapOpen} importantForAccessibility={mapOpen ? 'no-hide-descendants' : 'auto'}
-      onLayout={event => setDockHeight(event.nativeEvent.layout.height)}>
+      onLayout={event => { setDockHeight(event.nativeEvent.layout.height); onDockHeight?.(event.nativeEvent.layout.height); }}>
       <ScrollView style={{ maxHeight: height * 0.3 }}><JourneyControls stacked={window.fontScale > 1.3} compact={settings.interfaceMode === InterfaceMode.USER} /></ScrollView>
       <Pressable accessibilityRole="button" accessibilityLabel="Show map" accessibilityState={{ expanded: mapOpen }}
         onPress={() => setMapOpen(true)} style={styles.mapToggle}>
@@ -167,7 +167,7 @@ export function JourneyControls({ stacked, compact = false }: { stacked: boolean
 
   return <View style={styles.footer}>
     {compact && <TextButton label="Hide controls" onPress={() => setExpanded(false)} />}
-    {s.busy === 'starting' && <Text style={type.bodyMedium}>Checking location…</Text>}
+    {s.busy === 'starting' && <Text style={type.bodyMedium} accessibilityLiveRegion="polite">Checking location…</Text>}
     <View style={[styles.controls, stacked && { flexDirection: 'column', alignItems: 'stretch' }]}>
       {(!paused || s.crossing) && (assistOn || active) && button(label, () => controller.crossingAction(action), Colors.Crossing, !s.busy && (assistOn || action === 'finish'))}
       {(assistOn || active) && button('Repeat', () => controller.repeatGuidance(), Colors.SurfaceVariant, assistOn || s.phase === 'walking')}
@@ -183,10 +183,10 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.Background, overflow: 'hidden' },
   header: { position: 'absolute', top: 0, left: 0, right: 0, paddingHorizontal: 12, backgroundColor: Colors.Glass },
   sheet: { position: 'absolute', left: 0, right: 0, backgroundColor: Colors.Surface, borderTopLeftRadius: 18, borderTopRightRadius: 18, overflow: 'hidden' },
-  sheetHandle: { minHeight: 44, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
-  exitMap: { position: 'absolute', right: 12 },
+  sheetHandle: { minHeight: 56, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
+  exitMap: { position: 'absolute', right: 12, gap: 12 },
   dock: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: Colors.Glass },
-  mapToggle: { alignSelf: 'center', minWidth: 72, height: 44, alignItems: 'center', justifyContent: 'center' },
+  mapToggle: { alignSelf: 'center', minWidth: 96, height: 56, alignItems: 'center', justifyContent: 'center' },
   summary: { paddingHorizontal: 16, paddingVertical: 10, gap: 8 },
   footer: { backgroundColor: Colors.Glass, padding: 10, borderTopWidth: 1, borderTopColor: Colors.Hairline, gap: 6 },
   controls: { flexDirection: 'row', alignItems: 'stretch', gap: 8 },

@@ -82,3 +82,12 @@ test('defers native padding until Google Maps is ready on first mount and retry'
   await act(async () => button('Retry map').props.onPress());
   expect(map().props.mapPadding).toBeUndefined();
 });
+
+test('M2 the accuracy line is 15 sp in the muted colour and the tool pills are 12 dp apart', async () => {
+  const { Colors } = require('../src/ui/theme');
+  const { StyleSheet } = require('react-native');
+  const line = tree.root.findAll((n: any) => n.type === 'Text' && n.props.children === 'Current location unavailable')[0];
+  expect(StyleSheet.flatten(line.props.style)).toMatchObject({ fontSize: 15, color: Colors.OnSurfaceMuted });
+  const row = tree.root.findAll((n: any) => { const s = StyleSheet.flatten(n.props.style); return s?.gap === 12 && s?.paddingHorizontal === 12; });
+  expect(row.length).toBeGreaterThan(0);
+});
