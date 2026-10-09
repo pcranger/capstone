@@ -36,6 +36,9 @@ const render = async (element: React.ReactElement) => { await act(async () => { 
 const byLabel = (label: string) => tree.root.findAll((n: any) => n.props.accessibilityLabel === label);
 const press = async (label: string) => { const t = byLabel(label).find((n: any) => n.props.onPress); expect(t).toBeDefined(); await act(async () => { t.props.onPress(); }); };
 const allText = () => tree.root.findAll((n: any) => n.type === 'Text').map((n: any) => ([] as unknown[]).concat(n.props.children).join('')).join(' | ');
+const expandAll = async () => {
+  for (const t of tree.root.findAll((n: any) => n.props.accessibilityState?.expanded === false && n.props.onPress)) await act(async () => { t.props.onPress(); });
+};
 const headers = (): string[] => tree.root.findAll((n: any) => n.type === 'Text' && n.props.accessibilityRole === 'header').map((n: any) => n.props.children);
 
 beforeEach(() => { jest.clearAllMocks(); controller.settings.set({ ...DEFAULT_SETTINGS, acceptedSafetyNotice: true }); });
@@ -85,6 +88,7 @@ describe('S2 Developer mode asks first', () => {
 describe('G2/M3 Guide', () => {
   test('uses the exact button names and none of the old ones', async () => {
     await render(<GuideScreen onBack={() => {}} />);
+    await expandAll();
     const text = allText();
     for (const name of ['Start camera help', 'Stop camera help', 'I’m crossing', 'I’m on the footpath', 'More controls', 'Start voice commands', 'Choose destination',
       'Show map', 'Close full-screen map', 'Expand destination panel', 'Collapse destination panel']) expect(text).toContain(name);
@@ -93,6 +97,7 @@ describe('G2/M3 Guide', () => {
   test('About holds the Google Maps note and the terms and privacy links', async () => {
     const open = jest.spyOn(Linking, 'openURL').mockResolvedValue(true as never);
     await render(<GuideScreen onBack={() => {}} />);
+    await press(S.guideSectionAbout);
     expect(allText()).toContain(S.guideAboutMaps);
     await press(S.guideLinkMapsTerms);
     expect(open).toHaveBeenLastCalledWith('https://maps.google.com/help/terms_maps/');

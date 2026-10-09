@@ -299,8 +299,9 @@ test('in-app help teaches exact voice turns, search versus start, fallback and r
   await render(<SettingsScreen onBack={() => {}} />);
   expect(renderedText()).not.toContain('Navigate to Sydney Town Hall');
   await press('Commands and voice setup');
+  await press('If voice fails');
   const text = renderedText();
-  for (const phrase of ['Manual', 'Navigate to Sydney Town Hall', 'Save as Home', 'cannot hear commands', 'finish crossing', 'Enable Dictation']) expect(text).toContain(phrase);
+  for (const phrase of ['Manual', 'Navigate to Sydney Town Hall', 'Save as Home', 'cannot hear commands', 'Finish crossing', 'Enable Dictation']) expect(text).toContain(phrase);
   expect(button('Read voice instructions')).toBeDefined(); expect(button('Open app settings')).toBeDefined();
   await press('Read voice instructions'); expect(controller.sayNavigation).toHaveBeenCalledWith(expect.stringContaining('Navigate to Town Hall'));
 });
