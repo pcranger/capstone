@@ -43,6 +43,27 @@ export const OrientationMath = {
   },
 
   /**
+   * Quaternion (x, y, z, w) for Expo DeviceMotion `rotation` {alpha, beta, gamma} in radians, so the expo-sensors
+   * fallback can feed the same pipeline as the native module. Expo (Android) builds these from Android's
+   * getOrientation(R) as alpha = -azimuth, beta = -pitch, gamma = roll, which is the W3C intrinsic Z-X'-Y'' order,
+   * so R = Rz(alpha) * Rx(beta) * Ry(gamma): the same device -> world matrix `rotationMatrixFromQuaternion` returns.
+   */
+  quaternionFromDeviceRotation(alpha: number, beta: number, gamma: number): [number, number, number, number] {
+    const cz = Math.cos(alpha / 2);
+    const sz = Math.sin(alpha / 2);
+    const cx = Math.cos(beta / 2);
+    const sx = Math.sin(beta / 2);
+    const cy = Math.cos(gamma / 2);
+    const sy = Math.sin(gamma / 2);
+    return [
+      sx * cy * cz - cx * sy * sz,
+      cx * sy * cz + sx * cy * sz,
+      cx * cy * sz + sx * sy * cz,
+      cx * cy * cz - sx * sy * sz,
+    ];
+  },
+
+  /**
    * Heading and pitch of the rear camera (device -Z axis). When the camera points almost straight
    * up or down the heading is taken from the top edge of the phone instead, which is what a user
    * holding the phone flat perceives as "forward".
