@@ -5,7 +5,7 @@ import { DeveloperTelemetry } from './DeveloperTelemetry';
 import { VehicleVisibilityControls } from './VehicleVisibilityControls';
 import { perceptionMessage } from '../perception/pipelineHealth';
 import { nowMs } from '../core/geometry';
-import { Linking, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Text } from './ScaledText';
 import { CameraSurface } from '../camera/CameraSurface';
 import { AssistMode } from '../crossing/crossingEngine';
@@ -15,6 +15,7 @@ import { InterfaceMode } from '../settings/settings';
 import { controller } from '../state/controller';
 import { useStore } from '../state/store';
 import { S } from '../strings';
+import { askForCamera } from './askForCamera';
 import { BigButton, TextButton } from './components';
 import { DetectionOverlay, SegmentationOverlay } from './Overlays';
 import { Colors, Dimens, useType } from './theme';
@@ -107,7 +108,7 @@ export function MainScreen({ height, topInset = 0, bottomInset = 0, hidden = fal
           <Text style={type.bodyLarge}>{S.cameraOffReason}</Text>
         </View>
         <BigButton primary text={canRequestPermission ? S.actionGrantCamera : S.actionOpenSettings} color={Colors.Crossing}
-          onPress={() => { if (canRequestPermission) void requestPermission(); else void Linking.openSettings(); }} />
+          onPress={() => { void askForCamera(canRequestPermission, requestPermission); }} />
         <TextButton size="large" label={S.actionChooseDestination} onPress={() => controller.openMap()} />
       </View>
     </ScrollView>}

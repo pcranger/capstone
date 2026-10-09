@@ -10,6 +10,7 @@ import { controller } from '../state/controller';
 import { useStore } from '../state/store';
 import { S } from '../strings';
 import { BigButton, IconPill, TextButton } from './components';
+import { askForCamera } from './askForCamera';
 import { MainScreen } from './MainScreen';
 import { MapPanel } from './MapPanel';
 import { DestinationSheet } from './DestinationSheet';
@@ -126,7 +127,8 @@ export function JourneyScreen({ onSettings, hidden, onDockHeight, hasPermission,
       accessibilityElementsHidden={mapOpen} importantForAccessibility={mapOpen ? 'no-hide-descendants' : 'auto'}
       onLayout={event => { setDockHeight(event.nativeEvent.layout.height); onDockHeight?.(event.nativeEvent.layout.height); }}>
       {/* J12: no scroll area over the camera. Large text sizes and User mode keep the primary action; the rest opens a sheet. */}
-      <JourneyControls stacked={window.fontScale > 1.3} compact={settings.interfaceMode === InterfaceMode.USER || window.fontScale > 1.3} />
+      <JourneyControls stacked={window.fontScale > 1.3} compact={settings.interfaceMode === InterfaceMode.USER || window.fontScale > 1.3}
+        permission={{ hasPermission, canRequestPermission, requestPermission }} />
       <Pressable accessibilityRole="button" accessibilityLabel="Show map" accessibilityState={{ expanded: mapOpen }}
         onPress={() => setMapOpen(true)} style={styles.mapToggle}>
         <MaterialIcons name="keyboard-arrow-up" size={28} color={Colors.OnSurface} />
@@ -183,13 +185,14 @@ function MoreControlsSheet({ visible, onClose, children }: { visible: boolean; o
   </Modal>;
 }
 
+interface CameraPermission { hasPermission: boolean; canRequestPermission: boolean; requestPermission: () => unknown }
 interface Extra { text: string; press: () => void; color?: string; enabled?: boolean }
 
 /**
  * These per-frame consumers are separate from the map and the rest of the journey layout. `compact` keeps only the
  * primary button in view; the other actions open in the More controls sheet.
  */
-export function JourneyControls({ stacked, compact = false }: { stacked: boolean; compact?: boolean }) {
+export function JourneyControls({ stacked, compact = false, permission }: { stacked: boolean; compact?: boolean; permission?: CameraPermission }) {
   const type = useType();
   const [sheetOpen, setSheetOpen] = useState(false);
   const s = useStore(controller.journey.state);
@@ -207,6 +210,10 @@ export function JourneyControls({ stacked, compact = false }: { stacked: boolean
     : paused ? button(S.actionResume, () => { void controller.startJourney(); }, Colors.Crossing, !s.busy, true)
     : walking ? button(S.actionStartCrossing, () => controller.crossingAction('help'), Colors.Crossing, !s.busy, true)
     : assistOn ? button(S.actionStartCrossing, () => controller.crossingAction('start'), Colors.Crossing, !s.busy, true)
+    // SIM-1: no camera permission, no camera help. The primary button asks for the camera instead.
+    : permission && !permission.hasPermission
+      ? button(permission.canRequestPermission ? S.actionGrantCamera : S.actionOpenSettings,
+        () => { void askForCamera(permission.canRequestPermission, permission.requestPermission); }, Colors.Crossing, true, true)
     : button(S.actionStartAssist, () => controller.command(UserCommand.START_ASSIST, true), Colors.Crossing, true, true);
   const extras = [
     (assistOn || walking || paused) && { text: 'Repeat', press: () => controller.repeatGuidance(), enabled: assistOn || walking },
