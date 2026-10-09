@@ -6,10 +6,13 @@ import {
   type StyleProp,
   StyleSheet,
   Switch,
+  TextInput,
+  type TextInputProps,
   type TextStyle,
   View,
   type ViewStyle,
 } from 'react-native';
+import { S } from '../strings';
 import { Text } from './ScaledText';
 import { Colors, Dimens, useType } from './theme';
 
@@ -18,8 +21,8 @@ export function SectionCard({ title, children }: { title: string; children: Reac
   const type = useType();
   return (
     <View style={styles.sectionCard}>
-      <Text style={[type.labelLarge, { color: Colors.Accent }]} accessibilityRole="header">
-        {title.toUpperCase()}
+      <Text style={[type.titleLarge, { color: Colors.Accent }]} accessibilityRole="header">
+        {title}
       </Text>
       {children}
     </View>
@@ -38,8 +41,16 @@ export function SwitchRow({ label, value, onChange }: { label: string; value: bo
       accessibilityState={{ checked: value }}
     >
       <Text style={[type.titleMedium, styles.rowLabel]}>{label}</Text>
+      {/* The word, not only the position and colour, carries the state (the track edge alone is under 3:1). */}
+      <Text
+        importantForAccessibility="no-hide-descendants"
+        accessibilityElementsHidden
+        style={[type.titleMedium, styles.stateWord, { color: value ? Colors.OnSurface : Colors.OnSurfaceMuted }]}
+      >
+        {value ? S.stateOn : S.stateOff}
+      </Text>
       <View pointerEvents="none" importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
-        <Switch value={value} trackColor={{ true: Colors.Accent, false: Colors.SurfaceVariant }} thumbColor="#FFFFFF" />
+        <Switch value={value} trackColor={{ true: Colors.Accent, false: Colors.OnSurfaceMuted }} thumbColor="#FFFFFF" />
       </View>
     </Pressable>
   );
@@ -79,6 +90,15 @@ export function RadioRow({
   );
 }
 
+/** Wraps one set of RadioRows so TalkBack can say "1 of 3" and treat them as a group. */
+export function RadioGroup({ children, label }: { children: ReactNode; label?: string }) {
+  return (
+    <View accessibilityRole="radiogroup" accessibilityLabel={label}>
+      {children}
+    </View>
+  );
+}
+
 /** Quiet explanatory text under a row or card. */
 export function Hint({ children, style }: { children: ReactNode; style?: StyleProp<TextStyle> }) {
   const type = useType();
@@ -97,6 +117,7 @@ export function BigButton({
   enabled = true,
   primary = false,
   description,
+  hint,
   multiline = false,
 }: {
   text: string;
@@ -107,24 +128,32 @@ export function BigButton({
   primary?: boolean;
   /** What VoiceOver says, when the visible label is shortened to fit. */
   description?: string;
+  /** What TalkBack adds after the name (for example, that a practice button is not a live signal). */
+  hint?: string;
   multiline?: boolean;
 }) {
   const type = useType();
   // Amber is the one state color that white text cannot sit on (1.1:1); it always takes black.
   const content = color === Colors.Hazard ? Colors.OnHazard : '#FFFFFF';
+  // A quiet (SurfaceVariant) button is 1.3:1 against the dock, so it gets a 2 dp outline. A disabled one loses its
+  // fill and gets a dashed outline at half strength, so "off" is a shape, not just a shade.
+  const quiet = color === Colors.SurfaceVariant;
   return (
     <Pressable
       onPress={onPress}
       disabled={!enabled}
       accessibilityRole="button"
       accessibilityLabel={description ?? text}
+      accessibilityHint={hint}
       accessibilityState={{ disabled: !enabled }}
       style={({ pressed }) => [
         styles.button,
         {
           minHeight: primary ? Dimens.primaryButton : Dimens.secondaryButton,
-          backgroundColor: enabled ? color : Colors.SurfaceVariant,
-          opacity: pressed ? 0.8 : 1,
+          backgroundColor: enabled ? color : 'transparent',
+          borderColor: enabled && !quiet ? color : Colors.OnSurfaceMuted,
+          borderStyle: enabled ? 'solid' : 'dashed',
+          opacity: !enabled ? 0.5 : pressed ? 0.8 : 1,
         },
         style,
       ]}
@@ -225,13 +254,26 @@ export function SliderRow({
         maximumTrackTintColor={Colors.SurfaceVariant}
         accessibilityLabel={label}
         accessibilityValue={{ text: format(local) }}
-        style={{ height: 44 }}
+        style={{ height: Dimens.touchTarget }}
       />
     </View>
   );
 }
 
-export function TextButton({ label, onPress, muted = false, disabled = false }: { label: string; onPress: () => void; muted?: boolean; disabled?: boolean }) {
+/** Link-style action. 48 dp by default; `size="large"` gives the 56 dp the journey screen asks for. */
+export function TextButton({
+  label,
+  onPress,
+  muted = false,
+  disabled = false,
+  size = 'default',
+}: {
+  label: string;
+  onPress: () => void;
+  muted?: boolean;
+  disabled?: boolean;
+  size?: 'default' | 'large';
+}) {
   const type = useType();
   return (
     <Pressable
@@ -241,10 +283,52 @@ export function TextButton({ label, onPress, muted = false, disabled = false }: 
       accessibilityRole="button"
       accessibilityLabel={label}
       hitSlop={8}
-      style={{ minHeight: 44, justifyContent: 'center', paddingHorizontal: Dimens.gapSmall }}
+      style={{
+        minHeight: size === 'large' ? Dimens.touchTarget : Dimens.secondaryButton,
+        justifyContent: 'center',
+        paddingHorizontal: Dimens.gapSmall,
+      }}
     >
-      <Text style={[type.labelLarge, { color: (muted || disabled) ? Colors.OnSurfaceMuted : Colors.Accent }]}>{label}</Text>
+      <Text style={[type.titleMedium, { color: muted || disabled ? Colors.OnSurfaceMuted : Colors.Accent }]}>{label}</Text>
     </Pressable>
+  );
+}
+
+/** The way out of a page: arrow plus word, 56 dp, top left. Pair it with the hardware back key, never replace it. */
+export function BackButton({ onPress, label = S.actionBack }: { onPress: () => void; label?: string }) {
+  const type = useType();
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      hitSlop={8}
+      style={({ pressed }) => [styles.backButton, { opacity: pressed ? 0.7 : 1 }]}
+    >
+      <MaterialIcons name="arrow-back" size={24} color={Colors.Accent} />
+      <Text style={[type.titleMedium, { color: Colors.Accent }]}>{label}</Text>
+    </Pressable>
+  );
+}
+
+/**
+ * A text box with its name written above it. The visible word is the accessibility label (or starts it), so a
+ * Voice Access user can say what they see and a TalkBack user hears the same word.
+ */
+export function TextField({ label, accessibilityLabel, style, ...rest }: { label: string } & TextInputProps) {
+  const type = useType();
+  return (
+    <View>
+      <Text importantForAccessibility="no" style={[type.bodyMedium, { color: Colors.OnSurfaceMuted }]}>
+        {label}
+      </Text>
+      <TextInput
+        accessibilityLabel={accessibilityLabel ?? label}
+        placeholderTextColor={Colors.OnSurfaceMuted}
+        style={[type.bodyLarge, styles.input, style]}
+        {...rest}
+      />
+    </View>
   );
 }
 
@@ -275,7 +359,21 @@ export const styles = StyleSheet.create({
     flex: 1,
     paddingRight: Dimens.gapMedium,
   },
+  stateWord: {
+    minWidth: 32,
+    textAlign: 'right',
+    marginRight: Dimens.gapMedium,
+  },
+  backButton: {
+    minHeight: Dimens.touchTarget,
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Dimens.gapSmall,
+    paddingRight: Dimens.gapMedium,
+  },
   button: {
+    borderWidth: 2,
     borderRadius: Dimens.radiusCard,
     alignItems: 'center',
     justifyContent: 'center',
@@ -312,6 +410,9 @@ export const styles = StyleSheet.create({
     gap: Dimens.gapSmall / 2,
   },
   input: {
+    minHeight: Dimens.touchTarget,
+    fontSize: 18,
+    lineHeight: 24,
     borderWidth: 1,
     borderColor: Colors.Hairline,
     borderRadius: Dimens.radiusRow,

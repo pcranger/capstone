@@ -27,7 +27,7 @@ const text = () => JSON.stringify(tree.toJSON());
 beforeEach(async () => { controller.planner.reset(); await controller.savedPlaces.load(); await act(async () => { tree = create(<DestinationSheet visible />); }); });
 afterEach(async () => { await act(async () => tree.unmount()); });
 test('empty saved list renders no placeholder suggestions; search stars do not select or route', async () => {
-  expect(text()).not.toContain('RECENTLY SAVED');
+  expect(text()).not.toContain('Recently saved');
   expect(button('Search places')).toBeUndefined();
   const input = tree.root.findAll((n: any) => n.props.accessibilityLabel === 'Destination name and suburb')[0];
   await act(async () => input.props.onChangeText('Library')); await press('Search places');
@@ -44,6 +44,7 @@ test('exactly three newest saved suggestions appear on field focus, with access 
   expect(button('1. Home 3. Open to check place details.')).toBeDefined();
   expect(button('3. Home 1. Open to check place details.')).toBeDefined();
   expect(button('4. Home 0. Open to check place details.')).toBeUndefined();
+  expect(text()).toContain('Recently saved'); expect(text()).not.toContain('RECENTLY SAVED');
   await press('All saved places'); expect(button('4. Home 0. Open to check place details.')).toBeDefined();
 });
 
@@ -52,4 +53,26 @@ test('accessibility activation stops voice before destination mutation without r
   (controller.stopVoice as jest.Mock).mockClear();
   await press('2. Library. South suburb'); expect(controller.stopVoice).toHaveBeenCalled();
   expect(controller.planner.state.value.selected?.id).toBe('place-1');
+});
+
+const hostStyle = (node: any) => require('react-native').StyleSheet.flatten(node.props.style);
+test('destination box has a visible label, is 56 dp and 18 sp, and its spoken name starts with the visible word', async () => {
+  expect(text()).toContain('Destination');
+  const input = tree.root.findAll((n: any) => n.type === 'TextInput' && n.props.accessibilityLabel === 'Destination name and suburb')[0];
+  expect(input.props.accessibilityLabel.startsWith('Destination')).toBe(true);
+  expect(hostStyle(input)).toMatchObject({ minHeight: 56, fontSize: 18 });
+});
+
+test('Confirm place and Start journey are primary (56 dp); busy text is a polite live region', async () => {
+  await act(async () => controller.planner.search('Library'));
+  await press('2. Library. South suburb');
+  const minHeight = (label: string) => hostStyle(tree.root.findAll((n: any) => typeof n.type === 'string' && n.props.accessibilityLabel === label)[0]).minHeight;
+  expect(minHeight('Confirm place')).toBe(56);
+  await press('Confirm place');
+  expect(minHeight('Start journey')).toBe(56);
+  expect(minHeight('New search')).toBe(48);
+  controller.planner.state.set({ ...controller.planner.state.value, busy: 'routing' } as any);
+  await act(async () => undefined);
+  const busy = tree.root.findAll((n: any) => n.type === 'Text' && n.props.children === 'Finding route…')[0];
+  expect(busy.props.accessibilityLiveRegion).toBe('polite');
 });

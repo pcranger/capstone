@@ -134,9 +134,9 @@ test('changing mode on Settings keeps that tab and the camera mounted', async ()
   expect(tree.root.findAllByType(SettingsScreen)).toHaveLength(1);
   await press('Developer mode');
   expect(tree.root.findAllByType(SettingsScreen)).toHaveLength(1);
-  expect(renderedText()).toContain(S.settingsSectionDetection.toUpperCase());
+  expect(renderedText()).toContain(S.settingsSectionDetection);
   await press('User mode');
-  expect(renderedText()).not.toContain(S.settingsSectionDetection.toUpperCase());
+  expect(renderedText()).not.toContain(S.settingsSectionDetection);
   expect(renderedText()).toContain(S.settingsSpeech);
   expect(mockCameraMount).toHaveBeenCalledTimes(1);
   expect(mockCameraUnmount).not.toHaveBeenCalled();
@@ -275,7 +275,7 @@ test('first launch goes straight to the journey; general precautions are in Sett
   expect(button(S.safetyAccept)).toBeUndefined();
   expect(renderedText()).not.toContain(S.safetyBody);
   await press('Settings');
-  expect(renderedText()).toContain('PRECAUTIONS AND LIMITATIONS');
+  expect(renderedText()).toContain('Precautions and limitations');
   expect(renderedText()).not.toContain(S.safetyBody);
   await press('Precautions');
   expect(renderedText()).toContain(S.safetyBody);
@@ -297,7 +297,7 @@ test('in-app help teaches exact voice turns, search versus start, fallback and r
   expect(renderedText()).not.toContain('Navigate to Sydney Town Hall');
   await press('Voice manual');
   const text = renderedText();
-  for (const phrase of ['MANUAL', 'Navigate to Sydney Town Hall', 'Save as Home', 'cannot hear commands', 'finish crossing', 'Enable Dictation']) expect(text).toContain(phrase);
+  for (const phrase of ['Manual', 'Navigate to Sydney Town Hall', 'Save as Home', 'cannot hear commands', 'finish crossing', 'Enable Dictation']) expect(text).toContain(phrase);
   expect(button('Read voice instructions')).toBeDefined(); expect(button('Open app settings')).toBeDefined();
   await press('Read voice instructions'); expect(controller.sayNavigation).toHaveBeenCalledWith(expect.stringContaining('Navigate to Town Hall'));
 });

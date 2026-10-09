@@ -276,6 +276,14 @@ export const S = {
   settingsSectionAi: 'Assistant',
   settingsGemini: 'Describe surroundings (Gemini)',
 
+  // UI P1a
+  stateOn: 'On',
+  stateOff: 'Off',
+  practiceOnly: 'Practice only',
+  practiceHint: 'Plays a practice sound. Not a live signal.',
+  fieldDestination: 'Destination',
+  fieldPlaceName: 'Saved place name',
+
 };
 
 /** Everyday speech: observations, short confirmations and recoverable failures. Tutorials stay in Help. */
