@@ -311,6 +311,22 @@ export const S = {
   guideAboutMaps: 'Searches and place checks use Google Maps. Saved place IDs and your labels stay on this phone.',
   guideLinkMapsTerms: 'Google Maps terms',
   guideLinkPrivacy: 'Google privacy policy',
+
+  // UI P3f
+  voiceSayHeading: 'Say',
+  voiceFailsHeading: 'If voice fails',
+  voiceSayLines: [
+    '“Navigate to Sydney Town Hall” starts a route. Include the suburb.',
+    'For several matches, say “first”, “second” or “third”.',
+    '“Search for a library” searches only. Say “start” or “confirm” to navigate.',
+    '“Save as Home” saves the selected place, not your GPS position. Later say “navigate to Home”.',
+    '“Repeat”, “pause”, “resume”, “cancel”, “retry”.',
+    '“Stop navigation” ends the route.',
+    '“Next instruction” after completing a route step.',
+    '“Arrived” at the destination.',
+    '“Finish crossing” only on the far footpath, beyond any refuge island.',
+    '“Confirm” starts a reviewed route; it does not complete a crossing.',
+  ],
 };
 
 /** Everyday speech: observations, short confirmations and recoverable failures. Tutorials stay in Help. */
