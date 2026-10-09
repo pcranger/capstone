@@ -24,7 +24,7 @@ export function usableFix(fix: LocationFix, now: number): boolean {
 }
 
 async function post(url: string, body: unknown | undefined, apiKey: string, fieldMask: string, signal?: AbortSignal): Promise<any> {
-  if (!apiKey.trim()) throw new Error('Walking routes are not configured in this build. Camera assistance is still available.');
+  if (!apiKey.trim()) throw new Error('Walking routes are not configured in this build. Camera help is still available.');
   const request = new AbortController();
   const cancel = () => request.abort();
   signal?.addEventListener('abort', cancel);
@@ -37,7 +37,7 @@ async function post(url: string, body: unknown | undefined, apiKey: string, fiel
     }).catch(() => { throw new Error('Cannot connect to Google Maps. Check your internet connection and try again.'); });
     // Do not echo service bodies: they can contain credentials, queries or precise locations.
     if (!response.ok) throw new Error(response.status === 403
-      ? 'The route service is unavailable for this build. Camera assistance is still available.'
+      ? 'The route service is unavailable for this build. Camera help is still available.'
       : response.status === 429 ? 'Google Maps usage limit reached. Try again later.'
       : `Google Maps could not complete the request (${response.status}).`);
     return await response.json();

@@ -22,7 +22,7 @@ export const V = {
   removed: 'Place removed. Undo available.', restored: 'Place restored.',
   saveFailed: 'Couldn’t save. Try again.', removeFailed: 'Couldn’t remove. Try again.', restoreFailed: 'Couldn’t restore. Try again.',
   completionCommands: 'Say next instruction, arrived, or finish crossing.',
-  crossingEnded: 'Crossing guidance ended.',
+  crossingEnded: 'Crossing ended.',
   noCrossing: 'No crossing guidance is active.',
   finishCrossingFirst: 'Finish crossing before advancing the route.',
   finalInstruction: 'Final instruction. Say arrived at your destination.',

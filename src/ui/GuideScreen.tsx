@@ -1,7 +1,7 @@
 import Constants from 'expo-constants';
 import * as Sharing from 'expo-sharing';
 import { useState } from 'react';
-import { ScrollView, View } from 'react-native';
+import { Linking, ScrollView, View } from 'react-native';
 import { Text } from './ScaledText';
 import { controller } from '../state/controller';
 import { useStore } from '../state/store';
@@ -34,14 +34,14 @@ export function GuideScreen({ onBack }: { onBack?: () => void }) {
     </View>
     <ScrollView contentContainerStyle={{ padding: Dimens.gutter, gap: Dimens.gapMedium }}>
 
-      <SectionCard title="Voice help"><VoiceHelp /></SectionCard>
+      <SectionCard title="Voice help">{body(S.guideVoiceButton)}<VoiceHelp /></SectionCard>
       <SectionCard title={S.guideSectionSafety}>{body(S.safetyBody)}</SectionCard>
       <SectionCard title={S.guideSectionHolding}>{body(S.guideHolding)}</SectionCard>
 
       <SectionCard title="Map and saved places">
-        {body('Open the map with the bottom arrow. Search in the bottom panel, or choose a saved place. Review the address, Confirm place, then Start journey.')}
-        {body('Tap a result’s star to save it. Focus the destination box for your three latest saves; All saved shows the rest. Save with a name adds an optional label.')}
-        {body('Drag the panel handle up or down, or use Expand and Collapse. The inward arrows return to the camera. Map controls do not change your journey.')}
+        {body(S.guideMapOpen)}
+        {body(S.guideMapSaved)}
+        {body(S.guideMapPanel)}
       </SectionCard>
 
       <SectionCard title={S.guideSectionSounds}>
@@ -95,6 +95,11 @@ export function GuideScreen({ onBack }: { onBack?: () => void }) {
         {body(S.guideAboutVersion(Constants.expoConfig?.version ?? '0.1.0'))}
         {body(S.guideAboutModel(model.kind === 'ready' ? model.info.displayName : S.modelMissing))}
         <Hint>{S.guideAboutLicenses}</Hint>
+        {body(S.guideAboutMaps)}
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: Dimens.gapMedium }}>
+          <TextButton label={S.guideLinkMapsTerms} onPress={() => { void Linking.openURL('https://maps.google.com/help/terms_maps/'); }} />
+          <TextButton label={S.guideLinkPrivacy} onPress={() => { void Linking.openURL('https://policies.google.com/privacy'); }} />
+        </View>
       </SectionCard>
     </ScrollView>
     </View>

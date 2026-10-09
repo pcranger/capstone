@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Keyboard, Linking, Pressable, ScrollView, View } from 'react-native';
+import { Keyboard, Pressable, ScrollView, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { controller } from '../state/controller';
 import { useStore } from '../state/store';
@@ -53,7 +53,8 @@ export function DestinationSheet({ visible }: { visible: boolean }) {
   const has = (id: string) => saved.items.some(p => p.placeId === id);
   const toggle = async (place: PlaceCandidate) => { controller.stopVoice(); controller.sayNavigation(await (has(place.id) ? controller.removeSaved(place.id) : controller.savePlace(place))); };
   const button = (text: string, onPress: () => void, enabled = true, primary = false) => <BigButton text={text} onPress={() => { controller.stopVoice(); onPress(); }} multiline primary={primary} color={Colors.Crossing} enabled={enabled} />;
-  return <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 16, paddingTop: 0, gap: 8 }}>
+  const routeReview = s.page === 'route' && s.route;
+  return <View style={{ flex: 1 }}><ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 16, paddingTop: 0, gap: 8 }}>
     {s.replacing && <Text style={type.bodyMedium}>Original journey paused. Cancel to keep it.</Text>}
     <TextField label={S.fieldDestination} value={s.query} maxLength={240} accessibilityLabel="Destination name and suburb" placeholder="Where to?"
       returnKeyType="search" onSubmitEditing={search}
@@ -89,9 +90,6 @@ export function DestinationSheet({ visible }: { visible: boolean }) {
     {s.page === 'route' && s.route && <>
       <Text style={type.titleLarge}>{s.route.destination}</Text><Text style={type.bodyMedium}>{s.route.destinationAddress}</Text>
       <Text style={type.bodyLarge}>{Math.round(s.route.distanceMeters)} metres · About {Math.max(1, Math.round(s.route.durationSeconds / 60))} {s.route.durationSeconds < 90 ? 'minute' : 'minutes'}</Text>
-      {button('Start journey', () => { Keyboard.dismiss(); void controller.startPlannedJourney(); }, !s.busy, true)}
-      <Text style={type.bodyMedium}>{WALKING_WARNING}</Text>
-      {s.route.warnings.map((w, i) => <Text key={i} style={type.bodyMedium}>{w}</Text>)}
       <TextButton label={showSteps ? 'Hide route instructions' : 'Review all instructions'} onPress={() => setShowSteps(v => !v)} />
       {showSteps && s.route.steps.map((step, i) => <Text key={i} style={type.bodyMedium}>{i + 1}. {step.instruction}</Text>)}
     </>}
@@ -101,10 +99,11 @@ export function DestinationSheet({ visible }: { visible: boolean }) {
       if (s.replacing) controller.cancelPlanning(); else controller.planner.edit();
     }} />}
     {(s.candidates.length > 0 || s.selected || entries.some(p => details[p.placeId])) && <Text style={{ fontFamily: 'System', color: '#FFFFFF', fontSize: 14 }}>Google Maps</Text>}
-    <Text style={type.bodyMedium}>Searches and place checks use Google Maps. Saved place IDs and your labels stay on this phone.</Text>
-    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
-      <TextButton label="Google Maps terms" onPress={() => { void Linking.openURL('https://maps.google.com/help/terms_maps/'); }} />
-      <TextButton label="Google privacy policy" onPress={() => { void Linking.openURL('https://policies.google.com/privacy'); }} />
-    </View>
-  </ScrollView>;
+  </ScrollView>
+    {routeReview && <View style={{ padding: 16, paddingTop: 8, gap: 8, borderTopWidth: 1, borderTopColor: Colors.Hairline, backgroundColor: Colors.Surface }}>
+      {button('Start journey', () => { Keyboard.dismiss(); void controller.startPlannedJourney(); }, !s.busy, true)}
+      <Text style={type.bodyMedium}>{WALKING_WARNING}</Text>
+      {s.route!.warnings.filter(w => w !== WALKING_WARNING).map((w, i) => <Text key={i} style={type.bodyMedium}>{w}</Text>)}
+    </View>}
+  </View>;
 }

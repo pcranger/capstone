@@ -96,7 +96,7 @@ export const MapPanel = memo(function MapPanel({ height, fullScreen = false, onE
       </MapView>
       {!fullScreen && onExpand && <Pressable style={StyleSheet.absoluteFill} accessibilityRole="button"
         accessibilityLabel="Open full-screen map" onPress={onExpand} />}
-    </View> : <Text style={[type.bodyLarge, styles.message]}>Map unavailable in this build. Camera assistance remains available.</Text>}
+    </View> : <Text style={[type.bodyLarge, styles.message]}>Map unavailable in this build. Camera help is still available.</Text>}
     <ScrollView accessibilityElementsHidden={toolsHidden} importantForAccessibility={toolsHidden ? 'no-hide-descendants' : 'auto'} style={[toolsHidden && { display: 'none' }, fullScreen ? [styles.floatingTools, { maxHeight: height * 0.3 }] : undefined]}>
     <View style={[styles.tools, stacked && styles.toolsStacked]}>
       <Text style={[type.bodyMedium, { width: '100%', paddingTop: 8, color: Colors.OnSurfaceMuted }]}>
