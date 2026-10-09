@@ -76,3 +76,19 @@ test('Confirm place and Start journey are primary (56 dp); busy text is a polite
   const busy = tree.root.findAll((n: any) => n.type === 'Text' && n.props.children === 'Finding route…')[0];
   expect(busy.props.accessibilityLiveRegion).toBe('polite');
 });
+
+test('M3/M4 route review: Start journey is pinned outside the scroll area with the warning once under it; terms and privacy links are gone', async () => {
+  const { WALKING_WARNING } = require('../src/nav/navigation');
+  await act(async () => controller.planner.search('Library'));
+  await press('2. Library. South suburb'); await press('Confirm place');
+  const scroll = tree.root.findAll((n: any) => n.type === 'RCTScrollView' || n.type === 'ScrollView')[0];
+  const labelled = (root: any) => root.findAll((n: any) => n.props.accessibilityRole === 'button' && n.props.accessibilityLabel === 'Start journey');
+  expect(labelled(tree.root).length).toBeGreaterThan(0);
+  expect(labelled(scroll)).toHaveLength(0);
+  const warning = JSON.stringify(WALKING_WARNING).slice(1, -1);
+  expect(text().split(warning).length - 1).toBe(1);
+  expect(text().indexOf('Start journey')).toBeLessThan(text().indexOf(warning));
+  expect(button('Google Maps terms')).toBeUndefined(); expect(button('Google privacy policy')).toBeUndefined();
+  expect(text()).toContain('Google Maps');
+  expect(text()).not.toContain('Saved place IDs');
+});

@@ -116,7 +116,7 @@ test('switching both ways during crossing retains the session and single camera 
   await render(<CrossWiseApp />);
   expect(renderedText()).not.toContain('DetectionOverlay');
   await press('Settings');
-  await press('Developer mode');
+  await press('Developer mode'); await press('Turn on');
   expect(renderedText()).toContain('DetectionOverlay');
   expect(button('Developer mode').props.accessibilityState.selected).toBe(true);
   await press('User mode');
@@ -132,7 +132,7 @@ test('changing mode on Settings keeps that tab and the camera mounted', async ()
   await render(<CrossWiseApp />);
   await press(S.tabSettings);
   expect(tree.root.findAllByType(SettingsScreen)).toHaveLength(1);
-  await press('Developer mode');
+  await press('Developer mode'); await press('Turn on');
   expect(tree.root.findAllByType(SettingsScreen)).toHaveLength(1);
   expect(renderedText()).toContain(S.settingsSectionDetection);
   await press('User mode');
@@ -159,7 +159,7 @@ test.each([S.settingsOpenGuide, S.practiceTitle])('help page %s and settings pre
   await press('Settings'); await press(link);
   await press(S.actionBackToSettings);
   expect(tree.root.findAllByType(SettingsScreen)).toHaveLength(1);
-  await press('Developer mode'); await press('User mode'); await press(S.actionBack);
+  await press('Developer mode'); await press('Turn on'); await press('User mode'); await press(S.actionBack);
   expect(button('Show map')).toBeDefined();
   expect(controller.ui.value.snapshot).toBe(snapshot);
   expect(controller.command).not.toHaveBeenCalled();

@@ -210,7 +210,7 @@ export const S = {
   guideSectionAbout: 'About',
   guideSectionSessions: 'Recorded sessions',
   guideHolding:
-    'The camera fills the screen. The bottom up arrow shows the map; the down arrow hides it. Tap the map to expand it. Use the bottom-right inward arrows to return. These buttons are labelled Show map, Hide map, Open full-screen map and Close full-screen map for VoiceOver.\n\nChoose destination, confirm the place and address, review the route, then Start journey. Repeat reads the current guidance. Show the map to review and confirm completed instructions. Pause shows Resume and End journey.\n\nAt a road, choose Crossing help. Hold the phone upright at chest height and scan slowly left and right. Choose “I’m crossing” when you begin. Confirm “I’m on the footpath” only on the far footpath, not on a refuge island. Route speech then resumes.\n\nWithout a destination, use Start camera assistance, then I’m crossing and I’m on the footpath. Stop assistance ends the session. Volume buttons change volume normally.',
+    'The camera fills the screen. Show map, the arrow at the bottom, opens the map. On the map, Close full-screen map returns to the camera.\n\nChoose destination, confirm the place and address, review the route, then Start journey. Repeat, Pause, Resume and End journey are under More controls. Repeat reads the current guidance. Pause shows Resume and End journey.\n\nAt a road, choose Start camera help. Hold the phone upright at chest height and scan slowly left and right. Choose I’m crossing when you begin. Choose I’m on the footpath only on the far footpath, not on a refuge island. Route speech then resumes.\n\nWithout a destination, use Start camera help, then I’m crossing and I’m on the footpath. Stop camera help ends the session. Volume buttons change volume normally.',
   guideSoundSonar:
     'Repeating tick that speeds up as the signal moves towards the centre of view, panned to the ear it is on.',
   guideSoundCentered: 'Short double tick: the signal is straight ahead.',
@@ -289,6 +289,19 @@ export const S = {
   voiceStop: 'Stop listening',
   voiceRetry: 'Retry voice',
   noticeDismissHint: 'Tap to dismiss',
+
+  // UI P2d
+  settingsSectionAdvanced: 'Advanced',
+  developerConfirm: 'Developer mode shows test tools. Continue?',
+  developerTurnOn: 'Turn on',
+  developerCancel: 'Cancel',
+  guideVoiceButton: 'Start voice commands, the microphone button, lets you speak a destination or a command. Stop listening ends it.',
+  guideMapOpen: 'Open the map with Show map, the arrow at the bottom. Search in the bottom panel, or choose a saved place. Review the address, choose Confirm place, then Start journey.',
+  guideMapSaved: 'Tap a result’s star to save it. Tap the destination box to see your three latest saves; All saved places shows the rest. Save with a name adds an optional label.',
+  guideMapPanel: 'Drag the panel handle, or use Expand destination panel and Collapse destination panel. Close full-screen map returns to the camera. Map controls do not change your journey.',
+  guideAboutMaps: 'Searches and place checks use Google Maps. Saved place IDs and your labels stay on this phone.',
+  guideLinkMapsTerms: 'Google Maps terms',
+  guideLinkPrivacy: 'Google privacy policy',
 };
 
 /** Everyday speech: observations, short confirmations and recoverable failures. Tutorials stay in Help. */
