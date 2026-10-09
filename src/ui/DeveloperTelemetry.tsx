@@ -3,7 +3,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { Text } from './ScaledText';
 import { type EngineSnapshot } from '../crossing/crossingEngine';
 import { ObjectCategory, isVehicle } from '../perception/detection';
-import { Colors, useType } from './theme';
+import { useType } from './theme';
 
 export function DeveloperTelemetry({ snapshot: s, fresh, fps, inferenceMs, brightness, model }: {
   snapshot: EngineSnapshot; fresh: boolean; fps: number; inferenceMs: number; brightness: number; model: string;
@@ -42,7 +42,7 @@ export function DeveloperTelemetry({ snapshot: s, fresh, fps, inferenceMs, brigh
         <Text style={type.labelLarge}>#{t.id} {t.category.replaceAll('_', ' ')} · {Math.round(t.confidence * 100)}% · {side}</Text>
         <Text style={type.labelMedium}>Box {Math.round(t.box.width * 100)} × {Math.round(t.box.height * 100)}% of frame{t.isPrimarySignal ? ' · PRIMARY' : ''}</Text>
         {isVehicle(t.category) && <Text style={type.labelMedium}>{t.motion ?? 'VEHICLE'}{t.motionSupported ? '' : ' (unsure)'} · {t.direction ?? 'UNKNOWN'}</Text>}
-        {isVehicle(t.category) && <Text style={[type.labelMedium, hazard && { color: Colors.Warn }]}>{hazard
+        {isVehicle(t.category) && <Text style={[type.labelMedium, hazard && { color: '#FFD87A' }]}>{hazard
           ? `${hazard.level} · optical TTC ${hazard.ttcSeconds.toFixed(1)} s`
           : 'Motion / approach unconfirmed'}</Text>}
       </View>;
