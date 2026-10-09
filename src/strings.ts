@@ -31,9 +31,9 @@ export const PHRASES: Record<Phrase, string> = {
   [Phrase.SIGNAL_LOST]: 'Pedestrian signal out of view.',
   [Phrase.SIGNAL_CHANGED_DONT_WALK_WHILE_CROSSING]: 'Signal changed to don’t walk.',
   [Phrase.WALKING_ON_DONT_WALK]: 'Don’t-walk signal.',
-  [Phrase.CROSSING_STARTED]: 'Crossing guidance started.',
-  [Phrase.CROSSING_DETECTED]: 'Crossing guidance started.',
-  [Phrase.CROSSING_ENDED]: 'Crossing guidance ended.',
+  [Phrase.CROSSING_STARTED]: 'Crossing started.',
+  [Phrase.CROSSING_DETECTED]: 'Crossing started.',
+  [Phrase.CROSSING_ENDED]: 'Crossing ended.',
   [Phrase.VEHICLE_LEFT]: 'Vehicle coming from the left.',
   [Phrase.VEHICLE_AHEAD]: 'Vehicle approaching.',
   [Phrase.VEHICLE_RIGHT]: 'Vehicle coming from the right.',
@@ -74,9 +74,9 @@ export function cueText(cue: Cue): string | null {
 export const S = {
   appName: 'CrossWise',
 
-  actionStartAssist: 'Start assist',
-  actionStopAssist: 'Stop assist',
-  actionStartCrossing: "I'm crossing now",
+  actionStartAssist: 'Start camera help',
+  actionStopAssist: 'Stop camera help',
+  actionStartCrossing: 'I’m crossing',
   actionEndCrossing: 'I’m on the footpath',
   crossingFinishHint: 'Confirm the far footpath, not a refuge island.',
   actionRepeatStatus: 'Repeat status',
@@ -85,12 +85,21 @@ export const S = {
   actionBackToSettings: 'Back to Settings',
   actionGrantCamera: 'Allow camera',
   actionOpenSettings: 'Open app settings',
+  // UI P2c: one glossary. "Camera help" is the camera on/off feature; "Crossing" is the crossing mode.
+  actionResume: 'Resume',
+  actionMoreControls: 'More controls',
+  actionHideControls: 'Hide controls',
+  actionChooseDestination: 'Choose destination',
+  cameraHelpOff: 'Camera help is off.',
+  cameraHelpOffHint: 'Choose Start camera help when you reach a road.',
+  cameraOffTitle: 'Camera is off',
+  cameraOffReason: 'CrossWise needs the camera to read signals and see traffic. Routes still work without it.',
   cameraPermissionNeeded:
     'CrossWise needs the camera to see pedestrian signals and traffic. Detection runs on the phone. Optional scene descriptions send requested images to Google Gemini.',
   cameraPermissionDenied:
     'Camera access is off for CrossWise. Turn it on in app settings, then come back to the app.',
 
-  modeIdle: 'Assist off',
+  modeIdle: 'Camera help off',
   modeSearching: 'Looking for a signal',
   modeWaiting: 'Watching the signal',
   modeCrossing: 'Crossing',
@@ -151,7 +160,7 @@ export const S = {
   settingsLogLocation:
     'Logs are saved in app storage. Use Share logs in Guide to export them.',
 
-  tabAssist: 'Assist',
+  tabAssist: 'Camera help',
   tabPractice: 'Practice',
   tabGuide: 'Guide',
   tabSettings: 'Settings',
@@ -175,7 +184,7 @@ export const S = {
   warnTilt: 'Phone is flat. Hold it upright, chest height, pointing across the street.',
   warnSlow: (fps: number) => `Only ${Math.round(fps)} frames per second. A fast vehicle may be missed.`,
   warnNoHeadphones: 'No headphones. Left and right tones will both play from the phone.',
-  warnBattery: (pct: number) => `Battery ${pct}%. Assist uses the camera continuously.`,
+  warnBattery: (pct: number) => `Battery ${pct}%. Camera help uses the camera continuously.`,
   warnBaselineModel:
     'Baseline model: it cannot tell a red signal from a green one. Colours are announced as unverified.',
   warnTapToDismiss: 'tap to dismiss',
@@ -210,7 +219,7 @@ export const S = {
   guideSectionAbout: 'About',
   guideSectionSessions: 'Recorded sessions',
   guideHolding:
-    'The camera fills the screen. The bottom up arrow shows the map; the down arrow hides it. Tap the map to expand it. Use the bottom-right inward arrows to return. These buttons are labelled Show map, Hide map, Open full-screen map and Close full-screen map for VoiceOver.\n\nChoose destination, confirm the place and address, review the route, then Start journey. Repeat reads the current guidance. Show the map to review and confirm completed instructions. Pause shows Resume and End journey.\n\nAt a road, choose Crossing help. Hold the phone upright at chest height and scan slowly left and right. Choose “I’m crossing” when you begin. Confirm “I’m on the footpath” only on the far footpath, not on a refuge island. Route speech then resumes.\n\nWithout a destination, use Start camera assistance, then I’m crossing and I’m on the footpath. Stop assistance ends the session. Volume buttons change volume normally.',
+    'The camera fills the screen. Show map, the arrow at the bottom, opens the map. On the map, Close full-screen map returns to the camera.\n\nChoose destination, confirm the place and address, review the route, then Start journey. Repeat, Pause and End journey are under More controls. Repeat reads the current guidance. While paused, Resume is the main button.\n\nAt a road, choose Start camera help. Hold the phone upright at chest height and scan slowly left and right. Choose I’m crossing when you begin. Choose I’m on the footpath only on the far footpath, not on a refuge island. Route speech then resumes.\n\nWithout a destination, use Start camera help, then I’m crossing and I’m on the footpath. More controls has Stop camera help, which ends the session. Volume buttons change volume normally.',
   guideSoundSonar:
     'Repeating tick that speeds up as the signal moves towards the centre of view, panned to the ear it is on.',
   guideSoundCentered: 'Short double tick: the signal is straight ahead.',
@@ -276,6 +285,52 @@ export const S = {
   settingsSectionAi: 'Assistant',
   settingsGemini: 'Describe surroundings (Gemini)',
 
+  // UI P1a
+  stateOn: 'On',
+  stateOff: 'Off',
+  practiceOnly: 'Practice only',
+  practiceHint: 'Plays a practice sound. Not a live signal.',
+  fieldDestination: 'Destination',
+  fieldPlaceName: 'Saved place name',
+
+  // UI P1b
+  voiceStart: 'Start voice commands',
+  voiceStop: 'Stop listening',
+  voiceRetry: 'Retry voice',
+  noticeDismissHint: 'Tap to dismiss',
+
+  // UI P2d
+  settingsSectionAdvanced: 'Advanced',
+  developerConfirm: 'Developer mode shows test tools. Continue?',
+  developerTurnOn: 'Turn on',
+  developerCancel: 'Cancel',
+  guideVoiceButton: 'Start voice commands, the microphone button, lets you speak a destination or a command. Stop listening ends it.',
+  guideMapOpen: 'Open the map with Show map, the arrow at the bottom. Search in the bottom panel, or choose a saved place. Review the address, choose Confirm place, then Start journey.',
+  guideMapSaved: 'Tap a result’s star to save it. Tap the destination box to see your three latest saves; All saved places shows the rest. Save with a name adds an optional label.',
+  guideMapPanel: 'Drag the panel handle, or use Expand destination panel and Collapse destination panel. Close full-screen map returns to the camera. Map controls do not change your journey.',
+  guideAboutMaps: 'Searches and place checks use Google Maps. Saved place IDs and your labels stay on this phone.',
+  guideLinkMapsTerms: 'Google Maps terms',
+  guideLinkPrivacy: 'Google privacy policy',
+
+  // UI P3f
+  voiceSayHeading: 'Say',
+  voiceFailsHeading: 'If voice fails',
+  voiceSayLines: [
+    '“Navigate to Sydney Town Hall” starts a route. Include the suburb.',
+    'For several matches, say “first”, “second” or “third”.',
+    '“Search for a library” searches only. Say “start” or “confirm” to navigate.',
+    '“Save as Home” saves the selected place, not your GPS position. Later say “navigate to Home”.',
+    '“Repeat”, “pause”, “resume”, “cancel”, “retry”.',
+    '“Stop navigation” ends the route.',
+    '“Next instruction” after completing a route step.',
+    '“Arrived” at the destination.',
+    '“Finish crossing” only on the far footpath, beyond any refuge island.',
+    '“Confirm” starts a reviewed route; it does not complete a crossing.',
+  ],
+
+  // UI P3e
+  actionClose: 'Close',
+  startingApp: 'Starting CrossWise…',
 };
 
 /** Everyday speech: observations, short confirmations and recoverable failures. Tutorials stay in Help. */
@@ -286,8 +341,8 @@ export const P = {
   detectionTooSlow: 'Detection too slow.',
   detectionUnavailable: 'Vehicle detection unavailable.',
   journeyPaused: 'Navigation paused.',
-  crossingPaused: 'Crossing guidance ended. Navigation paused.',
-  crossingHelp: 'Crossing guidance.',
+  crossingPaused: 'Crossing ended. Navigation paused.',
+  crossingHelp: 'Crossing started.',
   confirmFootpath: 'Finish crossing before changing the route.',
   journeyEnded: 'Navigation stopped.',
   locationRestored: 'Location restored.',

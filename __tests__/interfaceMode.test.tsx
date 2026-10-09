@@ -116,7 +116,7 @@ test('switching both ways during crossing retains the session and single camera 
   await render(<CrossWiseApp />);
   expect(renderedText()).not.toContain('DetectionOverlay');
   await press('Settings');
-  await press('Developer mode');
+  await press('Developer mode'); await press('Turn on');
   expect(renderedText()).toContain('DetectionOverlay');
   expect(button('Developer mode').props.accessibilityState.selected).toBe(true);
   await press('User mode');
@@ -132,11 +132,11 @@ test('changing mode on Settings keeps that tab and the camera mounted', async ()
   await render(<CrossWiseApp />);
   await press(S.tabSettings);
   expect(tree.root.findAllByType(SettingsScreen)).toHaveLength(1);
-  await press('Developer mode');
+  await press('Developer mode'); await press('Turn on');
   expect(tree.root.findAllByType(SettingsScreen)).toHaveLength(1);
-  expect(renderedText()).toContain(S.settingsSectionDetection.toUpperCase());
+  expect(renderedText()).toContain(S.settingsSectionDetection);
   await press('User mode');
-  expect(renderedText()).not.toContain(S.settingsSectionDetection.toUpperCase());
+  expect(renderedText()).not.toContain(S.settingsSectionDetection);
   expect(renderedText()).toContain(S.settingsSpeech);
   expect(mockCameraMount).toHaveBeenCalledTimes(1);
   expect(mockCameraUnmount).not.toHaveBeenCalled();
@@ -159,7 +159,7 @@ test.each([S.settingsOpenGuide, S.practiceTitle])('help page %s and settings pre
   await press('Settings'); await press(link);
   await press(S.actionBackToSettings);
   expect(tree.root.findAllByType(SettingsScreen)).toHaveLength(1);
-  await press('Developer mode'); await press('User mode'); await press(S.actionBack);
+  await press('Developer mode'); await press('Turn on'); await press('User mode'); await press(S.actionBack);
   expect(button('Show map')).toBeDefined();
   expect(controller.ui.value.snapshot).toBe(snapshot);
   expect(controller.command).not.toHaveBeenCalled();
@@ -189,7 +189,7 @@ test('User mode keeps warnings even when developer presentation hides them', asy
 test('shared controls have a single crossing action, Repeat and Stop', async () => {
   controller.ui.set({ ...controller.ui.value, snapshot: { ...EMPTY_SNAPSHOT, mode: AssistMode.SEARCHING } });
   await render(<JourneyControls stacked={false} />);
-  await press('I’m crossing'); await press('Repeat'); await press('Stop assistance');
+  await press('I’m crossing'); await press('Repeat'); await press('Stop camera help');
   expect(controller.crossingAction).toHaveBeenCalledWith('start');
   expect(controller.repeatGuidance).toHaveBeenCalledTimes(1);
   expect(controller.command).toHaveBeenCalledWith(UserCommand.STOP_ASSIST, true);
@@ -207,7 +207,8 @@ test('camera denial leaves destination planning and permission recovery availabl
   const request = jest.fn();
   await render(<MainScreen height={200} hasPermission={false} canRequestPermission requestPermission={request} />);
   expect(mockCameraMount).not.toHaveBeenCalled();
-  expect(renderedText()).toContain('Route guidance remains available');
+  expect(renderedText()).toContain('Camera is off');
+  expect(renderedText()).toContain('Routes still work without it');
   await press('Allow camera'); expect(request).toHaveBeenCalledTimes(1);
 });
 
@@ -224,7 +225,7 @@ test('rapid queued mode changes persist the final choice', async () => {
 test('idle controls have one full, wrapping start label', async () => {
   await render(<JourneyControls stacked={false} />);
   expect(button(S.actionDetails)).toBeUndefined();
-  const label = tree.root.findAll((n: any) => n.props.children === 'Start camera assistance' && n.props.style)[0];
+  const label = tree.root.findAll((n: any) => n.props.children === 'Start camera help' && n.props.style)[0];
   expect(label.props.numberOfLines).toBeUndefined();
   expect(button('I’m crossing')).toBeUndefined();
 });
@@ -275,17 +276,19 @@ test('first launch goes straight to the journey; general precautions are in Sett
   expect(button(S.safetyAccept)).toBeUndefined();
   expect(renderedText()).not.toContain(S.safetyBody);
   await press('Settings');
-  expect(renderedText()).toContain('PRECAUTIONS AND LIMITATIONS');
+  expect(renderedText()).toContain('Precautions and limitations');
   expect(renderedText()).not.toContain(S.safetyBody);
-  await press('Precautions');
+  await press('Read limitations');
   expect(renderedText()).toContain(S.safetyBody);
 });
 
-test('User camera keeps routine buttons behind More controls while retaining the fallback', async () => {
+test('User camera keeps one primary button in view and the routine buttons behind More controls', async () => {
   await render(<CrossWiseApp />);
-  expect(button('Start camera assistance')).toBeUndefined();
-  await press('More controls'); expect(button('Start camera assistance')).toBeDefined();
-  await press('Hide controls'); expect(button('Start camera assistance')).toBeUndefined();
+  expect(button('Start camera help')).toBeDefined(); expect(button('More controls')).toBeUndefined();
+  await act(async () => controller.ui.set({ ...controller.ui.value, snapshot: { ...EMPTY_SNAPSHOT, mode: AssistMode.SEARCHING } }));
+  expect(button('I’m crossing')).toBeDefined(); expect(button('Stop camera help')).toBeUndefined();
+  await press('More controls'); expect(button('Stop camera help')).toBeDefined(); expect(button('I’m crossing')).toBeDefined();
+  await press('Close'); expect(button('Stop camera help')).toBeUndefined(); // UI P3e J12: the sheet's Close button
 });
 test('compact crossing controls never hide unfinished-crossing recovery', async () => {
   controller.journey.state.set({ phase: 'paused', crossing: true } as any);
@@ -295,9 +298,10 @@ test('compact crossing controls never hide unfinished-crossing recovery', async 
 test('in-app help teaches exact voice turns, search versus start, fallback and recovery', async () => {
   await render(<SettingsScreen onBack={() => {}} />);
   expect(renderedText()).not.toContain('Navigate to Sydney Town Hall');
-  await press('Voice manual');
+  await press('Commands and voice setup');
+  await press('If voice fails');
   const text = renderedText();
-  for (const phrase of ['MANUAL', 'Navigate to Sydney Town Hall', 'Save as Home', 'cannot hear commands', 'finish crossing', 'Enable Dictation']) expect(text).toContain(phrase);
+  for (const phrase of ['Manual', 'Navigate to Sydney Town Hall', 'Save as Home', 'cannot hear commands', 'Finish crossing', 'Enable Dictation']) expect(text).toContain(phrase);
   expect(button('Read voice instructions')).toBeDefined(); expect(button('Open app settings')).toBeDefined();
   await press('Read voice instructions'); expect(controller.sayNavigation).toHaveBeenCalledWith(expect.stringContaining('Navigate to Town Hall'));
 });
@@ -306,7 +310,7 @@ test('voice help enables spoken guidance when speech was disabled', async () => 
   controller.settings.set({ ...DEFAULT_SETTINGS, speech: false });
   await render(<SettingsScreen onBack={() => {}} />);
   expect(button('Read voice instructions')).toBeUndefined();
-  await press('Voice manual');
+  await press('Commands and voice setup');
   await press('Enable spoken guidance');
   expect(controller.settings.value.speech).toBe(true);
   expect(button('Read voice instructions')).toBeDefined();

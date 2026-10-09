@@ -32,6 +32,15 @@ export const Colors = {
   /** Chrome accent — lighter and less saturated than Crossing, so it never reads as a state. */
   Accent: '#8AB4F8',
 
+  /** Notices and non-state icons. Same values the screens used before they became tokens (UI P3e J18). */
+  Warn: '#FFD87A',
+  Info: '#80DEEA',
+  RouteLine: '#1464C0',
+  RouteFill: 'rgba(20,100,192,0.14)',
+  VehicleMoving: '#FF7777',
+  VehicleStationary: '#69DB92',
+  VehicleOff: '#89959B',
+
   /** Keeps the top and bottom chrome legible over a bright sky without hiding the view. */
   TopScrim: ['rgba(0,0,0,0.70)', 'rgba(0,0,0,0)'] as const,
   BottomScrim: ['rgba(0,0,0,0)', 'rgba(0,0,0,0.80)'] as const,
@@ -45,9 +54,9 @@ export const Dimens = {
   gapMedium: 12,
   gapLarge: 20,
 
-  radiusHero: 24,
-  radiusCard: 18,
+  /** Three radii: 12 rows and fields, 18 cards and sheets, pill for chips and strips. */
   radiusRow: 12,
+  radiusCard: 18,
   radiusPill: 28,
 
   /** Apple's floor is 44 pt; this app is used standing and one-handed, so controls stay at 56. */
@@ -78,7 +87,6 @@ export function familyOf(font: AppFont, bold = true): string {
 }
 
 export interface Typography {
-  displayLarge: TextStyle;
   displayMedium: TextStyle;
   headlineMedium: TextStyle;
   titleLarge: TextStyle;
@@ -90,7 +98,7 @@ export interface Typography {
 }
 
 /**
- * Shared typography scales with system Dynamic Type. Legacy display sizes remain for developer components.
+ * Five sizes only: 15 / 17 / 20 / 26 / 34 sp. They scale with system Dynamic Type.
  */
 export function typographyFor(font: AppFont): Typography {
   const f = FAMILIES[font];
@@ -102,15 +110,14 @@ export function typographyFor(font: AppFont): Typography {
     color: Colors.OnSurface,
   });
   return {
-    displayLarge: style(52, true, 56, -0.5), // large-status mode only
     displayMedium: style(34, true, 38, -0.3), // the phase word, compact mode
     headlineMedium: style(26, true, 32),
     titleLarge: style(20, true, 26),
     titleMedium: style(17, true, 22),
-    bodyLarge: style(16, false, 22),
+    bodyLarge: style(17, false, 22),
     bodyMedium: style(15, false, 21),
-    labelLarge: style(13, true, 17, 0.9),
-    labelMedium: style(12, false, 16),
+    labelLarge: style(15, true, 21, 0.5),
+    labelMedium: style(15, false, 21),
   };
 }
 

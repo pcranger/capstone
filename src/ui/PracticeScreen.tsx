@@ -1,10 +1,10 @@
 import { VoiceCheck } from './VoiceCheck';
-import { ScrollView, View } from 'react-native';
+import { ScrollView } from 'react-native';
 import { Text } from './ScaledText';
 import { controller } from '../state/controller';
 import { type Cue, Cues, HapticPattern, Phrase, Priority, ToneKind } from '../feedback/cue';
 import { S } from '../strings';
-import { BigButton, Hint, SectionCard, TextButton } from './components';
+import { BackButton, BigButton, Hint, SectionCard } from './components';
 import { Colors, Dimens, useType } from './theme';
 
 /**
@@ -18,12 +18,11 @@ export function PracticeScreen({ onBack }: { onBack?: () => void }) {
   const type = useType();
   return (
     <ScrollView contentContainerStyle={{ padding: Dimens.gutter, gap: Dimens.gapMedium }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-        <Text style={[type.headlineMedium, { flex: 1 }]} accessibilityRole="header">
-          {S.practiceTitle}
-        </Text>
-        {onBack && <TextButton label={S.actionBackToSettings} onPress={onBack} />}
-      </View>
+      {onBack && <BackButton label={S.actionBackToSettings} onPress={onBack} />}
+      <Text style={type.headlineMedium} accessibilityRole="header">
+        {S.practiceTitle}
+      </Text>
+      <Text style={[type.titleMedium, { color: Colors.Accent }]}>{S.practiceOnly}</Text>
       <Hint>{S.practiceIntro}</Hint>
 
       <SectionCard title="Voice check"><VoiceCheck /></SectionCard>
@@ -95,5 +94,5 @@ export function PracticeScreen({ onBack }: { onBack?: () => void }) {
 }
 
 function Practice({ label, color, children }: { label: string; color: string; children: Cue[] }) {
-  return <BigButton text={label} color={color} onPress={() => controller.practice(children)} />;
+  return <BigButton text={label} color={color} hint={S.practiceHint} onPress={() => controller.practice(children)} />;
 }

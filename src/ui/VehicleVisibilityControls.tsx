@@ -3,8 +3,8 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { controller } from '../state/controller';
 import { useStore } from '../state/store';
 import { Text } from './ScaledText';
-import { useType } from './theme';
-const options=[['showMovingVehicles','Moving','directions-car','#FF7777'],['showStationaryVehicles','Stationary','local-parking','#69DB92']] as const;
+import { Colors, useType } from './theme';
+const options=[['showMovingVehicles','Moving','directions-car',Colors.VehicleMoving],['showStationaryVehicles','Stationary','local-parking',Colors.VehicleStationary]] as const;
 /** Visual filters only; warning preferences and motion classification are independent. */
 export function VehicleVisibilityControls({compact=false}:{compact?:boolean}) {
   const settings=useStore(controller.settings),type=useType();
@@ -14,7 +14,7 @@ export function VehicleVisibilityControls({compact=false}:{compact?:boolean}) {
       accessibilityHint={enabled?'Tap to hide these boxes.':'Tap to show these boxes.'}
       onPress={()=>controller.updateSettings(s=>({...s,[key]:!enabled,showOverlay:!enabled||s.showOverlay}))}
       style={{minWidth:44,minHeight:44,alignItems:'center',justifyContent:'center',paddingHorizontal:8,gap:2}}>
-      <View><MaterialIcons name={icon} size={23} color={enabled?color:'#89959B'} />
+      <View><MaterialIcons name={icon} size={23} color={enabled?color:Colors.VehicleOff} />
         {!enabled&&<View pointerEvents="none" style={styles.slash}/>}</View>
       {!compact&&<Text style={type.labelMedium}>{label}</Text>}
     </Pressable>})}

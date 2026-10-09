@@ -7,15 +7,21 @@ import { controller } from '../state/controller';
 import { useStore } from '../state/store';
 import { Verbosity } from '../feedback/cue';
 import { BUNDLED_MODEL, displayNameOf, referenceOf } from '../perception/modelLoader';
-import { InterfaceMode, type AppSettings } from '../settings/settings';
+import { AppFont, InterfaceMode, type AppSettings } from '../settings/settings';
 import { InterfaceModeSelector } from './InterfaceModeSelector';
 import { S } from '../strings';
 import { services, nativeMapConfigured } from '../config/services';
-import { BigButton, Hint, RadioRow, SectionCard, SliderRow, SwitchRow, TextButton } from './components';
-import { Colors, Dimens, useType } from './theme';
+import { BackButton, BigButton, Hint, RadioRow, SectionCard, SliderRow, SwitchRow, TextButton } from './components';
+import { Colors, Dimens, familyOf, useType } from './theme';
 import { SpeechPreview } from './SpeechPreview';
 import { VehicleVisibilityControls } from './VehicleVisibilityControls';
 import { VoiceHelp } from './VoiceHelp';
+
+const FONT_CHOICES: [AppFont, string][] = [
+  [AppFont.MODERN, S.fontModern],
+  [AppFont.CLASSIC, S.fontClassic],
+  [AppFont.HYPERLEGIBLE, S.fontHyperlegible],
+];
 
 export function SettingsScreen({ onBack, onOpenGuide, onOpenPractice }: {
   onBack: () => void;
@@ -26,6 +32,7 @@ export function SettingsScreen({ onBack, onOpenGuide, onOpenPractice }: {
   const [previewOpen,setPreviewOpen]=useState(false);
   const [manualOpen, setManualOpen] = useState(false);
   const [precautionsOpen, setPrecautionsOpen] = useState(false);
+  const [confirmDeveloper, setConfirmDeveloper] = useState(false);
   const settings = useStore(controller.settings);
   const developer = settings.interfaceMode === InterfaceMode.DEVELOPER;
   const model = useStore(controller.model);
@@ -33,6 +40,12 @@ export function SettingsScreen({ onBack, onOpenGuide, onOpenPractice }: {
   const update = (transform: (s: AppSettings) => AppSettings) => controller.updateSettings(transform);
   const set = <K extends keyof AppSettings>(key: K) => (value: AppSettings[K]) =>
     update((s) => ({ ...s, [key]: value }));
+
+  /** Turning Developer on asks first (it shows test tools); turning it off, or going back to User, never does. */
+  const chooseMode = (mode: InterfaceMode) => {
+    if (mode === InterfaceMode.DEVELOPER) { setConfirmDeveloper(true); return; }
+    setConfirmDeveloper(false); set('interfaceMode')(mode);
+  };
 
   const importModel = async () => {
     const result = await DocumentPicker.getDocumentAsync({ type: '*/*', copyToCacheDirectory: true });
@@ -59,53 +72,14 @@ export function SettingsScreen({ onBack, onOpenGuide, onOpenPractice }: {
 
   return (
     <View style={{ flex: 1 }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: Dimens.gutter, paddingVertical: 8 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: Dimens.gapSmall, paddingHorizontal: Dimens.gutter, paddingVertical: 8 }}>
+        <BackButton onPress={onBack} />
         <Text style={[type.headlineMedium, { flex: 1 }]} accessibilityRole="header">
           {S.settingsTitle}
         </Text>
-        <TextButton label={S.actionBack} onPress={onBack} />
       </View>
 
       <ScrollView contentContainerStyle={{ padding: Dimens.gutter, gap: Dimens.gapMedium }}>
-      <SectionCard title="Interface">
-        <InterfaceModeSelector value={settings.interfaceMode} onChange={set('interfaceMode')} />
-      </SectionCard>
-      <SectionCard title="Manual">
-        <Pressable accessibilityRole="button" accessibilityLabel="Voice manual" accessibilityState={{ expanded: manualOpen }}
-          onPress={() => setManualOpen(v => !v)} style={{ minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Text style={type.titleMedium}>Commands and voice setup</Text>
-          <MaterialIcons name={manualOpen ? 'expand-less' : 'expand-more'} size={24} color={Colors.OnSurface} />
-        </Pressable>
-        {manualOpen && <VoiceHelp />}
-      </SectionCard>
-
-      {(onOpenGuide || onOpenPractice) && (
-        <SectionCard title={S.settingsSectionHelp}>
-          {onOpenGuide && <TextButton label={S.settingsOpenGuide} onPress={onOpenGuide} />}
-          {onOpenPractice && <TextButton label={S.practiceTitle} onPress={onOpenPractice} />}
-        </SectionCard>
-      )}
-
-      {developer && <SectionCard title="Vehicle boxes">
-        <Hint>Tap an icon to show or hide that motion state. A slash means hidden. Alerts are unchanged.</Hint>
-        <VehicleVisibilityControls />
-      </SectionCard>}
-      {developer && <SectionCard title="Speech preview">
-        <TextButton label={previewOpen?'Close speech preview':'Open speech preview'} onPress={()=>setPreviewOpen(v=>!v)} />
-        {previewOpen && <SpeechPreview />}
-      </SectionCard>}
-      <SectionCard title="Precautions and limitations">
-        <Pressable accessibilityRole="button" accessibilityLabel="Precautions" accessibilityState={{ expanded: precautionsOpen }}
-          onPress={() => setPrecautionsOpen(v => !v)} style={{ minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Text style={type.titleMedium}>Read limitations</Text>
-          <MaterialIcons name={precautionsOpen ? 'expand-less' : 'expand-more'} size={24} color={Colors.OnSurface} />
-        </Pressable>
-        {precautionsOpen && <>
-        <Text style={type.bodyMedium}>{S.safetyBody}</Text>
-        <Text style={type.bodyMedium}>Stereo headphones separate left and right tones. Phone speakers may play both together.</Text>
-        {model.kind === 'ready' && !model.info.hasPedestrianSignalClasses && <Text style={type.bodyMedium}>{S.warnBaselineModel}</Text>}
-        </>}
-      </SectionCard>
       <SectionCard title={S.settingsSectionFeedback}>
         <SwitchRow label={S.settingsSpeech} value={settings.speech} onChange={set('speech')} />
         <SwitchRow label={S.settingsTones} value={settings.tones} onChange={set('tones')} />
@@ -119,6 +93,7 @@ export function SettingsScreen({ onBack, onOpenGuide, onOpenPractice }: {
           onCommit={set('speechRate')}
         />
         <Text style={[type.titleMedium, { marginTop: Dimens.gapSmall }]}>{S.settingsVerbosity}</Text>
+        <View accessibilityRole="radiogroup">
         {[
           [Verbosity.MINIMAL, S.verbosityMinimal],
           [Verbosity.NORMAL, S.verbosityNormal],
@@ -131,12 +106,75 @@ export function SettingsScreen({ onBack, onOpenGuide, onOpenPractice }: {
             onPress={() => set('verbosity')(level as Verbosity)}
           />
         ))}
+        </View>
       </SectionCard>
 
+      <SectionCard title={S.settingsSectionDisplay}>
+        <Text style={type.titleMedium}>{S.settingsFont}</Text>
+        <View accessibilityRole="radiogroup">
+          {FONT_CHOICES.map(([font, label]) => (
+            <RadioRow
+              key={font}
+              label={label}
+              selected={settings.appFont === font}
+              onPress={() => set('appFont')(font)}
+              labelStyle={{ fontFamily: familyOf(font) }}
+            />
+          ))}
+        </View>
+        <SwitchRow label={S.settingsLargeStatus} value={settings.largeStatus} onChange={set('largeStatus')} />
+        {developer && <>
+          <SwitchRow label={S.settingsPreview} value={settings.showPreview} onChange={set('showPreview')} />
+          <SwitchRow label={S.settingsOverlay} value={settings.showOverlay} onChange={set('showOverlay')} />
+        </>}
+      </SectionCard>
 
-      {developer && <SectionCard title={S.settingsSectionDisplay}>
-        <SwitchRow label={S.settingsPreview} value={settings.showPreview} onChange={set('showPreview')} />
-        <SwitchRow label={S.settingsOverlay} value={settings.showOverlay} onChange={set('showOverlay')} />
+      {(onOpenGuide || onOpenPractice) && (
+        <SectionCard title={S.settingsSectionHelp}>
+          {onOpenGuide && <TextButton label={S.settingsOpenGuide} onPress={onOpenGuide} />}
+          {onOpenPractice && <TextButton label={S.practiceTitle} onPress={onOpenPractice} />}
+        </SectionCard>
+      )}
+
+      <SectionCard title="Manual">
+        <Pressable accessibilityRole="button" accessibilityLabel="Commands and voice setup" accessibilityState={{ expanded: manualOpen }}
+          onPress={() => setManualOpen(v => !v)} style={{ minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Text style={type.titleMedium}>Commands and voice setup</Text>
+          <MaterialIcons name={manualOpen ? 'expand-less' : 'expand-more'} size={24} color={Colors.OnSurface} />
+        </Pressable>
+        {manualOpen && <VoiceHelp />}
+      </SectionCard>
+      <SectionCard title="Precautions and limitations">
+        <Pressable accessibilityRole="button" accessibilityLabel="Read limitations" accessibilityState={{ expanded: precautionsOpen }}
+          onPress={() => setPrecautionsOpen(v => !v)} style={{ minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Text style={type.titleMedium}>Read limitations</Text>
+          <MaterialIcons name={precautionsOpen ? 'expand-less' : 'expand-more'} size={24} color={Colors.OnSurface} />
+        </Pressable>
+        {precautionsOpen && <>
+        <Text style={type.bodyMedium}>{S.safetyBody}</Text>
+        <Text style={type.bodyMedium}>Stereo headphones separate left and right tones. Phone speakers may play both together.</Text>
+        {model.kind === 'ready' && !model.info.hasPedestrianSignalClasses && <Text style={type.bodyMedium}>{S.warnBaselineModel}</Text>}
+        </>}
+      </SectionCard>
+      <SectionCard title={S.settingsSectionAdvanced}>
+        <InterfaceModeSelector value={settings.interfaceMode} onChange={chooseMode} />
+        {confirmDeveloper && <View style={{ gap: Dimens.gapSmall }}>
+          <Text accessibilityLiveRegion="polite" style={type.titleMedium}>{S.developerConfirm}</Text>
+          <View style={{ flexDirection: 'row', gap: Dimens.gapSmall }}>
+            <BigButton text={S.developerTurnOn} color={Colors.Crossing} style={{ flex: 1 }}
+              onPress={() => { setConfirmDeveloper(false); set('interfaceMode')(InterfaceMode.DEVELOPER); }} />
+            <BigButton text={S.developerCancel} color={Colors.SurfaceVariant} style={{ flex: 1 }} onPress={() => setConfirmDeveloper(false)} />
+          </View>
+        </View>}
+      </SectionCard>
+
+      {developer && <SectionCard title="Vehicle boxes">
+        <Hint>Tap an icon to show or hide that motion state. A slash means hidden. Alerts are unchanged.</Hint>
+        <VehicleVisibilityControls />
+      </SectionCard>}
+      {developer && <SectionCard title="Speech preview">
+        <TextButton label={previewOpen?'Close speech preview':'Open speech preview'} onPress={()=>setPreviewOpen(v=>!v)} />
+        {previewOpen && <SpeechPreview />}
       </SectionCard>}
 
       {developer && <SectionCard title="Services">

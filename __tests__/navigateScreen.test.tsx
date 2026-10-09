@@ -38,7 +38,7 @@ afterEach(async () => { await act(async () => { controller.journey.end(); tree.u
 
 test('missing configuration disables requests without presenting a key editor', async () => {
   await act(async () => { services.mapsRestApiKey = ''; tree.update(<NavigateScreen onStarted={openAssist} onBack={openSettings} />); });
-  expect(text()).toContain('Walking routes unavailable'.toUpperCase()); expect(button('Search places').props.accessibilityState.disabled).toBe(true);
+  expect(text()).toContain('Walking routes unavailable'); expect(button('Search places').props.accessibilityState.disabled).toBe(true);
   expect(button('Open settings')).toBeUndefined(); await press('Back to journey'); expect(openSettings).toHaveBeenCalled();
 });
 test('same-name places remain distinct, require a route review, and start only on explicit confirmation', async () => {

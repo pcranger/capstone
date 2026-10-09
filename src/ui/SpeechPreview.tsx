@@ -45,7 +45,7 @@ export function SpeechPreview() {
     {SPEECH_SAMPLES.map((sample,i)=><View key={sample.id} style={{gap:4,paddingVertical:8}}>
       <Text style={type.bodyMedium}>{sample.text}</Text>
       <Hint>{sample.trigger}</Hint>
-      <TextButton disabled={blocked||!settings.speech} label={`Play ${sample.id}`} onPress={()=>{void play(i);}} />
+      <TextButton disabled={blocked||!settings.speech} label={sample.text} onPress={()=>{void play(i);}} />
     </View>)}
   </>;
 }

@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { type ReactElement, type ReactNode, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { MaterialIcons } from '@expo/vector-icons';
-import { BackHandler, Keyboard, PanResponder, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Animated, BackHandler, Easing, Keyboard, Modal, PanResponder, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { SafeAreaInsetsContext, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from './ScaledText';
 import { AssistMode, UserCommand } from '../crossing/crossingEngine';
 import { WALKING_WARNING } from '../nav/navigation';
@@ -10,15 +10,35 @@ import { controller } from '../state/controller';
 import { useStore } from '../state/store';
 import { S } from '../strings';
 import { BigButton, IconPill, TextButton } from './components';
+import { askForCamera } from './askForCamera';
 import { MainScreen } from './MainScreen';
 import { MapPanel } from './MapPanel';
 import { DestinationSheet } from './DestinationSheet';
-import { Colors, useType } from './theme';
+import { Colors, Dimens, useType } from './theme';
+import { useReducedMotion } from './useReducedMotion';
 import { VoiceControl, VoiceStatus } from './VoiceControl';
 
+/**
+ * X2: when the sheet changes height it slides 200 ms ease-out on transform instead of jumping. The layout height
+ * changes at once; translateY starts at the old top edge and eases to 0. Instant with Reduce Motion.
+ */
+function useSheetSlide(height: number, reduceMotion: boolean) {
+  const [slide] = useState(() => new Animated.Value(0));
+  const last = useRef(height);
+  useLayoutEffect(() => {
+    const delta = height - last.current;
+    last.current = height;
+    slide.stopAnimation();
+    if (!delta || reduceMotion) { slide.setValue(0); return; }
+    slide.setValue(delta);
+    Animated.timing(slide, { toValue: 0, duration: 200, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
+  }, [height, reduceMotion, slide]);
+  return slide;
+}
+
 /** Two views; neither map interaction nor the keyboard resizes the camera. */
-export function JourneyScreen({ onSettings, hidden, hasPermission, canRequestPermission, requestPermission }: {
-  onSettings: () => void; hidden: boolean;
+export function JourneyScreen({ onSettings, hidden, onDockHeight, hasPermission, canRequestPermission, requestPermission }: {
+  onSettings: () => void; hidden: boolean; onDockHeight?: (height: number) => void;
   hasPermission: boolean; canRequestPermission: boolean; requestPermission: () => unknown;
 }) {
   const type = useType();
@@ -31,13 +51,14 @@ export function JourneyScreen({ onSettings, hidden, hasPermission, canRequestPer
   const setMapOpen = (value: boolean) => { if (value) controller.openMap(); else controller.closeMap(); };
   const setExpanded = (value: boolean) => controller.presentation.update(s => ({ ...s, expanded: value }));
   const [height, setHeight] = useState(window.height - 90);
-  const [headerHeight, setHeaderHeight] = useState(52);
+  const [headerHeight, setHeaderHeight] = useState(56);
   const [dockHeight, setDockHeight] = useState(114);
   const [keyboard, setKeyboard] = useState(0);
   const [sheetHeight, setSheetHeight] = useState(200);
   const active = journey.phase === 'walking' || journey.phase === 'paused';
   const available = Math.max(120, height - keyboard - 56);
   const requestedHeight = Math.min(available, expanded || keyboard ? height * 0.76 : Math.max(190, height * 0.3));
+  const sheetSlide = useSheetSlide(requestedHeight, useReducedMotion());
   const [sheetGesture] = useState(() => PanResponder.create({
     onStartShouldSetPanResponder: () => true,
     onPanResponderRelease: (_, gesture) => {
@@ -83,7 +104,7 @@ export function JourneyScreen({ onSettings, hidden, hasPermission, canRequestPer
       <MapPanel height={height} fullScreen toolsHidden={expanded || keyboard > 0} bottomInset={sheetHeight + keyboard + 12} onInteract={() => { controller.stopVoice(); collapse(); }} preview={(!active || planner.replacing) ? planner : undefined}
         onCandidate={place => { controller.stopVoice(); controller.planner.select(place); setExpanded(true); }}
         onPlaceId={id => { controller.stopVoice(); if (active && !planner.replacing && !controller.changeDestination()) return; setExpanded(true); void controller.planner.resolve(id); }} />
-      <View style={[styles.sheet, { height: requestedHeight, bottom: keyboard }]}
+      <Animated.View style={[styles.sheet, { height: requestedHeight, bottom: keyboard, transform: [{ translateY: sheetSlide }] }]}
         onLayout={e => setSheetHeight(e.nativeEvent.layout.height)}>
         <VoiceStatus onHelp={onSettings} />
         <View style={styles.sheetHandle} {...sheetGesture.panHandlers} accessible accessibilityRole="button"
@@ -96,7 +117,7 @@ export function JourneyScreen({ onSettings, hidden, hasPermission, canRequestPer
           <JourneyControls stacked={window.fontScale > 1.3} />
           <TextButton label="Change destination" onPress={() => controller.changeDestination()} />
         </ScrollView> : <DestinationSheet visible={mapOpen && !hidden} />}
-      </View>
+      </Animated.View>
       <View style={[styles.exitMap, { bottom: sheetHeight + keyboard + 12 }]}>
         <VoiceControl onHelp={onSettings} />
         <IconPill icon="fullscreen-exit" label="Close full-screen map" onPress={closeMap} />
@@ -104,8 +125,10 @@ export function JourneyScreen({ onSettings, hidden, hasPermission, canRequestPer
     </View>
     <View style={[styles.dock, mapOpen && { opacity: 0 }]} pointerEvents={mapOpen ? 'none' : 'auto'}
       accessibilityElementsHidden={mapOpen} importantForAccessibility={mapOpen ? 'no-hide-descendants' : 'auto'}
-      onLayout={event => setDockHeight(event.nativeEvent.layout.height)}>
-      <ScrollView style={{ maxHeight: height * 0.3 }}><JourneyControls stacked={window.fontScale > 1.3} compact={settings.interfaceMode === InterfaceMode.USER} /></ScrollView>
+      onLayout={event => { setDockHeight(event.nativeEvent.layout.height); onDockHeight?.(event.nativeEvent.layout.height); }}>
+      {/* J12: no scroll area over the camera. Large text sizes and User mode keep the primary action; the rest opens a sheet. */}
+      <JourneyControls stacked={window.fontScale > 1.3} compact={settings.interfaceMode === InterfaceMode.USER || window.fontScale > 1.3}
+        permission={{ hasPermission, canRequestPermission, requestPermission }} />
       <Pressable accessibilityRole="button" accessibilityLabel="Show map" accessibilityState={{ expanded: mapOpen }}
         onPress={() => setMapOpen(true)} style={styles.mapToggle}>
         <MaterialIcons name="keyboard-arrow-up" size={28} color={Colors.OnSurface} />
@@ -121,7 +144,7 @@ export function RouteSummary({ onDestination }: { onDestination: () => void }) {
   const active = s.phase === 'walking' || s.phase === 'paused';
   return <View style={styles.summary}>
     {active && route ? <>
-      <Text style={type.labelLarge} accessibilityRole="header">{s.phase === 'paused' ? 'JOURNEY PAUSED' : s.crossing ? 'CROSSING HELP' : `ROUTE · ${s.stepIndex + 1} OF ${route.steps.length}`}</Text>
+      <Text style={[type.titleLarge, { color: Colors.Accent }]} accessibilityRole="header">{s.phase === 'paused' ? 'Journey paused' : s.crossing ? 'Crossing' : `Step ${s.stepIndex + 1} of ${route.steps.length}`}</Text>
       <Text style={type.bodyMedium}>To {route.destination}</Text>
       {s.crossing ? <>
         <Text style={type.titleMedium}>Route speech is paused.</Text>
@@ -139,55 +162,91 @@ export function RouteSummary({ onDestination }: { onDestination: () => void }) {
       <BigButton text={route && s.phase !== 'arrived' ? 'Review destination' : 'Choose destination'} multiline
         color={Colors.Crossing} onPress={() => { if (s.phase === 'arrived') controller.journey.end(); onDestination(); }} />
     </>}
-    {s.error && <Text style={[type.bodyMedium, { color: '#FFD87A' }]} accessibilityRole="alert">{s.error}</Text>}
-    {route && <Text style={type.bodyMedium}>{WALKING_WARNING}</Text>}
+    {s.error && <Text style={[type.bodyMedium, { color: Colors.Warn }]} accessibilityRole="alert">{s.error}</Text>}
+    {/* The beta warning is shown once, under Start journey in the destination sheet; not again while walking. */}
+    {route && !active && <Text style={type.bodyMedium}>{WALKING_WARNING}</Text>}
   </View>;
 }
 
-/** These per-frame consumers are separate from the map and the rest of the journey layout. */
-export function JourneyControls({ stacked, compact = false }: { stacked: boolean; compact?: boolean }) {
+/** J12: the extra dock actions live in a bottom sheet, so the dock never grows or scrolls. Back and Close both dismiss it. */
+function MoreControlsSheet({ visible, onClose, children }: { visible: boolean; onClose: () => void; children: ReactNode }) {
   const type = useType();
-  const [expanded, setExpanded] = useState(false);
+  const reduceMotion = useReducedMotion();
+  const bottom = useContext(SafeAreaInsetsContext)?.bottom ?? 0;
+  return <Modal visible={visible} transparent statusBarTranslucent animationType={reduceMotion ? 'none' : 'slide'} onRequestClose={onClose}>
+    <View style={styles.modalRoot}>
+      <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessible={false} importantForAccessibility="no" />
+      <View accessibilityViewIsModal style={[styles.moreSheet, { paddingBottom: bottom + Dimens.gutter }]}>
+        <Text style={type.titleLarge} accessibilityRole="header">{S.actionMoreControls}</Text>
+        {children}
+        <BigButton text={S.actionClose} color={Colors.SurfaceVariant} onPress={onClose} />
+      </View>
+    </View>
+  </Modal>;
+}
+
+interface CameraPermission { hasPermission: boolean; canRequestPermission: boolean; requestPermission: () => unknown }
+interface Extra { text: string; press: () => void; color?: string; enabled?: boolean }
+
+/**
+ * These per-frame consumers are separate from the map and the rest of the journey layout. `compact` keeps only the
+ * primary button in view; the other actions open in the More controls sheet.
+ */
+export function JourneyControls({ stacked, compact = false, permission }: { stacked: boolean; compact?: boolean; permission?: CameraPermission }) {
+  const type = useType();
+  const [sheetOpen, setSheetOpen] = useState(false);
   const s = useStore(controller.journey.state);
   const { snapshot } = useStore(controller.ui);
-  const mode = snapshot.mode;
-  const assistOn = mode !== AssistMode.IDLE;
+  const assistOn = snapshot.mode !== AssistMode.IDLE;
   const paused = s.phase === 'paused';
-  const active = s.phase === 'walking' || paused;
-  const crossing = mode === AssistMode.CROSSING || (paused && s.crossing);
-  const action = crossing ? 'finish' : s.phase === 'walking' && !s.crossing ? 'help' : 'start';
-  const label = action === 'finish' ? 'I’m on the footpath' : action === 'help' ? 'Crossing help' : 'I’m crossing';
-  const button = (text: string, onPress: () => void, color = Colors.SurfaceVariant, enabled = true) =>
-    <BigButton text={text} onPress={onPress} multiline color={color} enabled={enabled} style={stacked ? undefined : { flex: 1 }} />;
+  const walking = s.phase === 'walking';
+  const crossing = snapshot.mode === AssistMode.CROSSING || (paused && s.crossing);
+  const button = (text: string, onPress: () => void, color = Colors.SurfaceVariant, enabled = true, primary = false, fill = !stacked && !primary) =>
+    <BigButton key={text} text={text} onPress={onPress} multiline color={color} enabled={enabled} primary={primary}
+      style={fill ? { flex: 1 } : undefined} />;
 
-  if (compact && !expanded) return <View style={styles.footer}>
-    {crossing && button(label, () => controller.crossingAction(action), Colors.Crossing, !s.busy)}
-    <TextButton label="More controls" onPress={() => setExpanded(true)} />
-  </View>;
+  // One primary button (56 dp), always in the same place, that walks through the states. (ui-p2c J2)
+  const primary = crossing ? button(S.actionEndCrossing, () => controller.crossingAction('finish'), Colors.Crossing, !s.busy, true)
+    : paused ? button(S.actionResume, () => { void controller.startJourney(); }, Colors.Crossing, !s.busy, true)
+    : walking ? button(S.actionStartCrossing, () => controller.crossingAction('help'), Colors.Crossing, !s.busy, true)
+    : assistOn ? button(S.actionStartCrossing, () => controller.crossingAction('start'), Colors.Crossing, !s.busy, true)
+    // SIM-1: no camera permission, no camera help. The primary button asks for the camera instead.
+    : permission && !permission.hasPermission
+      ? button(permission.canRequestPermission ? S.actionGrantCamera : S.actionOpenSettings,
+        () => { void askForCamera(permission.canRequestPermission, permission.requestPermission); }, Colors.Crossing, true, true)
+    : button(S.actionStartAssist, () => controller.command(UserCommand.START_ASSIST, true), Colors.Crossing, true, true);
+  const extras = [
+    (assistOn || walking || paused) && { text: 'Repeat', press: () => controller.repeatGuidance(), enabled: assistOn || walking },
+    walking && { text: 'Pause', press: () => controller.pauseJourney() },
+    paused && { text: 'End journey', press: () => controller.stopNavigation(), color: Colors.DontWalk },
+    !walking && !paused && assistOn && { text: S.actionStopAssist, press: () => controller.command(UserCommand.STOP_ASSIST, true), color: Colors.DontWalk },
+  ].filter(Boolean) as Extra[];
+  // At most two buttons share a row; a lone button, or the larger text sizes, take the full width. (ui-p2c J11)
+  const more = extras.map(x => button(x.text, x.press, x.color, x.enabled));
+  const rows: ReactElement[][] = [];
+  for (let i = 0; i < more.length; i += stacked ? 1 : 2) rows.push(more.slice(i, i + (stacked ? 1 : 2)));
 
   return <View style={styles.footer}>
-    {compact && <TextButton label="Hide controls" onPress={() => setExpanded(false)} />}
-    {s.busy === 'starting' && <Text style={type.bodyMedium}>Checking location…</Text>}
-    <View style={[styles.controls, stacked && { flexDirection: 'column', alignItems: 'stretch' }]}>
-      {(!paused || s.crossing) && (assistOn || active) && button(label, () => controller.crossingAction(action), Colors.Crossing, !s.busy && (assistOn || action === 'finish'))}
-      {(assistOn || active) && button('Repeat', () => controller.repeatGuidance(), Colors.SurfaceVariant, assistOn || s.phase === 'walking')}
-      {s.phase === 'walking' && button('Pause', () => controller.pauseJourney())}
-      {paused && !s.crossing && button('Resume', () => { void controller.startJourney(); }, Colors.Crossing, !s.busy)}
-      {paused && button('End journey', () => controller.stopNavigation(), Colors.DontWalk)}
-      {!active && button(assistOn ? 'Stop assistance' : 'Start camera assistance',
-        () => controller.command(assistOn ? UserCommand.STOP_ASSIST : UserCommand.START_ASSIST, true), assistOn ? Colors.DontWalk : Colors.Crossing)}
-    </View>
+    {s.busy === 'starting' && <Text style={type.bodyMedium} accessibilityLiveRegion="polite">Checking location…</Text>}
+    {!compact && rows.map((row, i) => <View key={i} style={styles.controls}>{row}</View>)}
+    {primary}
+    {compact && extras.length > 0 && <TextButton size="large" label={S.actionMoreControls} onPress={() => setSheetOpen(true)} />}
+    {compact && <MoreControlsSheet visible={sheetOpen && extras.length > 0} onClose={() => setSheetOpen(false)}>
+      {extras.map(x => button(x.text, () => { setSheetOpen(false); x.press(); }, x.color, x.enabled, false, false))}
+    </MoreControlsSheet>}
   </View>;
 }
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.Background, overflow: 'hidden' },
-  header: { position: 'absolute', top: 0, left: 0, right: 0, paddingHorizontal: 12, backgroundColor: Colors.Glass },
-  sheet: { position: 'absolute', left: 0, right: 0, backgroundColor: Colors.Surface, borderTopLeftRadius: 18, borderTopRightRadius: 18, overflow: 'hidden' },
-  sheetHandle: { minHeight: 44, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
-  exitMap: { position: 'absolute', right: 12 },
+  header: { position: 'absolute', top: 0, left: 0, right: 0, minHeight: 56, paddingHorizontal: 12, backgroundColor: Colors.Glass },
+  sheet: { position: 'absolute', left: 0, right: 0, backgroundColor: Colors.Surface, borderTopLeftRadius: Dimens.radiusCard, borderTopRightRadius: Dimens.radiusCard, overflow: 'hidden' },
+  sheetHandle: { minHeight: 56, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
+  exitMap: { position: 'absolute', right: 12, gap: 12 },
   dock: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: Colors.Glass },
-  mapToggle: { alignSelf: 'center', minWidth: 72, height: 44, alignItems: 'center', justifyContent: 'center' },
+  mapToggle: { alignSelf: 'center', minWidth: 96, height: 56, alignItems: 'center', justifyContent: 'center' },
   summary: { paddingHorizontal: 16, paddingVertical: 10, gap: 8 },
   footer: { backgroundColor: Colors.Glass, padding: 10, borderTopWidth: 1, borderTopColor: Colors.Hairline, gap: 6 },
   controls: { flexDirection: 'row', alignItems: 'stretch', gap: 8 },
+  modalRoot: { flex: 1, justifyContent: 'flex-end', backgroundColor: Colors.TopScrim[0] },
+  moreSheet: { backgroundColor: Colors.Surface, borderTopLeftRadius: Dimens.radiusCard, borderTopRightRadius: Dimens.radiusCard, padding: Dimens.gutter, gap: Dimens.gapMedium },
 });

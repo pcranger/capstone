@@ -29,6 +29,18 @@ function usePolled<T>(initial: T, read: () => T | Promise<T>, intervalMs: number
 const readHeadphones = () => CrossWiseNative?.headphonesConnected() ?? true;
 const readBattery = () => CrossWiseNative?.batteryPercent() ?? Promise.resolve(100);
 
+/** Headphones and battery, polled. Shared by the full WarningsPanel and the slim line on the camera screen (UI P3e J16). */
+export function useDeviceState() {
+  return { headphones: usePolled(true, readHeadphones, 4_000), battery: usePolled(100, readBattery, 60_000) };
+}
+
+export function deviceWarnings({ headphones, battery }: { headphones: boolean; battery: number }): [string, string][] {
+  const out: [string, string][] = [];
+  if (!headphones) out.push(['headphones', S.warnNoHeadphones]);
+  if (battery <= 20) out.push(['battery', S.warnBattery(battery)]);
+  return out;
+}
+
 /**
  * Conditions that quietly break detection. A covered lens or a dark street looks exactly like "nothing detected",
  * so the app has to say which one it is rather than report an empty, confident-looking scene.
@@ -50,8 +62,7 @@ export function WarningsPanel({
 }) {
   const type = useType();
   const assistOn = ui.snapshot.mode !== AssistMode.IDLE;
-  const headphones = usePolled(true, readHeadphones, 4_000);
-  const battery = usePolled(100, readBattery, 60_000);
+  const device = useDeviceState();
 
   // Each warning has a stable id so dismissing one does not silence the others, and a warning that comes back
   // (the lens is covered again) is a new event rather than something already waved away.
@@ -60,8 +71,7 @@ export function WarningsPanel({
   else if (assistOn && ui.frameBrightness < 0.12) all.push(['dark', S.warnDark]);
   if (ui.snapshot.pitchDeg !== null && ui.snapshot.pitchDeg < -45) all.push(['tilt', S.warnTilt]);
   if (assistOn && ui.fps >= 0.1 && ui.fps <= 8) all.push(['slow', S.warnSlow(ui.fps)]);
-  if (!headphones) all.push(['headphones', S.warnNoHeadphones]);
-  if (battery <= 20) all.push(['battery', S.warnBattery(battery)]);
+  all.push(...deviceWarnings(device));
   if (model.kind === 'ready' && !model.info.hasPedestrianSignalClasses) all.push(['baseline', S.warnBaselineModel]);
   const warnings = all.filter(([id]) => !dismissed.has(id));
   if (warnings.length === 0) return null;
