@@ -136,6 +136,8 @@ export class CrossingEngine {
   private pitchHighSinceMs: number | null = null;
   private warnedWalkingOnDontWalk = false;
   private readonly announcedHazards = new Map<number, [HazardLevel, number]>();
+  /** Track ids already told "approaching"; that first announcement skips the 3 s repeat rule (CW-5). */
+  private readonly approachHeard = new Set<number>();
   private hazards: VehicleHazard[] = [];
   private veerStatus: VeerStatus | null = null;
   private aimBearing: number | null = null;
@@ -527,21 +529,24 @@ export class CrossingEngine {
   }
 
   private hazardCues(nowMs: number): Cue[] {
-    if(nowMs-this.lastVehicleCueMs<3000 && !this.hazards.some(h=>h.level===HazardLevel.CRITICAL)) return [];
+    const firstApproach = (h: VehicleHazard) => h.approaching && !this.approachHeard.has(h.trackId);
+    if(nowMs-this.lastVehicleCueMs<3000 && !this.hazards.some(h=>h.level===HazardLevel.CRITICAL || firstApproach(h))) return [];
     for (const [id, value] of [...this.announcedHazards.entries()]) {
-      if (!this.hazards.some((h) => h.trackId === id) && nowMs - value[1] > 5_000) this.announcedHazards.delete(id);
+      if (!this.hazards.some((h) => h.trackId === id) && nowMs - value[1] > 5_000) { this.announcedHazards.delete(id); this.approachHeard.delete(id); }
     }
     // One announcement per frame: the most urgent hazard that is new, escalated, or due for a repeat.
     const hazard = this.hazards.find((h) => {
       const previous = this.announcedHazards.get(h.trackId);
       return (
         previous === undefined ||
+        firstApproach(h) ||
         (h.level === HazardLevel.CRITICAL && previous[0] === HazardLevel.WARNING) ||
         nowMs - previous[1] >= 3_000
       );
     });
     if (!hazard) return [];
     this.announcedHazards.set(hazard.trackId, [hazard.level, nowMs]);
+    if (hazard.approaching) this.approachHeard.add(hazard.trackId);
     this.lastVehicleCueMs=nowMs;
     const critical = hazard.level === HazardLevel.CRITICAL;
     let phrase: Phrase;
