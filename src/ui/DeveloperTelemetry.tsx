@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { Text } from './ScaledText';
@@ -5,7 +6,7 @@ import { type EngineSnapshot } from '../crossing/crossingEngine';
 import { ObjectCategory, isVehicle } from '../perception/detection';
 import { useType } from './theme';
 
-export function DeveloperTelemetry({ snapshot: s, fresh, fps, inferenceMs, brightness, model }: {
+export const DeveloperTelemetry = memo(function DeveloperTelemetry({ snapshot: s, fresh, fps, inferenceMs, brightness, model }: {
   snapshot: EngineSnapshot; fresh: boolean; fps: number; inferenceMs: number; brightness: number; model: string;
 }) {
   const type = useType();
@@ -49,7 +50,8 @@ export function DeveloperTelemetry({ snapshot: s, fresh, fps, inferenceMs, brigh
     })}
     <Text style={type.labelMedium}>Counts include stationary objects. Optical TTC is an image-expansion estimate; speed and distance are not measured.</Text>
   </View>;
-}
+});
+
 const styles = StyleSheet.create({
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   metric: { flexGrow: 1, flexBasis: '29%', backgroundColor: '#182B32', borderRadius: 8, padding: 8, gap: 2 },

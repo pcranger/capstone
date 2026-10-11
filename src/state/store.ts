@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 
 /** A minimal observable value — the StateFlow of this port. */
 export class Store<T> {
@@ -28,4 +28,14 @@ export class Store<T> {
 
 export function useStore<T>(store: Store<T>): T {
   return useSyncExternalStore(store.subscribe, () => store.value);
+}
+
+/** Low-rate diagnostic displays; detection overlays continue using the live store. */
+export function useSampledStore<T>(store: Store<T>, intervalMs = 1000): T {
+  const [sample, setSample] = useState(store.value);
+  useEffect(() => {
+    const timer = setInterval(() => setSample(store.value), intervalMs);
+    return () => clearInterval(timer);
+  }, [store, intervalMs]);
+  return sample;
 }

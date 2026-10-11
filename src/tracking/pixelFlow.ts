@@ -3,7 +3,7 @@ import * as cv from 'jsfeat';
 import type { GrayFrame } from './vehicleMotion';
 export interface FlowPoint { x:number; y:number; dx:number; dy:number }
 
-/** Pyramidal Lucas–Kanade, forward/backward checked; bounded to 950 corners. */
+/** Pyramidal Lucas–Kanade, forward/backward checked; bounded to 400 corners (native Android flow uses the same budget). */
 export function pixelFlow(previous:GrayFrame,current:GrayFrame,regions:BoxF[]=[]):FlowPoint[] {
   const w=current.width,h=current.height;
   const a=new cv.pyramid_t(3),b=new cv.pyramid_t(3);
@@ -18,8 +18,8 @@ export function pixelFlow(previous:GrayFrame,current:GrayFrame,regions:BoxF[]=[]
     const cell=`${Math.floor(p.x/5)},${Math.floor(p.y/5)}`;
     if(occupied.has(cell))return false;occupied.add(cell);return true;
   });
-  const regional=regions.slice(0,12).flatMap(b=>distributed.filter(p=>p.x/w>b.left && p.x/w<b.right && p.y/h>b.top && p.y/h<b.bottom).slice(0,50));
-  const selected=[...new Set([...regional,...distributed.slice(0,350)])].slice(0,950);
+  const regional=regions.slice(0,12).flatMap(b=>distributed.filter(p=>p.x/w>b.left && p.x/w<b.right && p.y/h>b.top && p.y/h<b.bottom).slice(0,20));
+  const selected=[...new Set([...regional,...distributed.slice(0,160)])].slice(0,400);
   const n=selected.length;if(n<6)return [];
   const xy=new Float32Array(n*2),q=new Float32Array(n*2),back=new Float32Array(n*2);
   const status=new Uint8Array(n),reverse=new Uint8Array(n);

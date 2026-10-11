@@ -87,6 +87,7 @@ export interface RawDetection {
 
 export interface FrameResult {
   capturedWallMs?: number;
+  motionWorkerMs?: number;
   motionImage?: import("../tracking/vehicleMotion").GrayFrame;
   detections: RawDetection[];
   frameWidth: number;
@@ -637,7 +638,8 @@ export class CrossWiseController {
     if (!loaded) return;
     // Time the frame was captured, as closely as the JS thread can know it.
     const age = result.capturedWallMs === undefined ? result.inferenceMs : Date.now()-result.capturedWallMs;
-    this.pipeline.update(p=>({receivedAt:nowMs(),latencyMs:age,slowFrames:p.slowFrames+(age>350?1:0),error:null}));
+    if (nowMs() - this.pipeline.value.receivedAt >= 500 || this.pipeline.value.error !== null)
+      this.pipeline.update(p=>({receivedAt:nowMs(),latencyMs:age,slowFrames:p.slowFrames+(age>350?1:0),error:null,processingMs:result.inferenceMs,motionWorkerMs:result.motionWorkerMs}));
     const timestampMs = nowMs() - age;
     const labels = loaded.info.labels;
     const categories = loaded.categories;
@@ -659,8 +661,9 @@ export class CrossWiseController {
       inferenceMs: result.inferenceMs,
     };
     if (result.debug) this.writeDebugCapture(result, loaded, detections);
-    // Preserve requested diagnostics even when inference is too old for live guidance.
-    if(age < 0 || age > 350) return;
+    // Accept completed detections regardless of processing latency. Keep capture time
+    // for motion calculations; invalid clock values are not usable measurements.
+    if (!Number.isFinite(age) || age < 0) return;
     this.brightness = 0.8 * this.brightness + 0.2 * result.brightness;
     if (result.mask) this.mask.set(result.mask);
     else if (this.mask.value !== null) this.mask.set(null);

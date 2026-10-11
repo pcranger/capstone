@@ -12,7 +12,7 @@ import { Side } from '../crossing/hazardMonitor';
 import { SignalPhase } from '../signal/signalPhaseTracker';
 import { InterfaceMode } from '../settings/settings';
 import { controller } from '../state/controller';
-import { useStore } from '../state/store';
+import { useStore, useSampledStore } from '../state/store';
 import { S } from '../strings';
 import { TextButton } from './components';
 import { DetectionOverlay, SegmentationOverlay } from './Overlays';
@@ -26,6 +26,7 @@ export function MainScreen({ height, topInset = 0, bottomInset = 0, hidden = fal
   const window = useWindowDimensions();
   const settings = useStore(controller.settings);
   const ui = useStore(controller.ui);
+  const telemetry = useSampledStore(controller.ui);
   const model = useStore(controller.model);
   const mask = useStore(controller.mask);
   const camera = useStore(controller.cameraStatus);
@@ -109,9 +110,9 @@ export function MainScreen({ height, topInset = 0, bottomInset = 0, hidden = fal
       {!developer && journey.phase === 'walking' && journey.route && <Text style={type.bodyMedium}>
         {journey.crossing ? 'Crossing assistance' : journey.route.steps[journey.stepIndex]?.instruction}
       </Text>}
-      {developer && <Text style={type.labelMedium}>Camera: {camera}{cameraDetail?` · ${cameraDetail}`:''}. Inference: {Math.round(pipeline.latencyMs)} ms · stale frames rejected: {pipeline.slowFrames}{pipeline.error?` · ${pipeline.error}`:''}</Text>}
-      {developer && <DeveloperTelemetry snapshot={ui.snapshot} fresh={fresh} fps={ui.fps} inferenceMs={ui.inferenceMs}
-        brightness={ui.frameBrightness} model={model.kind === 'ready' ? `${model.info.displayName} · ${model.info.backend} · ${model.info.inputWidth}px` : 'Model unavailable'} />}
+      {developer && <Text style={type.labelMedium}>Camera: {camera}{cameraDetail?` · ${cameraDetail}`:''}. Frame latency: {Math.round(pipeline.latencyMs)} ms · Processing: {Math.round(pipeline.processingMs ?? 0)} ms · Motion: {Math.round(pipeline.motionWorkerMs ?? 0)} ms{pipeline.error?` · ${pipeline.error}`:''}</Text>}
+      {developer && <DeveloperTelemetry snapshot={telemetry.snapshot} fresh={fresh} fps={telemetry.fps} inferenceMs={telemetry.inferenceMs}
+        brightness={telemetry.frameBrightness} model={model.kind === 'ready' ? `${model.info.displayName} · ${model.info.backend} · ${model.info.inputWidth}px` : 'Model unavailable'} />}
 
     </ScrollView>}
   </View>;

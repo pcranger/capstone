@@ -35,6 +35,12 @@ class CrossWiseNativeModule : Module(), SensorEventListener {
   override fun definition() = ModuleDefinition {
     Name("CrossWiseNative")
     Events("onMotion")
+    // Expo AsyncFunction runs on the module worker queue, never on the UI/JS thread.
+    AsyncFunction("trackVehicleFlow") { previous: ByteArray, current: ByteArray, width: Int, height: Int, regions: List<List<Double>> ->
+      // Expo copies Uint8Array to owned ByteArray before dispatch. No JSI properties
+      // may be read on the worker queue.
+      VehicleFlow.track(previous, current, width, height, regions)
+    }
     Function("isMotionAvailable") { sensors.getDefaultSensor(Sensor.TYPE_GAME_ROTATION_VECTOR) != null && sensors.getDefaultSensor(Sensor.TYPE_ACCELEROMETER) != null }
     Function("startMotion") { intervalMs: Double ->
       if (!active) {

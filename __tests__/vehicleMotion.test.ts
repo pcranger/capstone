@@ -42,13 +42,13 @@ describe('Mobile pixel-motion evidence',()=>{
       expect(state).not.toBe('MOVING');
     }
   });
-  test('foreground translating over static background gives left-to-right motion',()=>{
+  test.each([100, 450, 600])('foreground motion remains supported at %i ms frame intervals', interval=>{
     const motion=new VehicleMotion(),tracker=new ObjectTracker(),source=noise(),texture=noise();let result;
     for(let i=0;i<10;i++){
-      const pixels=[...source.pixels];const x0=50+i*2;
+      const pixels=[...source.pixels];const x0=20+i*5;
       for(let y=30;y<80;y++)for(let x=0;x<60;x++)pixels[y*192+x0+x]=texture.pixels[(y+10)*192+x];
       const image={...source,pixels};const d=det(ObjectCategory.CAR,new BoxF(x0/192,30/108,(x0+60)/192,80/108));
-      result=motion.update(tracker.update([d],i*100),[d],image,i*100);
+      result=motion.update(tracker.update([d],i*interval),[d],image,i*interval);
     }
     expect([...result!.values()][0]).toEqual({state:'MOVING',direction:'LEFT_TO_RIGHT',supported:true});
   });

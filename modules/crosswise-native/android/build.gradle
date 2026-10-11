@@ -6,5 +6,19 @@ group = 'expo.modules.crosswise'
 version = '1.0.0'
 android {
   namespace 'expo.modules.crosswise'
-  defaultConfig { versionCode 1; versionName '1.0.0' }
+  testBuildType 'release'
+  packagingOptions { jniLibs { pickFirsts += ['**/libc++_shared.so'] } }
+  defaultConfig {
+    versionCode 1; versionName '1.0.0'
+    testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+    if (project.hasProperty("reactNativeArchitectures")) {
+      ndk { abiFilters (*project.property("reactNativeArchitectures").split(",")) }
+    }
+  }
+}
+
+dependencies {
+  implementation "org.opencv:opencv:4.13.0"
+  androidTestImplementation "androidx.test:runner:1.6.2"
+  androidTestImplementation "androidx.test.ext:junit:1.1.5"
 }
