@@ -10,12 +10,10 @@ import {
   useCamera,
   useCameraDevice,
   useFrameOutput,
-  usePhotoOutput,
 } from 'react-native-vision-camera';
 import { useResizer } from 'react-native-vision-camera-resizer';
 import { scheduleOnRN } from 'react-native-worklets';
 import CrossWiseNative from '../../modules/crosswise-native';
-import { bytesToBase64 } from '../ai/gemini';
 import { controller, type FrameResult, type RawDetection } from '../state/controller';
 import { useStore } from '../state/store';
 import { estimateSignalColor, meanLuminance, motionLuma, paintLetterboxBars } from '../perception/pixels';
@@ -270,31 +268,6 @@ export function CameraSurface({ showPreview, style, resizeMode = 'cover' }: {
     onFrame,
     onFrameDropped: () => undefined,
   });
-  // 16:9 like the analysis stream, so both run off the same sensor crop.
-  const photoOutput = usePhotoOutput({
-    targetResolution: CommonResolutions.HD_16_9,
-    containerFormat: 'jpeg',
-    quality: 0.8,
-    qualityPrioritization: 'speed',
-  });
-
-  useEffect(() => {
-    controller.registerCapturer(async () => {
-      const photo = await photoOutput.capturePhoto({ enableShutterSound: false }, {});
-      try {
-        const image = await photo.toImageAsync();
-        // 768 px is plenty for scene description and keeps the upload small on a phone at a curb.
-        const scale = Math.min(1, 768 / Math.max(image.width, image.height));
-        const small = scale < 1 ? await image.resizeAsync(Math.round(image.width * scale), Math.round(image.height * scale)) : image;
-        const encoded = await small.toEncodedImageDataAsync('jpg', 80);
-        return bytesToBase64(new Uint8Array(encoded.buffer));
-      } finally {
-        photo.dispose();
-      }
-    });
-    return () => controller.registerCapturer(null);
-  }, [photoOutput]);
-
   const onStarted = useCallback(() => { updateGeometry(device); controller.setCameraStatus('running'); }, [device]);
   const unavailable = useCallback(() => controller.setCameraStatus('unavailable',AppState.currentState==='active'?'Camera session stopped':'App is in background'), []);
   const interrupted = useCallback((reason:unknown)=>controller.setCameraStatus('unavailable',`Interrupted: ${String(reason)}`),[]);
@@ -304,7 +277,7 @@ export function CameraSurface({ showPreview, style, resizeMode = 'cover' }: {
     controller.setCameraStatus(device && active ? 'starting' : 'unavailable');
     return () => controller.setCameraStatus('unavailable');
   }, [device, active]);
-  const outputs = useMemo(() => [frameOutput, photoOutput], [frameOutput, photoOutput]);
+  const outputs = useMemo(() => [frameOutput], [frameOutput]);
 
   if (device == null) return <View style={style} />;
   return showPreview ? (

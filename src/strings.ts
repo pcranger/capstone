@@ -89,13 +89,12 @@ export const S = {
   actionResume: 'Resume',
   actionMoreControls: 'More controls',
   actionHideControls: 'Hide controls',
-  actionChooseDestination: 'Choose destination',
   cameraHelpOff: 'Camera help is off.',
   cameraHelpOffHint: 'Choose Start camera help when you reach a road.',
   cameraOffTitle: 'Camera is off',
-  cameraOffReason: 'CrossWise needs the camera to read signals and see traffic. Routes still work without it.',
+  cameraOffReason: 'CrossWise needs the camera to read signals and see traffic.',
   cameraPermissionNeeded:
-    'CrossWise needs the camera to see pedestrian signals and traffic. Detection runs on the phone. Optional scene descriptions send requested images to Google Gemini.',
+    'CrossWise needs the camera to see pedestrian signals and traffic. Detection runs on the phone.',
   cameraPermissionDenied:
     'Camera access is off for CrossWise. Turn it on in app settings, then come back to the app.',
 
@@ -219,7 +218,7 @@ export const S = {
   guideSectionAbout: 'About',
   guideSectionSessions: 'Recorded sessions',
   guideHolding:
-    'The camera fills the screen. Show map, the arrow at the bottom, opens the map. On the map, Close full-screen map returns to the camera.\n\nChoose destination, confirm the place and address, review the route, then Start journey. Repeat, Pause and End journey are under More controls. Repeat reads the current guidance. While paused, Resume is the main button.\n\nAt a road, choose Start camera help. Hold the phone upright at chest height and scan slowly left and right. Choose I’m crossing when you begin. Choose I’m on the footpath only on the far footpath, not on a refuge island. Route speech then resumes.\n\nWithout a destination, use Start camera help, then I’m crossing and I’m on the footpath. More controls has Stop camera help, which ends the session. Volume buttons change volume normally.',
+    'The camera fills the screen. At a road, choose Start camera help. Hold the phone upright at chest height and scan slowly left and right. Choose I’m crossing when you begin. Choose I’m on the footpath only on the far footpath, not on a refuge island. More controls has Stop camera help, which ends the session. Volume buttons change volume normally.',
   guideSoundSonar:
     'Repeating tick that speeds up as the signal moves towards the centre of view, panned to the ear it is on.',
   guideSoundCentered: 'Short double tick: the signal is straight ahead.',
@@ -274,24 +273,12 @@ export const S = {
   settingsShowWarnings: 'Show warnings over the camera',
   settingsShowStatusIcons: 'Show status icons (people, crosswalk, signal)',
   settingsShowModelLine: 'Show model and frame rate',
-  geminiPointLeft: 'Point the phone left.',
-  geminiPointFront: 'Point the phone forward.',
-  geminiPointRight: 'Point the phone right.',
-  geminiThinking: 'Looking at your surroundings.',
-  geminiFailed: 'Description unavailable. Try again.',
-  geminiNoKey: 'Scene descriptions unavailable.',
-  actionDescribe: 'Describe surroundings',
-  actionDescribing: 'Scanning…',
-  settingsSectionAi: 'Assistant',
-  settingsGemini: 'Describe surroundings (Gemini)',
 
   // UI P1a
   stateOn: 'On',
   stateOff: 'Off',
   practiceOnly: 'Practice only',
   practiceHint: 'Plays a practice sound. Not a live signal.',
-  fieldDestination: 'Destination',
-  fieldPlaceName: 'Saved place name',
 
   // UI P1b
   voiceStart: 'Start voice commands',
@@ -304,28 +291,18 @@ export const S = {
   developerConfirm: 'Developer mode shows test tools. Continue?',
   developerTurnOn: 'Turn on',
   developerCancel: 'Cancel',
-  guideVoiceButton: 'Start voice commands, the microphone button, lets you speak a destination or a command. Stop listening ends it.',
-  guideMapOpen: 'Open the map with Show map, the arrow at the bottom. Search in the bottom panel, or choose a saved place. Review the address, choose Confirm place, then Start journey.',
-  guideMapSaved: 'Tap a result’s star to save it. Tap the destination box to see your three latest saves; All saved places shows the rest. Save with a name adds an optional label.',
-  guideMapPanel: 'Drag the panel handle, or use Expand destination panel and Collapse destination panel. Close full-screen map returns to the camera. Map controls do not change your journey.',
-  guideAboutMaps: 'Searches and place checks use Google Maps. Saved place IDs and your labels stay on this phone.',
-  guideLinkMapsTerms: 'Google Maps terms',
+  guideVoiceButton: 'Start voice commands, the microphone button, lets you speak a command. Stop listening ends it.',
   guideLinkPrivacy: 'Google privacy policy',
 
   // UI P3f
   voiceSayHeading: 'Say',
   voiceFailsHeading: 'If voice fails',
   voiceSayLines: [
-    '“Navigate to Sydney Town Hall” starts a route. Include the suburb.',
-    'For several matches, say “first”, “second” or “third”.',
-    '“Search for a library” searches only. Say “start” or “confirm” to navigate.',
-    '“Save as Home” saves the selected place, not your GPS position. Later say “navigate to Home”.',
-    '“Repeat”, “pause”, “resume”, “cancel”, “retry”.',
-    '“Stop navigation” ends the route.',
-    '“Next instruction” after completing a route step.',
-    '“Arrived” at the destination.',
+    '“Start” turns camera help on. “Pause” turns it off, but not during a crossing.',
+    '“Repeat” reads the current status again. “Retry” starts camera help, or repeats the status.',
+    '“Resume” turns camera help on again.',
+    '“Cancel” ends a crossing, or turns camera help off.',
     '“Finish crossing” only on the far footpath, beyond any refuge island.',
-    '“Confirm” starts a reviewed route; it does not complete a crossing.',
   ],
 
   // UI P3e
@@ -340,20 +317,4 @@ export const P = {
   detectionWaiting: 'Waiting for detection…',
   detectionTooSlow: 'Detection too slow.',
   detectionUnavailable: 'Vehicle detection unavailable.',
-  journeyPaused: 'Navigation paused.',
-  crossingPaused: 'Crossing ended. Navigation paused.',
-  crossingHelp: 'Crossing started.',
-  confirmFootpath: 'Finish crossing before changing the route.',
-  journeyEnded: 'Navigation stopped.',
-  locationRestored: 'Location restored.',
-  locationPoor: 'Location inaccurate. Distance unavailable.',
-  offRoute: 'You may be off route.',
-  stepEnd: 'End of this instruction nearby.',
-  nearDestination: 'Destination nearby.',
-  places: (count: number) => count ? `${count} ${count === 1 ? 'place' : 'places'} found.` : 'No places found. Try another name.',
-  routeReady: (name: string, metres: number) => `${name}. About ${Math.round(metres)} metres.`,
-  instruction: (index: number, instruction: string, remaining: number | null) =>
-    `${instruction}${/[.!?]$/.test(instruction) ? '' : '.'}` +
-    (remaining === null ? '' : ` About ${remaining} metres remaining.`),
-  arrived: (name: string) => `Arrived at ${name}.`,
 };

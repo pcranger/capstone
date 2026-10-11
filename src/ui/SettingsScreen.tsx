@@ -10,7 +10,6 @@ import { BUNDLED_MODEL, displayNameOf, referenceOf } from '../perception/modelLo
 import { AppFont, InterfaceMode, type AppSettings } from '../settings/settings';
 import { InterfaceModeSelector } from './InterfaceModeSelector';
 import { S } from '../strings';
-import { services, nativeMapConfigured } from '../config/services';
 import { BackButton, BigButton, Hint, RadioRow, SectionCard, SliderRow, SwitchRow, TextButton } from './components';
 import { Colors, Dimens, familyOf, useType } from './theme';
 import { SpeechPreview } from './SpeechPreview';
@@ -177,19 +176,12 @@ export function SettingsScreen({ onBack, onOpenGuide, onOpenPractice }: {
         {previewOpen && <SpeechPreview />}
       </SectionCard>}
 
-      {developer && <SectionCard title="Services">
-        <Hint>Google map: {nativeMapConfigured ? 'configured' : 'not configured'}</Hint>
-        <Hint>Walking routes: {services.mapsRestApiKey ? 'configured' : 'not configured'}</Hint>
-        <Hint>Scene descriptions: {services.geminiApiKey ? 'configured' : 'not configured'}</Hint>
-        <Hint>Configuration is supplied by the computer at build time. Configured does not confirm service access.</Hint>
-      </SectionCard>}
-
       {developer && <SectionCard title={S.settingsSectionGuidance}>
         <SwitchRow label={S.settingsAimSonar} value={settings.aimSonar} onChange={set('aimSonar')} />
         <Hint>Phone heading is diagnostic only. Walking-direction advice is disabled.</Hint>
         <SwitchRow label={S.settingsVehicleAlerts} value={settings.vehicleAlerts} onChange={set('vehicleAlerts')} />
         <SwitchRow label={S.settingsAutoCrossing} value={settings.autoDetectCrossing} onChange={set('autoDetectCrossing')} />
-        <Hint>Automatic crossing detection is experimental: Developer camera assistance only, never during a route or in User mode.</Hint>
+        <Hint>Automatic crossing detection is experimental: Developer camera assistance only, never in User mode.</Hint>
       </SectionCard>}
 
       {developer && (

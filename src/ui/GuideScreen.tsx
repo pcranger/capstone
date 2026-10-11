@@ -38,12 +38,6 @@ export function GuideScreen({ onBack }: { onBack?: () => void }) {
       <Section title={S.guideSectionSafety}>{body(S.safetyBody)}</Section>
       <Section title={S.guideSectionHolding}>{body(S.guideHolding)}</Section>
 
-      <Section title="Map and saved places">
-        {body(S.guideMapOpen)}
-        {body(S.guideMapSaved)}
-        {body(S.guideMapPanel)}
-      </Section>
-
       <Section title={S.guideSectionSounds}>
         <Legend name={S.practiceSonar} meaning={S.guideSoundSonar} />
         <Legend name={S.practiceCentered} meaning={S.guideSoundCentered} />
@@ -95,11 +89,7 @@ export function GuideScreen({ onBack }: { onBack?: () => void }) {
         {body(S.guideAboutVersion(Constants.expoConfig?.version ?? '0.1.0'))}
         {body(S.guideAboutModel(model.kind === 'ready' ? model.info.displayName : S.modelMissing))}
         <Hint>{S.guideAboutLicenses}</Hint>
-        {body(S.guideAboutMaps)}
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: Dimens.gapMedium }}>
-          <TextButton label={S.guideLinkMapsTerms} onPress={() => { void Linking.openURL('https://maps.google.com/help/terms_maps/'); }} />
-          <TextButton label={S.guideLinkPrivacy} onPress={() => { void Linking.openURL('https://policies.google.com/privacy'); }} />
-        </View>
+        <TextButton label={S.guideLinkPrivacy} onPress={() => { void Linking.openURL('https://policies.google.com/privacy'); }} />
       </Section>
     </ScrollView>
     </View>

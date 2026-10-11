@@ -2,37 +2,20 @@ import { spokenError } from './speechCatalog';
 import { Store } from '../state/store';
 import type { SpeechInput } from './nativeSpeech';
 
-export type VoiceIntent =
-  | { kind: 'destination'; query: string; navigate: boolean }
-  | { kind: 'choose'; index: number }
-  | { kind: 'save'; alias?: string }
-  | { kind: 'confirm' | 'retry' | 'repeat' | 'pause' | 'resume' | 'cancel' | 'end' | 'help' | 'stopListening' | 'next' | 'arrived' | 'finishCrossing' };
+export type VoiceIntent = { kind: 'start' | 'retry' | 'repeat' | 'pause' | 'resume' | 'cancel' | 'help' | 'stopListening' | 'finishCrossing' };
 
 /** Only explicit commands may start an action. */
 export { VOICE_MANUAL as VOICE_QUICK_START } from './speechCatalog';
 
+const COMMANDS: Record<string, VoiceIntent['kind']> = {
+  start: 'start', retry: 'retry', repeat: 'repeat', pause: 'pause', resume: 'resume', cancel: 'cancel',
+  'finish crossing': 'finishCrossing', help: 'help', 'voice help': 'help', manual: 'help', man: 'help',
+  'show commands': 'help', 'stop listening': 'stopListening',
+};
+
 export function voiceIntent(text: string): VoiceIntent | null {
-  const value = text.trim().replace(/[.!?]+$/, '').trim();
-  const lower = value.toLocaleLowerCase('en-AU');
-  const commands: Record<string, VoiceIntent['kind']> = {
-    'next instruction': 'next', arrived: 'arrived', 'finish crossing': 'finishCrossing',
-    confirm: 'confirm', 'start journey': 'confirm', start: 'confirm', retry: 'retry',
-    repeat: 'repeat', pause: 'pause', 'pause navigation': 'pause', resume: 'resume',
-    'resume navigation': 'resume', cancel: 'cancel', 'end journey': 'end', 'stop navigation': 'end',
-    help: 'help', 'voice help': 'help', manual: 'help', man: 'help', 'show commands': 'help', 'stop listening': 'stopListening',
-  };
-  if (Object.hasOwn(commands, lower)) return { kind: commands[lower] } as VoiceIntent;
-  const choice = /^(?:(?:choose|select|number|option) )?(first|second|third|one|two|three|1|2|3)$/.exec(lower);
-  if (choice) return { kind: 'choose', index: ['first', 'one', '1'].includes(choice[1]) ? 0 : ['second', 'two', '2'].includes(choice[1]) ? 1 : 2 };
-  if (/^save(?: (?:this|location))?$/.test(lower)) return { kind: 'save' };
-  const alias = /^save(?: this)? as (.+)$/i.exec(value);
-  if (alias) return { kind: 'save', alias: alias[1] };
-  const destination = /^(navigate to|take me to|go to|search for|search|find) (.+)$/i.exec(value);
-  if (destination) return { kind: 'destination', query: destination[2], navigate: !/^(search|find)/i.test(destination[1]) };
-  // Yes/no and generic acknowledgements are never a destination or crossing command.
-  if (!value || /^(yes|no|okay|ok|thanks|thank you|stop|cross|cross now|i am across|save as|navigate to|search for)$/.test(lower)
-    || /^(where|what|when|why|how|can you|could you)\b/.test(lower)) return null;
-  return null;
+  const lower = text.trim().replace(/[.!?]+$/, '').trim().toLocaleLowerCase('en-AU');
+  return Object.hasOwn(COMMANDS, lower) ? { kind: COMMANDS[lower] } : null;
 }
 
 export interface NavigationVoiceState { phase: 'off' | 'preparing' | 'speaking' | 'listening' | 'working' | 'error'; text: string }

@@ -40,7 +40,6 @@ export interface AppSettings {
   /** The icon rail at the top left: people, crosswalk, you, vehicles, signal. */
   showStatusIcons: boolean;
   showModelLine: boolean;
-  geminiEnabled: boolean;
   /** Low-vision mode: the phase word takes the whole bottom panel instead of a compact line. */
   largeStatus: boolean;
   /**
@@ -74,7 +73,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   showWarnings: true,
   showStatusIcons: true,
   showModelLine: false,
-  geminiEnabled: true,
   largeStatus: false,
   customModelPath: null,
   acceptedSafetyNotice: false,
@@ -103,7 +101,7 @@ const FILE_KEYS: (keyof AppSettings)[] = [
   'speech', 'tones', 'haptics', 'speechRate', 'verbosity', 'appFont', 'largeStatus', 'showWarnings', 'showStatusIcons',
   'showMovingVehicles', 'showStationaryVehicles',
   'showModelLine', 'showPreview', 'showOverlay', 'aimSonar', 'veerGuidance', 'vehicleAlerts', 'autoDetectCrossing',
-  'useGpu', 'scoreThreshold', 'logSessions', 'customModelPath', 'geminiEnabled', 'interfaceMode',
+  'useGpu', 'scoreThreshold', 'logSessions', 'customModelPath', 'interfaceMode',
 ];
 
 /** Allowlisted preferences only. Legacy credentials and volume shortcuts are intentionally discarded. */

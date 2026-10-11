@@ -9,12 +9,12 @@ import { SPEECH_SAMPLES, previewCues } from '../voice/speechPreview';
 import { Hint, SwitchRow, TextButton } from './components';
 import { useType } from './theme';
 
-/** Plays text/cues only. No navigation commands, microphone input or scene fixtures. */
+/** Plays text/cues only. No voice commands, microphone input or scene fixtures. */
 export function SpeechPreview() {
-  const type=useType(), settings=useStore(controller.settings), ui=useStore(controller.ui), journey=useStore(controller.journey.state);
+  const type=useType(), settings=useStore(controller.settings), ui=useStore(controller.ui);
   const [sounds,setSounds]=useState(false),[index,setIndex]=useState(0),[playing,setPlaying]=useState(false);
   const generation=useRef(0);
-  const blocked=ui.snapshot.mode!==AssistMode.IDLE || journey.phase==='walking' || journey.phase==='paused';
+  const blocked=ui.snapshot.mode!==AssistMode.IDLE;
   const stop=()=>{++generation.current;controller.stopSpeechPreview();setPlaying(false);};
   useEffect(()=>()=>{++generation.current;controller.stopSpeechPreview();},[]);
   useEffect(()=>{if(blocked){++generation.current;controller.stopSpeechPreview();}},[blocked]);

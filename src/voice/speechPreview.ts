@@ -46,10 +46,9 @@ function extras(id: Phrase): Cue[] {
 }
 const samples: SpeechSample[] = Object.keys(PHRASES).map(id=>({id,
   text:phraseText(id as Phrase,[2]),trigger:triggers[id as Phrase]??'Explicit Repeat status with fresh, supported observations.',extras:extras(id as Phrase)}));
-const functionSamples:Record<string,string>={place:V.place('Town Hall','George Street, Sydney'),routeStarted:V.routeStarted('Town Hall','Continue along George Street.'),savedAs:V.savedAs('Home'),heard:V.heard('Test microphone'),
-  places:P.places(2),routeReady:P.routeReady('Town Hall',250),instruction:P.instruction(0,'Continue along George Street.',120),arrived:P.arrived('Town Hall')};
+const functionSamples:Record<string,string>={heard:V.heard('Test microphone')};
 export const SPEECH_SAMPLES: SpeechSample[] = [...samples,
   ...[P,V].flatMap((catalog,index)=>Object.entries(catalog).map(([id,value])=>({id:`${index===0?'navigation':'voice'}.${id}`,text:typeof value==='string'?value:functionSamples[id]??'',
-    trigger:id==='heard'?'Settings microphone test; transcript only.':id.startsWith('describe')?'Explicit optional scene description.':`Explicit command, navigation event or recovery: ${id.replace(/([A-Z])/g,' $1').toLowerCase()}.`,extras:[]}))).filter(s=>!!s.text),
+    trigger:id==='heard'?'Settings microphone test; transcript only.':`Explicit command or recovery: ${id.replace(/([A-Z])/g,' $1').toLowerCase()}.`,extras:[]}))).filter(s=>!!s.text),
   {id:'manual',text:VOICE_MANUAL,trigger:'Explicit Manual command or Read voice instructions.',extras:[]}];
 export const previewCues = (sample:SpeechSample, sounds:boolean):Cue[] => [Cues.speakText(sample.text,Priority.NORMAL),...(sounds?sample.extras:[])];

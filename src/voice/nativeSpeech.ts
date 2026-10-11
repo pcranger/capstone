@@ -134,8 +134,7 @@ export class NativeSpeechInput implements SpeechInput {
           ...(this.audioSourceUri ? { audioSource: { uri: this.audioSourceUri } } : {}),
           interimResults: false, addsPunctuation: false, maxAlternatives: 1, iosTaskHint: 'dictation',
           recordingOptions: { persist: false },
-          contextualStrings: ['Navigate to', 'Search for', 'Save as Home', 'Confirm', 'Start journey', 'Pause', 'Resume', 'Repeat',
-            'End journey', 'Stop navigation', 'Help', 'Voice help', 'Manual', 'Man', 'Next instruction', 'Arrived', 'Finish crossing', 'Cancel', 'Retry', 'First', 'Second', 'Third', 'Stop listening', 'Sydney Town Hall'],
+          contextualStrings: ['Start', 'Pause', 'Resume', 'Repeat', 'Help', 'Voice help', 'Manual', 'Man', 'Finish crossing', 'Cancel', 'Retry', 'Stop listening'],
           iosCategory: { category: 'playAndRecord', mode: 'measurement', categoryOptions: ['defaultToSpeaker', 'allowBluetooth', 'mixWithOthers', 'duckOthers'] } });
       } catch { abort(new Error('Microphone unavailable. Use Retry voice.')); }
     });

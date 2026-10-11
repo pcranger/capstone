@@ -21,8 +21,8 @@ import { DetectionOverlay, SegmentationOverlay } from './Overlays';
 import { Colors, Dimens, useType } from './theme';
 
 /** One full-screen camera surface. UI overlays never resize the camera or its box coordinate space. */
-export function MainScreen({ height, topInset = 0, bottomInset = 0, hidden = false, hasPermission, canRequestPermission, requestPermission }: {
-  height?: number; topInset?: number; bottomInset?: number; hidden?: boolean; hasPermission: boolean; canRequestPermission: boolean; requestPermission: () => unknown;
+export function MainScreen({ height, topInset = 0, bottomInset = 0, hasPermission, canRequestPermission, requestPermission }: {
+  height?: number; topInset?: number; bottomInset?: number; hasPermission: boolean; canRequestPermission: boolean; requestPermission: () => unknown;
 }) {
   const type = useType();
   const window = useWindowDimensions();
@@ -33,7 +33,6 @@ export function MainScreen({ height, topInset = 0, bottomInset = 0, hidden = fal
   const camera = useStore(controller.cameraStatus);
   const pipeline=useStore(controller.pipeline);
   const cameraDetail=useStore(controller.cameraDetail);
-  const journey = useStore(controller.journey.state);
   const warnings = deviceWarnings(useDeviceState());
   const [attempt, setAttempt] = useState(0);
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -42,11 +41,10 @@ export function MainScreen({ height, topInset = 0, bottomInset = 0, hidden = fal
   const developer = settings.interfaceMode === InterfaceMode.DEVELOPER;
   const assistOn = ui.snapshot.mode !== AssistMode.IDLE;
   const fresh = camera === 'running' && controller.hasRecentFrame;
-  const routeOnly = journey.phase === 'walking' && !journey.crossing;
   const signal = ui.snapshot.signal;
   const hazard = fresh ? ui.snapshot.hazards[0] : null;
-  let status = !assistOn ? S.cameraHelpOff : routeOnly ? 'Watching nearby traffic.' : 'No pedestrian signal verified.';
-  if (assistOn && !routeOnly && fresh && signal.phase !== SignalPhase.UNKNOWN) {
+  let status = !assistOn ? S.cameraHelpOff : 'No pedestrian signal verified.';
+  if (assistOn && fresh && signal.phase !== SignalPhase.UNKNOWN) {
     status = !signal.trusted ? 'Signal colour is unverified.' : {
       [SignalPhase.UNKNOWN]: 'No pedestrian signal verified.',
       [SignalPhase.WALK]: signal.freshWalk ? 'Walk signal just appeared.' : 'Walk signal observed; start time unknown.',
@@ -57,7 +55,7 @@ export function MainScreen({ height, topInset = 0, bottomInset = 0, hidden = fal
   }
   if (hazard && assistOn) status = S.hazardBanner(hazard.side === Side.LEFT ? S.sideLeft : hazard.side === Side.RIGHT ? S.sideRight : S.sideAhead);
   let unavailable: string | null = null;
-  if (!hasPermission) unavailable = 'Camera permission is off. Route guidance remains available.';
+  if (!hasPermission) unavailable = 'Camera permission is off. Camera help needs it.';
   else if (model.kind !== 'ready') unavailable = model.kind === 'loading' ? 'Loading detection…' : 'Detection unavailable. Check the model in Settings → Developer.';
   else if (camera !== 'running' || !fresh) unavailable = perceptionMessage(camera,fresh,pipeline,nowMs());
   else if (assistOn && ui.frameBrightness < 0.04) unavailable = 'Camera blocked or too dark. Check the lens.';
@@ -71,18 +69,17 @@ export function MainScreen({ height, topInset = 0, bottomInset = 0, hidden = fal
     [SignalPhase.UNKNOWN]: Colors.Unknown, [SignalPhase.WALK]: Colors.Walk, [SignalPhase.WALK_FLASHING]: Colors.Caution,
     [SignalPhase.DONT_WALK]: Colors.DontWalk, [SignalPhase.DONT_WALK_FLASHING]: Colors.DontWalk,
   };
-  const signalShown = assistOn && !routeOnly && fresh && signal.phase !== SignalPhase.UNKNOWN;
-  const crossingNow = ui.snapshot.mode === AssistMode.CROSSING || journey.crossing;
+  const signalShown = assistOn && fresh && signal.phase !== SignalPhase.UNKNOWN;
+  const crossingNow = ui.snapshot.mode === AssistMode.CROSSING;
   const tone = hazardShown ? Colors.Hazard : unavailable || posture ? Colors.Caution
     : signalShown ? (signal.trusted ? signalTone[signal.phase] : Colors.Caution) : crossingNow ? Colors.Crossing : Colors.Unknown;
   const onTone = tone === Colors.Hazard ? Colors.OnHazard : Colors.OnSurface;
-  const hint = hazardShown ? undefined : crossingNow ? S.crossingFinishHint : !assistOn && !unavailable ? S.cameraHelpOffHint
-    : journey.phase === 'walking' ? journey.route?.steps[journey.stepIndex]?.instruction : undefined;
+  const hint = hazardShown ? undefined : crossingNow ? S.crossingFinishHint : !assistOn && !unavailable ? S.cameraHelpOffHint : undefined;
   const extras = !settings.showPreview || (hasPermission && camera === 'unavailable') || developer;
   const icon = unavailable ? 'videocam-off' : hazard && assistOn ? 'warning' : posture ? 'screen-rotation' : assistOn ? 'visibility' : 'pause-circle-outline';
 
   return <View style={[styles.panel, height === undefined ? StyleSheet.absoluteFill : { height }]}
-    pointerEvents="box-none" accessibilityElementsHidden={hidden} importantForAccessibility={hidden ? 'no-hide-descendants' : 'auto'}>
+    pointerEvents="box-none">
     <View style={StyleSheet.absoluteFill} accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
       {hasPermission && <CameraSurface key={attempt} showPreview={settings.showPreview} resizeMode="cover" style={StyleSheet.absoluteFill} />}
       {developer && fresh && settings.showPreview && model.kind === 'ready' && model.info.format === 'SEGMENTATION' &&
@@ -109,7 +106,6 @@ export function MainScreen({ height, topInset = 0, bottomInset = 0, hidden = fal
         </View>
         <BigButton primary text={canRequestPermission ? S.actionGrantCamera : S.actionOpenSettings} color={Colors.Crossing}
           onPress={() => { void askForCamera(canRequestPermission, requestPermission); }} />
-        <TextButton size="large" label={S.actionChooseDestination} onPress={() => controller.openMap()} />
       </View>
     </ScrollView>}
     {(developer ? detailsOpen : hasPermission) && <ScrollView style={[styles.status, { top: topInset + (developer ? 60 : 0), maxHeight: Math.max(80, Math.min(window.height * (developer ? 0.38 : 0.28), window.height - topInset - bottomInset - 160)) }]}>

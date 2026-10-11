@@ -1,7 +1,7 @@
 import { EMPTY_PIPELINE, perceptionMessage } from '../perception/pipelineHealth';
 import { NativeSpeechInput } from '../voice/nativeSpeech';
 import { VoiceAudioCheck } from '../voice/audioCheck';
-import { V, spokenError } from '../voice/speechCatalog';
+import { V } from '../voice/speechCatalog';
 import { NavigationVoice, voiceIntent, VOICE_QUICK_START } from '../voice/navigationVoice';
 import { speechStatus } from '../voice/speechStatus';
 import { Haptics } from '../feedback/haptics';
@@ -9,7 +9,6 @@ import { HapticPattern } from '../feedback/cue';
 import { Directory, File, Paths } from 'expo-file-system';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { AppState, type AppStateStatus } from 'react-native';
-import { type CapturedView, describeSurroundings } from '../ai/gemini';
 import { BoxF, nowMs } from '../core/geometry';
 import {
   AssistMode,
@@ -22,13 +21,6 @@ import {
 import { type Cue, Cues, Phrase, Priority, ToneKind } from '../feedback/cue';
 import { FeedbackEngine } from '../feedback/feedbackEngine';
 import { SessionLogger } from '../logging/sessionLogger';
-import { searchPlaces, walkingRoute, placeDetails, usableFix, type PlaceCandidate, type WalkingRoute } from '../nav/navigation';
-import { DestinationPlanner } from '../nav/planner';
-import { SavedPlacesRepository } from '../nav/savedPlaces';
-import { Journey } from '../nav/journey';
-import { cachedLocation, ensureLocationPermission, watchLocation } from '../nav/location';
-import { LocationCoordinator } from '../nav/locationCoordinator';
-import { walkingCue } from '../nav/feedbackPolicy';
 import type { Detection, FrameDetections, ObjectCategory, SignalColor } from '../perception/detection';
 import {
   displayNameOf,
@@ -54,7 +46,6 @@ import {
 } from '../settings/settings';
 import { cueText, phraseText, P, S } from '../strings';
 import { Store } from './store';
-import { services } from '../config/services';
 
 export type ModelState =
   | { kind: 'loading' }
@@ -101,16 +92,6 @@ export interface FrameResult {
 
 export type MaskImage = { buffer: ArrayBuffer; width: number; height: number } | null;
 
-/** Takes one still for the Gemini scan; registered by the camera view. Returns base64 JPEG, ≤ 768 px. */
-export type FrameCapturer = () => Promise<string | null>;
-
-const SCAN_STEPS: [string, string][] = [
-  ['left', S.geminiPointLeft],
-  ['front', S.geminiPointFront],
-  ['right', S.geminiPointRight],
-];
-
-const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 /**
  * The app's brain on the JS thread — the port of the Android CrossWiseViewModel. Screens read its stores; the
@@ -134,7 +115,6 @@ export class CrossWiseController {
   });
   readonly mask = new Store<MaskImage>(null);
   readonly notice = new Store<string | null>(null);
-  readonly describing = new Store(false);
   readonly pipeline = new Store({...EMPTY_PIPELINE});
   readonly cameraDetail = new Store<string|null>(null);
   readonly cameraStatus = new Store<'starting' | 'running' | 'unavailable'>('starting');
@@ -151,40 +131,6 @@ export class CrossWiseController {
     () => this.feedback.silenceRoutine(), () => { if (this.settings.value.haptics) Haptics.play(HapticPattern.CENTERED_TICK); });
   private readonly sensors = new MotionSensors();
   readonly logger = new SessionLogger();
-  readonly locations = new LocationCoordinator({ now: Date.now, prepare: ensureLocationPermission,
-    cached: cachedLocation, watch: watchLocation });
-  readonly journey = new Journey({
-    now: Date.now, locate: signal => this.locations.fresh(signal), watch: (fix, error) => this.locations.watch(fix, error),
-    search: (query, fix, signal) => searchPlaces(query, fix, services.mapsRestApiKey, signal),
-    route: (fix, to, signal) => walkingRoute(fix, to, services.mapsRestApiKey, signal),
-    say: text => { if (this.engine.mode !== AssistMode.CROSSING && !this.voice.processing) this.deliver([Cues.speakText(text, Priority.NORMAL)]); },
-    silence: () => this.feedback.silenceRoutine(),
-  });
-
-  readonly presentation = new Store({ mapOpen: false, expanded: false });
-  readonly savedPlaces = new SavedPlacesRepository();
-  readonly savedDetails = new Store<Record<string, PlaceCandidate>>({});
-  readonly planner = new DestinationPlanner({
-    search: (query, signal) => {
-      const fix = this.journey.location.value;
-      return searchPlaces(query, fix && usableFix(fix, Date.now()) ? fix : null, services.mapsRestApiKey, signal);
-    },
-    details: (id, signal) => placeDetails(id, services.mapsRestApiKey, signal),
-    route: async (to, signal) => {
-      const fix = await this.locations.fresh(signal);
-      if (signal.aborted) throw new Error('Request cancelled.');
-      if (!usableFix(fix, Date.now())) throw new Error('Location uncertain. Retry from the footpath.');
-      this.journey.location.set(fix);
-      return walkingRoute(fix, to, services.mapsRestApiKey, signal);
-    },
-    start: async plan => {
-      const started = await this.startJourney(plan);
-      if (!started) throw new Error(this.engine.mode === AssistMode.CROSSING ? P.confirmFootpath
-        : this.journey.state.value.error ?? 'Could not start. Check location and retry.');
-      return true;
-    },
-    cancelStart: () => this.journey.pause(),
-  });
   private homeVisible = false;
   private unknownCommands = 0;
   private queuedScanToken=-1;
@@ -192,24 +138,19 @@ export class CrossWiseController {
   private trafficFailure:string|null=null;
   private voiceMuted = false;
   private voiceAudioGeneration = 0;
-  private voiceNavigate = false;
-  private lastVoiceQuery = '';
-  private lastVoicePrompt = '';
-  private resumeAfterBackground = false;
   readonly voice = new NavigationVoice({
     input: new NativeSpeechInput(),
     say: async text => {
-      this.lastVoicePrompt = text;
       this.ui.update(s => ({ ...s, caption: text }));
       return this.feedback.sayAndWait(text);
     },
     ready: () => this.feedback.dispatch([Cues.tone(ToneKind.LISTENING), Cues.haptic(HapticPattern.CENTERED_TICK)]),
     handle: (text, current) => this.handleVoice(text, current),
-    cancel: () => this.planner.cancel(),
+    cancel: () => undefined,
   });
   setHomeVisible(visible: boolean): void {
     this.homeVisible = visible;
-    if (visible) { void this.locations.start().then(() => this.startVoice()); }
+    if (visible) this.startVoice();
     else { ++this.voiceAudioGeneration; this.voice.stop(); this.feedback.silenceRoutine(); }
   }
   startVoice(force = false): void {
@@ -224,153 +165,36 @@ export class CrossWiseController {
     });
   }
   stopVoice(): void {
-    this.voiceMuted = true; this.voiceNavigate = false;
+    this.voiceMuted = true;
     ++this.voiceAudioGeneration; this.voice.stop(); this.feedback.silenceRoutine();
   }
-  private async handleVoice(text: string, current: () => boolean): Promise<string | null> {
+  private async handleVoice(text: string, _current: () => boolean): Promise<string | null> {
     const intent = voiceIntent(text);
     if (!intent) return ++this.unknownCommands >= 2 ? V.unknownHelp : V.unknown;
     this.unknownCommands = 0;
-    const describeRoute = () => {
-      const s = this.journey.state.value;
-      return s.route ? `${s.phase === 'paused' ? 'Navigation paused. ' : ''}${s.route.destination}. ${s.route.steps[s.stepIndex].instruction}` : V.destination;
-    };
+    const crossing = this.engine.mode === AssistMode.CROSSING;
     switch (intent.kind) {
       case 'stopListening': this.stopVoice(); return null;
       case 'help': return VOICE_QUICK_START;
+      case 'start': case 'resume':
+        if (this.assistOn) return V.running;
+        this.command(UserCommand.START_ASSIST, true); return V.started;
+      case 'retry':
+        if (!this.assistOn) { this.command(UserCommand.START_ASSIST, true); return V.started; }
+        this.repeatGuidance(); return null;
+      case 'repeat': this.repeatGuidance(); return null;
       case 'pause':
-        if (!this.journey.hasJourney) return V.noRoute;
-        this.pauseJourney(); return V.paused;
-      case 'resume':
-        if (this.journey.running) return V.running;
-        return await this.startJourney() && current() ? describeRoute() : this.journey.state.value.error ? spokenError(this.journey.state.value.error) : V.noPausedRoute;
-      case 'end': this.stopNavigation(); return V.stopped;
-      case 'repeat':
-        if (this.journey.state.value.crossing || this.engine.mode === AssistMode.CROSSING) { this.repeatGuidance(); return null; }
-        return this.journey.hasJourney ? describeRoute() : this.lastVoicePrompt || V.destination;
-      case 'cancel': this.cancelPlanning(); return V.cancelled;
-      case 'save': {
-        const place = this.planner.state.value.selected ?? this.journey.state.value.destination;
-        return place ? this.savePlace(place, intent.alias) : V.chooseBeforeSave;
-      }
-      case 'destination': {
-        if (this.journey.state.value.crossing || this.engine.mode === AssistMode.CROSSING) return V.changeBlocked;
-        this.voiceNavigate = intent.navigate; this.lastVoiceQuery = intent.query;
-        if (this.journey.hasJourney) this.journey.pause();
-        this.planner.replace();
-        await this.savedPlaces.load(); if (!current()) return null;
-        const query = intent.query.toLocaleLowerCase('en-AU').trim();
-        const saved = this.savedPlaces.state.value.items.filter(p => (p.alias ?? p.queryLabel ?? '').toLocaleLowerCase('en-AU').trim() === query);
-        if (saved.length === 1) {
-          await this.planner.resolve(saved[0].placeId); if (!current()) return null;
-          return this.voicePlace(current);
-        }
-        await this.delayedVoiceWork(() => this.planner.search(intent.query), current, V.searching); if (!current()) return null;
-        const s = this.planner.state.value;
-        if (s.error) return spokenError(s.error);
-        if (s.candidates.length === 1) { this.planner.select(s.candidates[0]); return this.voicePlace(current); }
-        this.presentation.set({ mapOpen: true, expanded: true });
-        if(!s.candidates.length)return V.noPlaces;
-        return s.candidates.slice(0, 3).map((p, i) => `${i + 1}. ${p.name}, ${p.address}.`).join(' ')
-          + (s.candidates.length === 2 ? ' Say first or second.' : ' Say first, second, or third.');
-      }
-      case 'choose': {
-        const s = this.planner.state.value;
-        const place = s.page === 'results' ? s.candidates[intent.index] : null;
-        if (!place) return V.resultUnavailable;
-        this.planner.select(place); return this.voicePlace(current);
-      }
-      case 'retry': {
-        const selected = this.planner.state.value.selected;
-        if (selected) return this.voicePlace(current);
-        return this.lastVoiceQuery ? this.handleVoice(`${this.voiceNavigate ? 'navigate to' : 'search'} ${this.lastVoiceQuery}`, current) : V.destination;
-      }
-      case 'next': {
-        const s = this.journey.state.value;
-        if (s.crossing || this.engine.mode === AssistMode.CROSSING) return V.finishCrossingFirst;
-        if (!this.journey.running || !s.route) return s.phase === 'paused' ? V.paused : V.noRoute;
-        if (s.stepIndex === s.route.steps.length - 1) return V.finalInstruction;
-        this.journey.next(s.stepIndex); return describeRoute();
-      }
-      case 'arrived': {
-        const s = this.journey.state.value;
-        if (s.crossing || this.engine.mode === AssistMode.CROSSING) return V.finishCrossingFirst;
-        if (!this.journey.running || !s.route) return s.phase === 'paused' ? V.paused : V.noRoute;
-        if (s.stepIndex !== s.route.steps.length - 1) return V.arrivalTooSoon;
-        this.finishJourney(s.stepIndex); return P.arrived(s.route.destination);
-      }
-      case 'finishCrossing': {
-        if (!this.journey.state.value.crossing && this.engine.mode !== AssistMode.CROSSING) return V.noCrossing;
+        // Never switch the traffic watch off in the middle of a crossing.
+        if (crossing) return V.finishCrossingFirst;
+        this.command(UserCommand.STOP_ASSIST, true); return V.paused;
+      case 'cancel':
+        if (crossing) { this.command(UserCommand.END_CROSSING); return V.crossingEnded; }
+        if (this.assistOn) this.command(UserCommand.STOP_ASSIST, true);
+        return V.cancelled;
+      case 'finishCrossing':
+        if (!crossing) return V.noCrossing;
         this.command(UserCommand.END_CROSSING);
-        return this.journey.running ? describeRoute() : this.journey.state.value.phase === 'paused' ? P.crossingPaused : V.crossingEnded;
-      }
-      case 'confirm':
-        if (this.journey.state.value.crossing || this.engine.mode===AssistMode.CROSSING) return V.changeBlocked;
-        if (this.journey.hasJourney && !this.planner.state.value.selected) return V.completionCommands;
-        this.voiceNavigate = true; return this.voicePlace(current);
-    }
-  }
-  private async delayedVoiceWork(work: () => Promise<unknown>, current: () => boolean, label: string): Promise<void> {
-    let progress: Promise<boolean> | undefined;
-    const timer = setTimeout(() => { if (current()) progress = this.voiceProgress(label, current); }, 2000);
-    try { await work(); } finally { clearTimeout(timer); if (progress) await progress; }
-  }
-  private async voiceProgress(text: string, current: () => boolean): Promise<boolean> {
-    if (!current()) return false;
-    this.ui.update(s => ({ ...s, caption: text }));
-    return await this.feedback.sayAndWait(text) && current();
-  }
-  private async voicePlace(current: () => boolean): Promise<string | null> {
-    const selected = this.planner.state.value.selected;
-    if (!selected) return this.planner.state.value.error ? spokenError(this.planner.state.value.error) : V.destination;
-    if (!this.voiceNavigate) return V.place(selected.name, selected.address);
-    await this.delayedVoiceWork(() => this.planner.confirm(selected.id), current, V.planning); if (!current()) return null;
-    const s = this.planner.state.value;
-    if (s.error || !s.route) return s.error ? spokenError(s.error) : V.routeUnavailable;
-    if (!current() || !await this.startPlannedJourney() || !current()) return this.journey.state.value.error ? spokenError(this.journey.state.value.error) : V.startFailed;
-    const live = this.journey.state.value;
-    return V.routeStarted(selected.name, live.route?.steps[live.stepIndex].instruction ?? '');
-  }
-  openMap(): void { this.presentation.update(s => ({ ...s, mapOpen: true })); }
-  closeMap(): void { this.planner.cancel(); this.presentation.set({ mapOpen: false, expanded: false }); }
-  changeDestination(): boolean {
-    if (this.journey.state.value.crossing || this.engine.mode === AssistMode.CROSSING) { this.sayNavigation(P.confirmFootpath); return false; }
-    if (this.journey.hasJourney) this.pauseJourney();
-    this.planner.replace(); this.presentation.set({ mapOpen: true, expanded: true }); return true;
-  }
-  cancelPlanning(): void { this.planner.reset(); this.presentation.update(s => ({ ...s, expanded: false })); }
-  async startPlannedJourney(): Promise<boolean> {
-    const started = await this.planner.start(this.planner.state.value.revision);
-    if (started) this.presentation.set({ mapOpen: false, expanded: false });
-    return started;
-  }
-  sayNavigation(text: string): void { this.deliver([Cues.speakText(text, Priority.NORMAL)]); }
-  async savePlace(place: PlaceCandidate, alias?: string): Promise<string> {
-    try {
-      const draft = this.planner.state.value;
-      const queryLabel = draft.candidates.some(p => p.id === place.id) ? draft.query || undefined : undefined;
-      const result = await this.savedPlaces.save(place.id, queryLabel, alias);
-      this.savedDetails.update(s => ({ ...s, [place.id]: place }));
-      return alias ? V.savedAs(alias) : result === 'saved' ? V.saved : V.alreadySaved;
-    } catch (e) { return spokenError(e, 'save'); }
-  }
-  async removeSaved(placeId: string): Promise<string> {
-    try { await this.savedPlaces.remove(placeId); return V.removed; }
-    catch (e) { return spokenError(e, 'remove'); }
-  }
-  async undoSaved(): Promise<string> {
-    try { await this.savedPlaces.undo(); return V.restored; }
-    catch (e) { return spokenError(e, 'restore'); }
-  }
-  /** Resolve only visible shortcuts; cancellation cannot publish a late result. */
-  async loadSavedDetails(ids: string[], signal: AbortSignal): Promise<void> {
-    for (const id of ids.slice(0, 3)) {
-      if (signal.aborted) return;
-      if (this.savedDetails.value[id]) continue;
-      try {
-        const place = await placeDetails(id, services.mapsRestApiKey, signal);
-        if (!signal.aborted) this.savedDetails.update(s => ({ ...s, [id]: place }));
-      } catch { /* The local bookmark remains usable; selection offers an explicit retry. */ }
+        return V.crossingEnded;
     }
   }
 
@@ -383,7 +207,6 @@ export class CrossWiseController {
   private loadedModelKey: string | null = null;
   private loadGeneration = 0;
   private sensorTimer: ReturnType<typeof setInterval> | null = null;
-  private capturer: FrameCapturer | null = null;
   private probeRunning = false;
   private speechProbeRunning = false;
   private keptAwake = false;
@@ -393,20 +216,11 @@ export class CrossWiseController {
   start(): void {
     if (this.started) return;
     this.started = true;
-    this.locations.state.subscribe(() => {
-      const s = this.locations.state.value;
-      if (!this.journey.running) this.journey.location.set(s.status === 'ready' ? s.fix : null);
-    });
-    this.journey.state.subscribe(() => {
-      this.applyEngineSettings();
-      this.updateKeepAwake(this.engine.mode !== AssistMode.IDLE || this.journey.running);
-    });
     this.settingsRepository.subscribe((s) => this.onSettings(s));
     this.settingsRepository
       .load()
       .catch(() => undefined)
       .finally(() => this.settingsLoaded.set(true));
-    void this.savedPlaces.load();
     this.refreshModelLibrary();
     // Sensor-driven guidance (veer, tilt, auto crossing) runs at 10 Hz regardless of camera speed.
     this.sensorTimer = setInterval(() => {
@@ -443,7 +257,7 @@ export class CrossWiseController {
 
   private applyEngineSettings(): void {
     const settings = engineSettingsOf(this.settings.value);
-    if (this.journey.hasJourney || this.settings.value.interfaceMode !== InterfaceMode.DEVELOPER) settings.autoDetectCrossing = false;
+    if (this.settings.value.interfaceMode !== InterfaceMode.DEVELOPER) settings.autoDetectCrossing = false;
     settings.pedestrianSignals = this.model.value.kind==='ready' && this.model.value.info.hasPedestrianSignalClasses;
     this.engine.settings = settings;
   }
@@ -528,16 +342,7 @@ export class CrossWiseController {
 
   private onForeground(): void {
     this.sensors.start();
-    // First launch waits for the camera permission screen before requesting location.
-    // Existing journeys can recover immediately when returning from the background.
-    if (this.homeVisible || this.journey.hasJourney) void this.locations.start().then(async () => {
-      if (AppState.currentState !== 'active') return;
-      if (this.resumeAfterBackground && this.journey.state.value.phase === 'paused' && !this.journey.state.value.crossing) {
-        this.resumeAfterBackground = false;
-        await this.startJourney();
-      }
-      this.startVoice();
-    });
+    this.startVoice();
     // A conf file edited in the Files app while we were away takes effect now.
     if (this.settingsLoaded.value) void this.settingsRepository.load();
     this.refreshModelLibrary();
@@ -546,14 +351,7 @@ export class CrossWiseController {
   private onBackground(): void {
     // The camera stops in the background, so any signal state would go stale: say so and stop.
     ++this.voiceAudioGeneration; this.voice.stop();
-    ++this.descriptionGeneration;
-    this.resumeAfterBackground = this.journey.running && !this.journey.state.value.crossing;
-    this.planner.cancel();
-    const hadJourney = this.journey.hasJourney;
-    this.journey.pause();
-    this.locations.stop(); this.journey.location.set(null);
     if (this.engine.mode !== AssistMode.IDLE) this.command(UserCommand.STOP_ASSIST, true);
-    if (hadJourney) this.deliver([Cues.speakText(P.journeyPaused, Priority.NORMAL)]);
     this.sensors.stop();
   }
 
@@ -635,7 +433,7 @@ export class CrossWiseController {
 
   /** Explicit USB fixture test; file speech never reaches handleVoice or navigation. */
   private async checkSpeechProbe(): Promise<void> {
-    if (this.speechProbeRunning || this.journey.hasJourney || this.assistOn || AppState.currentState !== 'active') return;
+    if (this.speechProbeRunning || this.assistOn || AppState.currentState !== 'active') return;
     const request = new File(Paths.document, 'voice-probe.request.json');
     if (!request.exists) return;
     this.speechProbeRunning = true;
@@ -646,7 +444,7 @@ export class CrossWiseController {
       ++this.voiceAudioGeneration; this.voice.stop(); this.feedback.silenceRoutine();
       await this.voice.whenStopped(); await this.feedback.whenIdle();
       for (let i = 1; i <= count; i++) {
-        if (AppState.currentState !== 'active' || this.journey.hasJourney) throw new Error('Test interrupted.');
+        if (AppState.currentState !== 'active') throw new Error('Test interrupted.');
         const file = new File(Paths.document, `voice-probe-${i}.wav`);
         if (!file.exists || file.size > 2_000_000) throw new Error('Missing or oversized voice fixture.');
         const input = new NativeSpeechInput(file.uri);
@@ -750,26 +548,10 @@ export class CrossWiseController {
     }
   }
 
-  registerCapturer(capturer: FrameCapturer | null): void {
-    this.capturer = capturer;
-  }
-
   // ---- User actions -----------------------------------------------------------------------------
 
-  command(command: UserCommand, preserveJourney = false): void {
-    // Explicit Assist controls can also enter/leave the crossing handoff while a journey is running.
-    const wasCrossing = this.engine.mode === AssistMode.CROSSING;
-    if (command === UserCommand.STOP_ASSIST && !preserveJourney) this.journey.end();
-    if (this.journey.hasJourney && (command === UserCommand.START_CROSSING ||
-        (command === UserCommand.TOGGLE_CROSSING && !wasCrossing))) this.journey.enterCrossing();
+  command(command: UserCommand, quiet = false): void {
     const output = this.engine.command(command, nowMs());
-    if (this.journey.state.value.phase === 'paused' && this.journey.state.value.crossing &&
-        (command === UserCommand.END_CROSSING || (command === UserCommand.TOGGLE_CROSSING && wasCrossing))) {
-      this.journey.leaveCrossing();
-      this.stopJourneyEngine();
-      this.speakNow(P.crossingPaused);
-      return;
-    }
     const extra: Cue[] = [];
     if (command === UserCommand.START_ASSIST) {
       this.assistStartedAt=nowMs();this.trafficFailure=null;
@@ -780,27 +562,25 @@ export class CrossWiseController {
     } else if (command === UserCommand.STOP_ASSIST) {
       this.logger.stop();
     }
-    const confirmations = preserveJourney || this.voice.processing
+    const confirmations = quiet || this.voice.processing
       ? output.cues.filter(c => c.kind !== 'speak' || ![Phrase.ASSIST_STARTED, Phrase.ASSIST_STOPPED, Phrase.CROSSING_ENDED].includes(c.phrase)) : output.cues;
     this.deliverEngine([...confirmations, ...extra]);
-    if (this.journey.state.value.crossing && (command === UserCommand.END_CROSSING ||
-        (command === UserCommand.TOGGLE_CROSSING && wasCrossing))) this.journey.leaveCrossing();
     this.publish(output.snapshot, { force: true });
-    this.updateKeepAwake(output.snapshot.mode !== AssistMode.IDLE || this.journey.running);
+    this.updateKeepAwake(output.snapshot.mode !== AssistMode.IDLE);
   }
 
   private previewGeneration=0;
   async previewSpeech(cues: Cue[]): Promise<boolean> {
-    if (this.assistOn || this.journey.hasJourney || !this.settings.value.speech || AppState.currentState!=='active') return false;
+    if (this.assistOn || !this.settings.value.speech || AppState.currentState!=='active') return false;
     const generation=this.previewGeneration;
     this.voice.stop();
     this.feedback.dispatch(cues);
     const complete=await this.feedback.whenIdle();
-    return complete && generation===this.previewGeneration && !this.assistOn && !this.journey.hasJourney;
+    return complete && generation===this.previewGeneration && !this.assistOn ;
   }
   stopSpeechPreview(): void {
     ++this.previewGeneration;
-    if(!this.assistOn && !this.journey.hasJourney)this.feedback.silence();
+    if(!this.assistOn )this.feedback.silence();
     else this.feedback.silenceRoutine();
   }
 
@@ -823,20 +603,16 @@ export class CrossWiseController {
   get hasRecentFrame(): boolean { return this.lastFrameMs > 0 && nowMs() - this.lastFrameMs <= 5_000; }
 
   /** Explicit expected state protects a changed button label from rapid duplicate taps. */
-  crossingAction(expected: 'help' | 'start' | 'finish'): void {
-    const s = this.journey.state.value;
+  crossingAction(expected: 'start' | 'finish'): void {
     const mode = this.engine.mode;
-    const actual = mode === AssistMode.CROSSING || (s.phase === 'paused' && s.crossing) ? 'finish'
-      : this.journey.running && !s.crossing ? 'help' : 'start';
+    const actual = mode === AssistMode.CROSSING ? 'finish' : 'start';
     if (expected !== actual) return;
     if (expected === 'finish') this.command(UserCommand.END_CROSSING);
-    else if (expected === 'help') this.crossingForJourney();
-    else if (mode !== AssistMode.IDLE && s.phase !== 'paused') this.command(UserCommand.START_CROSSING);
+    else if (mode !== AssistMode.IDLE) this.command(UserCommand.START_CROSSING);
   }
 
   repeatGuidance(): void {
-    if (this.journey.running && !this.journey.state.value.crossing) this.journey.repeat();
-    else if (this.model.value.kind !== 'ready' || this.cameraStatus.value !== 'running' || !this.hasRecentFrame) {
+    if (this.model.value.kind !== 'ready' || this.cameraStatus.value !== 'running' || !this.hasRecentFrame) {
       this.speakNow(this.model.value.kind!=='ready'?P.detectionUnavailable:perceptionMessage(this.cameraStatus.value,this.hasRecentFrame,this.pipeline.value,nowMs())??P.detectionUnavailable);
     } else this.command(UserCommand.REPEAT_STATUS);
   }
@@ -849,115 +625,6 @@ export class CrossWiseController {
     else deactivateKeepAwake('assist').catch(() => undefined);
   }
 
-  // ---- Describe surroundings (Gemini) -------------------------------------------------------------
-
-  /**
-   * The three-view scan from AN-S3: the traveler is asked to point left, ahead and right, one frame is taken at
-   * each, and Gemini answers in a sentence or two. Spoken, because the person who needs it is not reading.
-   */
-  private descriptionGeneration=0;
-  describeSurroundings(): void {
-    if (this.describing.value || this.engine.mode===AssistMode.CROSSING || this.journey.state.value.crossing) return;
-    const descriptionGeneration=++this.descriptionGeneration;
-    const key = services.geminiApiKey;
-    if (key.trim().length === 0) {
-      this.notice.set(S.geminiNoKey);
-      this.speakNow(S.geminiNoKey);
-      return;
-    }
-    this.describing.set(true);
-    void (async () => {
-      const views: CapturedView[] = [];
-      try {
-        for (const [label, phrase] of SCAN_STEPS) {
-          if(descriptionGeneration!==this.descriptionGeneration || this.engine.mode===AssistMode.CROSSING || this.journey.state.value.crossing)return;
-          this.speakNow(phrase);
-          await sleep(2_200);
-          const jpeg = await this.captureFrame();
-          if (jpeg) views.push({ direction: label, jpegBase64: jpeg });
-        }
-        let text: string;
-        try {
-          text = await describeSurroundings(views, key);
-        } catch (e) {
-          console.warn('describeSurroundings failed', e);
-          text = S.geminiFailed;
-        }
-        if(descriptionGeneration!==this.descriptionGeneration || this.engine.mode===AssistMode.CROSSING || this.journey.state.value.crossing)return;
-        this.notice.set(text);
-        this.speakNow(text);
-      } finally {
-        this.describing.set(false);
-      }
-    })();
-  }
-
-  private async captureFrame(): Promise<string | null> {
-    try {
-      return (await this.capturer?.()) ?? null;
-    } catch (e) {
-      console.warn('Capture failed', e);
-      return null;
-    }
-  }
-
-  // ---- Walking navigation -----------------------------------------------------------------------
-
-  async startJourney(plan?: { destination: PlaceCandidate; route: WalkingRoute }): Promise<boolean> {
-    const crossingNow = () => this.engine.mode === AssistMode.CROSSING;
-    if (crossingNow()) {
-      this.notice.set(P.confirmFootpath);
-      this.speakNow(P.confirmFootpath);
-      return false;
-    }
-    // Silence old signal-search speech before the route takes over.
-    this.feedback.silenceRoutine();
-    if (await this.journey.start(plan)) {
-      this.applyEngineSettings();
-      if (this.engine.mode === AssistMode.CROSSING) this.journey.enterCrossing();
-      if (this.engine.mode === AssistMode.IDLE) this.command(UserCommand.START_ASSIST, true);
-      return true;
-    }
-    return false;
-  }
-
-  crossingForJourney(): void {
-    if (!this.journey.running) return;
-    this.journey.enterCrossing();
-    if (this.engine.mode === AssistMode.IDLE) this.command(UserCommand.START_ASSIST, true);
-    this.deliver([Cues.speakText(P.crossingHelp, Priority.NORMAL)]);
-  }
-
-  pauseJourney(): void {
-    this.resumeAfterBackground = false;
-    const active = this.journey.hasJourney;
-    this.journey.pause();
-    const location = this.locations.state.value;
-    if (location.status === 'ready') this.journey.location.set(location.fix);
-    // Keep micro guidance available when the traveler pauses only the route in the foreground.
-    if (!this.journey.state.value.crossing && this.engine.mode !== AssistMode.IDLE) this.command(UserCommand.STOP_ASSIST, true);
-    if (active && !this.voice.processing) this.speakNow(P.journeyPaused);
-  }
-
-  finishJourney(step: number): void {
-    this.journey.arrive(step);
-    if (this.journey.state.value.phase === 'arrived') this.stopJourneyEngine();
-  }
-
-  stopNavigation(): void {
-    this.resumeAfterBackground = false;
-    this.journey.end();
-    this.stopJourneyEngine();
-    if (!this.voice.processing) this.speakNow(P.journeyEnded);
-  }
-
-  private stopJourneyEngine(): void {
-    const output = this.engine.command(UserCommand.STOP_ASSIST, nowMs());
-    this.logger.stop();
-    this.publish(output.snapshot, { force: true });
-    this.updateKeepAwake(false);
-  }
-
   private checkTrafficAvailability():void {
     if(!this.assistOn || !this.homeVisible || AppState.currentState!=='active' || nowMs()-this.assistStartedAt<3000)return;
     const failure=this.model.value.kind!=='ready'?P.detectionUnavailable:
@@ -965,7 +632,7 @@ export class CrossWiseController {
     if(failure===this.trafficFailure)return;
     const wasFailed=!!this.trafficFailure;this.trafficFailure=failure;
     if(failure){this.engine.invalidatePerception();this.feedback.silenceRoutine();this.deliver([Cues.speakText(failure,Priority.HIGH)]);}
-    else if(wasFailed)this.sayNavigation(V.trafficRestored);
+    else if(wasFailed)this.speakNow(V.trafficRestored);
   }
 
   private speakingScanToken:number|null=null;
@@ -990,22 +657,17 @@ export class CrossWiseController {
   private deliverEngine(cues: Cue[]): void {
     if(this.speakingScanToken!==null && this.engine.scanInstruction?.token!==this.speakingScanToken)this.feedback.silenceRoutine();
     void this.deliverScan().catch(() => { this.queuedScanToken=-1; });
-    const s = this.journey.state.value;
-    const relevant = this.journey.hasJourney && !s.crossing ? cues.filter(walkingCue) : cues;
-    // Search tutorials are available in Help/Repeat; do not repeat them into street noise.
-    this.deliver(relevant);
+    this.deliver(cues);
   }
 
   // ---- Internals --------------------------------------------------------------------------------
 
-  private speakNow(text: string): void {
+  speakNow(text: string): void {
     this.deliver([Cues.speakText(text, Priority.NORMAL)]);
   }
 
   private deliver(cues: Cue[]): void {
     if (cues.length === 0) return;
-    const trafficWarning=cues.some(c=>c.kind==='speak' && (c.phrase.startsWith('VEHICLE_') || c.phrase===Phrase.TRAFFIC_UNAVAILABLE));
-    if(trafficWarning)++this.descriptionGeneration;
     const urgent = cues.some(c => (c.kind === 'speak' && c.priority >= Priority.NORMAL && c.phrase !== Phrase.ASSIST_STARTED && c.phrase !== Phrase.ASSIST_STOPPED) ||
       (c.kind === 'speakText' && c.priority >= Priority.HIGH) ||
       (c.kind === 'tone' && c.tone !== 'SONAR' && c.tone !== 'CENTERED'));

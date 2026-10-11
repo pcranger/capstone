@@ -21,15 +21,13 @@ export function CrossWiseApp() {
   const permission = useCameraPermission();
   const [panel, setPanel] = useState<Panel>(null);
   const [dockHeight, setDockHeight] = useState(120);
-  const presentation = useStore(controller.presentation);
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
       if (panel) { setPanel(panel === 'settings' ? null : 'settings'); return true; }
-      if (presentation.mapOpen) { controller.closeMap(); return true; }
       return false;
     });
     return () => subscription.remove();
-  }, [panel, presentation.mapOpen]);
+  }, [panel]);
   const close = useCallback(() => setPanel(null), []);
   const requestedCamera = useRef(false);
   const [permissionsReady, setPermissionsReady] = useState(false);
@@ -38,7 +36,7 @@ export function CrossWiseApp() {
     requestedCamera.current = true;
     void (async () => {
       try { if (!permission.hasPermission && permission.canRequestPermission) await permission.requestPermission(); }
-      catch { /* The camera panel keeps its permission/retry control; route entry remains available. */ }
+      catch { /* The camera panel keeps its permission/retry control; the camera permission control remains available. */ }
       finally { setPermissionsReady(true); }
     })();
   }, [loaded, permission]);
@@ -49,7 +47,7 @@ export function CrossWiseApp() {
   useEffect(() => {
     if (!notice) return;
     // Spoken failures/confirmations use the feedback coordinator once. The visual copy stays 8 s (or until tapped) so a
-    // TalkBack user has time to reach it; it never resizes the journey view.
+    // TalkBack user has time to reach it; it never resizes the camera view.
     const timer = setTimeout(() => controller.clearNotice(), NOTICE_MS);
     return () => clearTimeout(timer);
   }, [notice]);
