@@ -84,3 +84,41 @@ export class VeerMonitor {
     return { deviationDeg: deviation, state: this.state, lockedHeadingDeg: locked };
   }
 }
+
+export type VeerCue = 'DRIFT_LEFT' | 'DRIFT_RIGHT';
+
+/** The phone must point more than this far off the anchor before a steering hint can start. */
+export const VEER_CUE_THRESHOLD_DEG = 15;
+/** ...and stay off for at least this long. */
+export const VEER_CUE_SUSTAIN_MS = 1_500;
+/** At most one hint in this window. */
+export const VEER_CUE_MIN_GAP_MS = 4_000;
+
+/**
+ * Steering hint for the PHONE's direction (not the body's): after the heading has been more than 15 degrees off
+ * the anchor for at least 1.5 s while walking, returns 'DRIFT_LEFT' or 'DRIFT_RIGHT', then stays quiet for 4 s.
+ * The caller decides whether to speak it; this function does not read settings (veerGuidance is off by default).
+ */
+export function createVeerCue(): ((anchorDeg: number, headingDeg: number, walking: boolean, now: number) => VeerCue | null) & { reset(): void } {
+  let offSince: number | null = null;
+  let offSide: VeerCue | null = null;
+  let lastCueAt: number | null = null;
+  const fn = (anchorDeg: number, headingDeg: number, walking: boolean, now: number): VeerCue | null => {
+    const deviation = Angles.wrap180(headingDeg - anchorDeg);
+    const side: VeerCue | null = !walking || Math.abs(deviation) <= VEER_CUE_THRESHOLD_DEG ? null : deviation < 0 ? 'DRIFT_LEFT' : 'DRIFT_RIGHT';
+    if (side === null || side !== offSide) {
+      offSide = side;
+      offSince = side === null ? null : now;
+      return null;
+    }
+    if (offSince === null || now - offSince < VEER_CUE_SUSTAIN_MS) return null;
+    if (lastCueAt !== null && now - lastCueAt < VEER_CUE_MIN_GAP_MS) return null;
+    lastCueAt = now;
+    return side;
+  };
+  fn.reset = () => { offSince = null; offSide = null; lastCueAt = null; };
+  return fn;
+}
+
+/** Shared instance for the crossing in progress; call veerCue.reset() when a crossing ends. */
+export const veerCue = createVeerCue();

@@ -1,5 +1,5 @@
 import { ToneKind } from './cue';
-import { TONE_GAIN } from './audioPolicy';
+import { TONE_GAIN, URGENT_TONE_GAIN } from './audioPolicy';
 
 interface Note {
   frequencyHz: number;
@@ -24,9 +24,9 @@ export function notesFor(kind: ToneKind): [Note[], number] {
     case ToneKind.STOP:
       return [[note(440, 260)], TONE_GAIN];
     case ToneKind.ALERT:
-      return [repeat(3, [note(2000, 70, 10), note(1500, 70, 10)]), TONE_GAIN];
+      return [repeat(3, [note(2000, 70, 10), note(1500, 70, 10)]), URGENT_TONE_GAIN];
     case ToneKind.CRITICAL:
-      return [repeat(5, [note(2500, 55, 5), note(1800, 55, 5)]), TONE_GAIN];
+      return [repeat(5, [note(2500, 55, 5), note(1800, 55, 5)]), URGENT_TONE_GAIN];
     case ToneKind.VEER:
       return [[note(660, 120)], TONE_GAIN];
     case ToneKind.LOST:

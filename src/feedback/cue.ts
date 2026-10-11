@@ -78,6 +78,8 @@ export enum HapticPattern {
   VEER_RIGHT = 'VEER_RIGHT',
   ALERT = 'ALERT',
   CRITICAL = 'CRITICAL',
+  /** Double tick for "microphone ready"; unlike CENTERED_TICK (one tick). Wired in the controller later. */
+  MIC_READY = 'MIC_READY',
 }
 
 export type Cue =

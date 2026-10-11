@@ -64,7 +64,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   speechRate: 0.85,
   verbosity: Verbosity.NORMAL,
   aimSonar: true,
-  veerGuidance: true,
+  veerGuidance: false,
   vehicleAlerts: true,
   autoDetectCrossing: true,
   useGpu: true,
@@ -101,6 +101,7 @@ export function feedbackConfigOf(s: AppSettings): FeedbackConfig {
 }
 
 const STORE_KEY = 'crosswise_settings';
+const STEER_RESET_KEY = 'crosswise_steer_hints_reset_v1';
 export const CONF_FILE_NAME = 'crosswise.conf.json';
 
 /** The keys the conf file carries. The safety notice is deliberately not one of them. */
@@ -206,6 +207,14 @@ export class SettingsRepository {
       console.warn('Could not read settings');
     }
     this.current = this.file.mergeInto(stored);
+    // Steering hints used to default to on and every save wrote that default back, so installed phones carry
+    // veerGuidance:true although nobody could choose it. Reset it once; later choices are kept.
+    let steerReset = false;
+    try { steerReset = (await AsyncStorage.getItem(STEER_RESET_KEY)) != null; } catch { /* treat as not yet reset */ }
+    if (!steerReset) {
+      if (this.current.veerGuidance) this.current = { ...this.current, veerGuidance: false };
+      try { await AsyncStorage.setItem(STEER_RESET_KEY, '1'); } catch { console.warn('Could not record the steering reset'); }
+    }
     // Rewrite both legacy stores now, not only after the user next changes a preference.
     this.file.write(this.current);
     try { await AsyncStorage.setItem(STORE_KEY, JSON.stringify(this.current)); }

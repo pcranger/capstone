@@ -13,7 +13,7 @@ import { controller } from '../src/state/controller';
 const { create, act } = require('react-test-renderer');
 const fs = require('fs');
 
-let mockHeadphones = true;
+let mockHeadphones = false;
 let mockBattery = 100;
 jest.mock('../src/camera/CameraSurface', () => ({ CameraSurface: () => null }));
 jest.mock('react-native-safe-area-context', () => ({ ...jest.requireActual('react-native-safe-area-context'), useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
@@ -58,7 +58,7 @@ const timingCalls = (spy: jest.SpyInstance, duration: number) => spy.mock.calls.
 
 beforeEach(() => {
   jest.clearAllMocks();
-  mockHeadphones = true; mockBattery = 100;
+  mockHeadphones = false; mockBattery = 100;
   setReduce(false);
   controller.settings.set({ ...DEFAULT_SETTINGS, acceptedSafetyNotice: true });
   controller.ui.set({ ...controller.ui.value, snapshot: EMPTY_SNAPSHOT, frameBrightness: 0.5 });
@@ -126,8 +126,8 @@ describe('J16 slim warnings line', () => {
     await mainScreen(); await act(async () => {});
     expect(byLabel(S.warnNoHeadphones)).toHaveLength(0);
   });
-  test('no headphones and a low battery become one polite line that speaks both', async () => {
-    mockHeadphones = false; mockBattery = 15;
+  test('connected headphones and a low battery become one polite line that speaks both', async () => {
+    mockHeadphones = true; mockBattery = 15;
     await mainScreen(); await act(async () => {}); await act(async () => {});
     const line = byLabel(`${S.warnNoHeadphones} ${S.warnBattery(15)}`).find((n: any) => typeof n.type === 'string');
     expect(line).toBeDefined();

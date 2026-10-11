@@ -1,10 +1,10 @@
-import { IOS_AUDIO_SESSION, TONE_GAIN } from '../src/feedback/audioPolicy';
+import { IOS_AUDIO_SESSION, TONE_GAIN, URGENT_TONE_GAIN } from '../src/feedback/audioPolicy';
 import { notesFor, renderTone } from '../src/feedback/toneSynth';
 import { ToneKind } from '../src/feedback/cue';
 
-test('urgent sounds use the same level as ordinary sounds and panning preserves power', () => {
+test('routine sounds keep TONE_GAIN, urgent vehicle tones use URGENT_TONE_GAIN, and panning preserves power', () => {
   for (const kind of Object.values(ToneKind)) {
-    expect(notesFor(kind)[1]).toBe(TONE_GAIN);
+    expect(notesFor(kind)[1]).toBe(kind === ToneKind.ALERT || kind === ToneKind.CRITICAL ? URGENT_TONE_GAIN : TONE_GAIN);
     const power = (pan: number) => {
       const [l, r] = renderTone(kind, pan, 48000);
       return l.reduce((sum, value, i) => sum + value * value + r[i] * r[i], 0);

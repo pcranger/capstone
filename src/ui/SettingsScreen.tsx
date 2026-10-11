@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { MaterialIcons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
-import { Pressable, ScrollView, View } from 'react-native';
+import { Pressable, ScrollView, View, type AccessibilityActionEvent } from 'react-native';
 import { Text } from './ScaledText';
 import { controller } from '../state/controller';
 import { useStore } from '../state/store';
@@ -10,6 +10,7 @@ import { BUNDLED_MODEL, displayNameOf, referenceOf } from '../perception/modelLo
 import { AppFont, InterfaceMode, type AppSettings } from '../settings/settings';
 import { InterfaceModeSelector } from './InterfaceModeSelector';
 import { S } from '../strings';
+import { STEER } from '../text/steerText';
 import { BackButton, BigButton, Hint, RadioRow, SectionCard, SliderRow, SwitchRow, TextButton } from './components';
 import { Colors, Dimens, familyOf, useType } from './theme';
 import { SpeechPreview } from './SpeechPreview';
@@ -21,6 +22,41 @@ const FONT_CHOICES: [AppFont, string][] = [
   [AppFont.CLASSIC, S.fontClassic],
   [AppFont.HYPERLEGIBLE, S.fontHyperlegible],
 ];
+
+/**
+ * A whole number with minus and plus buttons. For a screen reader the row is one adjustable control (swipe up or down
+ * to change it); the two buttons are for touch and stay out of the reading order, like the slider's thumb.
+ */
+export function StepperRow({ label, valueText, value, min, max, onChange, testID }: {
+  label: string; valueText: string; value: number; min: number; max: number; onChange: (v: number) => void; testID?: string;
+}) {
+  const type = useType();
+  const step = (delta: number) => onChange(Math.min(max, Math.max(min, value + delta)));
+  const onAction = (e: AccessibilityActionEvent) => {
+    if (e.nativeEvent.actionName === 'increment') step(1);
+    else if (e.nativeEvent.actionName === 'decrement') step(-1);
+  };
+  const button = (name: 'remove' | 'add', delta: number, disabled: boolean) => (
+    <Pressable testID={`${testID}-${delta > 0 ? 'up' : 'down'}`} disabled={disabled} onPress={() => step(delta)}
+      accessibilityRole="button" accessibilityLabel={delta > 0 ? STEER.stepperIncrease : STEER.stepperDecrease}
+      style={{ width: Dimens.touchTarget, height: Dimens.touchTarget, borderRadius: Dimens.touchTarget / 2, alignItems: 'center', justifyContent: 'center',
+        backgroundColor: Colors.SurfaceVariant, opacity: disabled ? 0.4 : 1 }}>
+      <MaterialIcons name={name} size={24} color={Colors.OnSurface} />
+    </Pressable>
+  );
+  return (
+    <View testID={testID} accessible accessibilityRole="adjustable" accessibilityLabel={label}
+      accessibilityValue={{ text: valueText }}
+      accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]} onAccessibilityAction={onAction}
+      style={{ minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: Dimens.gapMedium }}>
+      <Text style={[type.titleMedium, { flex: 1 }]}>{`${label}: ${valueText}`}</Text>
+      <View importantForAccessibility="no-hide-descendants" accessibilityElementsHidden style={{ flexDirection: 'row', gap: Dimens.gapSmall }}>
+        {button('remove', -1, value <= min)}
+        {button('add', 1, value >= max)}
+      </View>
+    </View>
+  );
+}
 
 export function SettingsScreen({ onBack, onOpenGuide, onOpenPractice }: {
   onBack: () => void;
@@ -82,7 +118,10 @@ export function SettingsScreen({ onBack, onOpenGuide, onOpenPractice }: {
       <SectionCard title={S.settingsSectionFeedback}>
         <SwitchRow label={S.settingsSpeech} value={settings.speech} onChange={set('speech')} />
         <SwitchRow label={S.settingsTones} value={settings.tones} onChange={set('tones')} />
+        <Hint>{S.warnNoHeadphones}</Hint>
         <SwitchRow label={S.settingsHaptics} value={settings.haptics} onChange={set('haptics')} />
+        <SwitchRow label={STEER.settingsSteerHints} value={settings.veerGuidance} onChange={set('veerGuidance')} />
+        <Hint>{STEER.settingsSteerHintsExplain}</Hint>
         <SliderRow
           label={S.settingsSpeechRate}
           value={settings.speechRate}
@@ -106,6 +145,13 @@ export function SettingsScreen({ onBack, onOpenGuide, onOpenPractice }: {
           />
         ))}
         </View>
+      </SectionCard>
+
+      <SectionCard title={STEER.settingsSectionCrossingCheck}>
+        <StepperRow label={STEER.settingsHoldName} valueText={STEER.settingsHoldValue(settings.holdSeconds)} value={settings.holdSeconds} min={3} max={8}
+          onChange={set('holdSeconds')} testID="stepper-hold" />
+        <StepperRow label={STEER.settingsRoadName} valueText={STEER.settingsRoadValue(settings.roadLanes)} value={settings.roadLanes} min={1} max={4}
+          onChange={set('roadLanes')} testID="stepper-lanes" />
       </SectionCard>
 
       <SectionCard title={S.settingsSectionDisplay}>
@@ -137,7 +183,7 @@ export function SettingsScreen({ onBack, onOpenGuide, onOpenPractice }: {
 
       <SectionCard title="Manual">
         <Pressable accessibilityRole="button" accessibilityLabel="Commands and voice setup" accessibilityState={{ expanded: manualOpen }}
-          onPress={() => setManualOpen(v => !v)} style={{ minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          onPress={() => setManualOpen(v => !v)} style={{ minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
           <Text style={type.titleMedium}>Commands and voice setup</Text>
           <MaterialIcons name={manualOpen ? 'expand-less' : 'expand-more'} size={24} color={Colors.OnSurface} />
         </Pressable>
@@ -145,7 +191,7 @@ export function SettingsScreen({ onBack, onOpenGuide, onOpenPractice }: {
       </SectionCard>
       <SectionCard title="Precautions and limitations">
         <Pressable accessibilityRole="button" accessibilityLabel="Read limitations" accessibilityState={{ expanded: precautionsOpen }}
-          onPress={() => setPrecautionsOpen(v => !v)} style={{ minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          onPress={() => setPrecautionsOpen(v => !v)} style={{ minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
           <Text style={type.titleMedium}>Read limitations</Text>
           <MaterialIcons name={precautionsOpen ? 'expand-less' : 'expand-more'} size={24} color={Colors.OnSurface} />
         </Pressable>
@@ -178,7 +224,7 @@ export function SettingsScreen({ onBack, onOpenGuide, onOpenPractice }: {
 
       {developer && <SectionCard title={S.settingsSectionGuidance}>
         <SwitchRow label={S.settingsAimSonar} value={settings.aimSonar} onChange={set('aimSonar')} />
-        <Hint>Phone heading is diagnostic only. Walking-direction advice is disabled.</Hint>
+        <Hint>{STEER.developerNote}</Hint>
         <SwitchRow label={S.settingsVehicleAlerts} value={settings.vehicleAlerts} onChange={set('vehicleAlerts')} />
         <SwitchRow label={S.settingsAutoCrossing} value={settings.autoDetectCrossing} onChange={set('autoDetectCrossing')} />
         <Hint>Automatic crossing detection is experimental: Developer camera assistance only, never in User mode.</Hint>

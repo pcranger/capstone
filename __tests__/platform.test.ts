@@ -21,8 +21,8 @@ describe('Tone synthesis', () => {
 
     const [left, right] = renderTone(ToneKind.ALERT, 1, 44_100);
     expect(peak(left)).toBeLessThan(1e-6); // fully right: nothing in the left ear
-    expect(peak(right)).toBeGreaterThan(0.44);
-    expect(peak(right)).toBeLessThanOrEqual(0.45 + 1e-6);
+    expect(peak(right)).toBeGreaterThan(0.79); // ALERT is an urgent tone: URGENT_TONE_GAIN 0.8 (was 0.45)
+    expect(peak(right)).toBeLessThanOrEqual(0.8 + 1e-6);
   });
 });
 

@@ -37,9 +37,15 @@ export const HAPTIC_PATTERNS: Record<HapticPattern, [number[], number[]]> = {
     [0, 220, 90, 60],
     [0, 220, 0, 220],
   ],
+  // Vehicle warning: one long 600 ms buzz, then two short ones. Nothing in the walk family starts with a long buzz.
   [HapticPattern.ALERT]: [
-    [0, 80, 50, 80, 50, 80, 50, 80],
-    [0, 255, 0, 255, 0, 255, 0, 255],
+    [0, 600, 100, 80, 100, 80],
+    [0, 255, 0, 255, 0, 255],
+  ],
+  // Microphone ready: two quick light ticks. CENTERED_TICK is a single tick.
+  [HapticPattern.MIC_READY]: [
+    [0, 30, 80, 30],
+    [0, 160, 0, 160],
   ],
   [HapticPattern.CRITICAL]: [
     [0, 400, 80, 400],
