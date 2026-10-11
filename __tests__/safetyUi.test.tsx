@@ -6,6 +6,7 @@ import { cameraAccess } from '../src/state/cameraAccess';
 import { controller } from '../src/state/controller';
 import { CrossWiseApp } from '../src/ui/CrossWiseApp';
 import { JourneyControls } from '../src/ui/JourneyScreen';
+import { S } from '../src/strings';
 import { T } from '../src/text/safetyText';
 
 const { create, act } = require('react-test-renderer');
@@ -102,7 +103,7 @@ describe('9 - camera permission follows the app', () => {
     mockPermission = { ...mockPermission, hasPermission: false };
     await render(<CrossWiseApp />);
     expect(cameraAccess.has).toBe(false);
-    expect(button('Open settings') ?? button('Allow camera')).toBeDefined();
+    expect(button(S.actionOpenSettings)).toBeDefined();
     mockPermission = { ...mockPermission, hasPermission: true };
     await act(async () => tree.update(<CrossWiseApp />));
     expect(cameraAccess.has).toBe(true);

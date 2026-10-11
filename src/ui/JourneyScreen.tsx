@@ -6,7 +6,7 @@ import { AssistMode, UserCommand } from '../crossing/crossingEngine';
 import { InterfaceMode } from '../settings/settings';
 import { controller } from '../state/controller';
 import { useStore } from '../state/store';
-import { pressStop } from '../state/safetyGuards';
+import { noteLabelChange, pressStop, pressUnlessLabelJustChanged } from '../state/safetyGuards';
 import { T } from '../text/safetyText';
 import { S } from '../strings';
 import { BigButton, IconPill, TextButton } from './components';
@@ -66,9 +66,6 @@ function MoreControlsSheet({ visible, onClose, children }: { visible: boolean; o
   </Modal>;
 }
 
-/** The big button ignores presses this long after its label changes, so a second tap meant for the old label cannot hit the new one. */
-const LABEL_LOCK_MS = 1_500;
-
 interface CameraPermission { hasPermission: boolean; canRequestPermission: boolean; requestPermission: () => unknown }
 interface Extra { text: string; press: () => void; color?: string; enabled?: boolean }
 
@@ -94,16 +91,15 @@ export function JourneyControls({ stacked, compact = false, permission }: { stac
         () => { void askForCamera(permission.canRequestPermission, permission.requestPermission); }]
     : [S.actionStartAssist, () => controller.command(UserCommand.START_ASSIST, true)];
   // The same place on screen means something else after each press: say what it does now, and hold off further presses briefly.
-  const labelChangedAt = useRef(0);
   const lastLabel = useRef(primaryLabel);
   useEffect(() => {
     if (lastLabel.current === primaryLabel) return;
     const lead = lastLabel.current === S.actionStartAssist && primaryLabel === S.actionStartCrossing ? T.cameraHelpOnLead : '';
     lastLabel.current = primaryLabel;
-    labelChangedAt.current = Date.now();
+    noteLabelChange();
     controller.speakNow(T.nextButton(primaryLabel, lead));
   }, [primaryLabel]);
-  const primary = button(primaryLabel, () => { if (Date.now() - labelChangedAt.current >= LABEL_LOCK_MS) primaryPress(); }, Colors.Crossing, true, true);
+  const primary = button(primaryLabel, () => pressUnlessLabelJustChanged(primaryPress), Colors.Crossing, true, true);
   const extras = [
     assistOn && { text: 'Repeat', press: () => controller.repeatGuidance() },
     assistOn && { text: S.actionStopAssist, press: pressStop, color: Colors.DontWalk },

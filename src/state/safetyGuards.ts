@@ -4,8 +4,14 @@ import { controller } from './controller';
 
 /** A second press within this long confirms the risky action. */
 export const CONFIRM_MS = 3_000;
+/** The big button ignores presses this long after its label changes, so a second tap meant for the old label cannot hit the new one. */
+export const LABEL_LOCK_MS = 1_500;
+let labelChangedAt = 0;
 let lastStop = 0;
 let lastBack = 0;
+
+export function noteLabelChange(): void { labelChangedAt = Date.now(); }
+export function pressUnlessLabelJustChanged(press: () => void): void { if (Date.now() - labelChangedAt >= LABEL_LOCK_MS) press(); }
 
 /**
  * The Stop button. In the middle of a crossing the first press only asks; a second press within 3 s confirms.
