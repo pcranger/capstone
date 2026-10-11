@@ -26,11 +26,14 @@ describe('CrossingEngine', () => {
   const geometry: CameraGeometry = { hfovDeg: 60, vfovDeg: 90 };
   let spoken: [number, Phrase][];
   let now: number;
+  /** Cross needs a fresh clear check result (D1); these tests are about the crossing itself, so give the engine one. */
+  const allowCross = () => { const c = (engine as any).check; c.stage = 'result'; c.summary = 'NONE_SEEN'; c.resultAt = now; };
   let heading: number;
   let walking: boolean;
 
   beforeEach(() => {
     engine = new CrossingEngine();
+    engine.settings = { ...engine.settings, veerGuidance: true }; // veer diagnostics under test; the default is off
     spoken = [];
     now = 0;
     heading = 0;
@@ -66,6 +69,7 @@ describe('CrossingEngine', () => {
     expect(phrases()).not.toContain(Phrase.WALK_ALREADY_ON);
 
     // The user starts walking toward the signal: crossing mode starts by itself.
+    allowCross(); // auto-detect needs a fresh clear check too (D1)
     walking = true;
     run(2_000, () => [det(ObjectCategory.PED_WALK)]);
     expect(engine.mode).toBe(AssistMode.CROSSING);
@@ -102,6 +106,7 @@ describe('CrossingEngine', () => {
     expect(engine.snapshot.signal.phase).toBe(SignalPhase.UNKNOWN);
     // Finishing leaves assistance on for the next crossing; repeated confirmation is harmless.
     expect(engine.command(UserCommand.END_CROSSING, now).cues).toEqual([]);
+    allowCross();
     collect(engine.command(UserCommand.START_CROSSING, now));
     expect(engine.mode).toBe(AssistMode.CROSSING);
     expect(engine.snapshot.crossingElapsedMs).toBe(0);
@@ -110,6 +115,7 @@ describe('CrossingEngine', () => {
   test.each([false, true])('crossing remains active past two minutes with walking=%s', (isWalking) => {
     engine.command(UserCommand.START_ASSIST, now);
     run(1_000, () => []);
+    allowCross();
     engine.command(UserCommand.START_CROSSING, now);
     walking = isWalking;
     run(125_000, () => []);
@@ -129,6 +135,7 @@ describe('CrossingEngine', () => {
 
   test('a sensor gap without heading does not complete a crossing, but the explicit shortcut does', () => {
     engine.command(UserCommand.START_ASSIST, 0);
+    allowCross();
     engine.command(UserCommand.START_CROSSING, 0);
     collect(engine.onSensors(180_000, null, false));
     expect(engine.mode).toBe(AssistMode.CROSSING);
@@ -141,6 +148,7 @@ describe('CrossingEngine', () => {
   test('stop assistance cancels crossing without claiming completion and later ticks stay idle', () => {
     engine.command(UserCommand.START_ASSIST, now);
     run(1_000, () => []);
+    allowCross();
     engine.command(UserCommand.START_CROSSING, now);
     collect(engine.command(UserCommand.STOP_ASSIST, now));
     expect(engine.mode).toBe(AssistMode.IDLE);

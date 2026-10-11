@@ -32,7 +32,7 @@ const c = controller as any;
 const fb = c.feedback;
 const cues = (): Cue[] => (fb.dispatch as jest.Mock).mock.calls.flatMap((call: [Cue[]]) => call[0]);
 const said = (text: string, priority?: Priority) => cues().some(q => q.kind === 'speakText' && q.text === text && (priority === undefined || q.priority === priority));
-const buzzed = () => cues().some(q => q.kind === 'haptic' && q.pattern === HapticPattern.CRITICAL);
+const buzzed = () => cues().some(q => q.kind === 'haptic' && q.pattern === HapticPattern.STOPPED);
 const sayAndWait = () => fb.sayAndWait as jest.Mock;
 
 beforeEach(() => {
@@ -81,12 +81,12 @@ describe('1 - camera help never stops silently', () => {
 
   test('the Stop button during a crossing asks first; a second press within 3 s confirms; a late second press asks again', () => {
     const command = jest.spyOn(controller, 'command').mockImplementation(() => undefined);
-    const speak = jest.spyOn(controller, 'speakNow').mockImplementation(() => undefined);
+    const speak = jest.spyOn(controller, 'speakHigh').mockImplementation(() => undefined);
     const dateNow = jest.spyOn(Date, 'now');
     c.ui.update((u: { snapshot: object }) => ({ ...u, snapshot: { ...u.snapshot, mode: AssistMode.CROSSING } }));
     dateNow.mockReturnValue(1_000_000);
     pressStop();
-    expect(speak).toHaveBeenCalledWith(T.stopConfirm);
+    expect(speak).toHaveBeenCalledWith(T.stopConfirm, true);
     expect(command).not.toHaveBeenCalled();
     dateNow.mockReturnValue(1_002_000);
     pressStop();
@@ -105,21 +105,23 @@ describe('1 - camera help never stops silently', () => {
   });
 
   test('Back at the home screen asks first; a second Back within 3 s closes the app', () => {
-    const speak = jest.spyOn(controller, 'speakNow').mockImplementation(() => undefined);
+    const speak = jest.spyOn(controller, 'speakHigh').mockImplementation(() => undefined);
     const dateNow = jest.spyOn(Date, 'now');
     dateNow.mockReturnValue(2_000_000);
     expect(pressBack()).toBe(true);
-    expect(speak).toHaveBeenCalledWith(T.backConfirm);
+    expect(speak).toHaveBeenCalledWith(T.backConfirm, true);
     dateNow.mockReturnValue(2_002_500);
     expect(pressBack()).toBe(false);
     dateNow.mockReturnValue(2_100_000);
     expect(pressBack()).toBe(true); // a fresh ask, not a close
   });
 
-  test('voice "pause" while on speaks the same safety words in its reply', async () => {
+  test('voice "pause" while on: command() speaks the safety words urgently; the reply is empty so they are said once', async () => {
     controller.command(UserCommand.START_ASSIST, true);
-    expect(await c.handleVoice('pause', () => true)).toBe(T.assistStopped);
+    (fb.dispatch as jest.Mock).mockClear();
+    expect(await c.handleVoice('pause', () => true)).toBeNull();
     expect(controller.assistOn).toBe(false);
+    expect(said(T.assistStopped, Priority.CRITICAL)).toBe(true);
   });
 });
 

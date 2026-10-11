@@ -823,8 +823,12 @@ export class CrossWiseController {
     const actual = mode === AssistMode.CROSSING ? 'finish' : 'start';
     if (expected !== actual) return;
     if (expected === 'finish') this.command(UserCommand.END_CROSSING);
-    // The engine gates Cross (fresh NONE_SEEN or stationary-only UNSURE) and speaks the refusal itself.
-    else if (mode !== AssistMode.IDLE) this.command(UserCommand.START_CROSSING);
+    else if (mode !== AssistMode.IDLE) {
+      // Cross works only on a fresh NONE_SEEN, or UNSURE with only parked cars. The engine checks again in startCrossing.
+      const now = nowMs();
+      if (this.engine.canCross(now)) this.command(UserCommand.START_CROSSING);
+      else this.deliver([Cues.speakText(this.engine.crossRefusal(now), Priority.HIGH)]);
+    }
   }
 
   repeatGuidance(): void {

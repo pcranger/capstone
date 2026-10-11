@@ -1,7 +1,7 @@
 import { AssistMode, CrossingEngine, UserCommand } from '../src/crossing/crossingEngine';
 import { Priority } from '../src/feedback/cue';
 import { ObjectCategory } from '../src/perception/detection';
-import { CHECK_RESULT_TEXT, CHECK_TEXT, checkEventText } from '../src/text/checkText';
+import { CHECK_RESULT_TEXT, CHECK_STOP, CHECK_TEXT, checkEventText } from '../src/text/checkText';
 import { det, frame } from './fixtures';
 
 const geometry = { hfovDeg: 60, vfovDeg: 90 };
@@ -66,6 +66,8 @@ class Rig {
     this.run(300, 0);
   }
 }
+/** Cross needs a fresh clear check result (D1); the countdown tests are about steps, so give the engine one. */
+const allowCross = (r: Rig) => { const c = (r.e as any).check; c.stage = 'result'; c.summary = 'NONE_SEEN'; c.resultAt = r.t; };
 const withNote = (t: string) => `${t} ${CHECK_TEXT.fallbackResult}`;
 afterEach(() => jest.restoreAllMocks());
 
@@ -136,7 +138,8 @@ describe('guided check in the engine', () => {
   test('a parked car seen during a hold gives UNSURE, and Cross is still allowed while fresh', () => {
     const r = new Rig();
     r.fullCheck(() => { r.car = 'STATIONARY'; }, () => { r.car = 'NONE'; });
-    expect(r.say()).toContain(withNote(CHECK_RESULT_TEXT.UNSURE));
+    // Parked cars have a known "not moving": their own wording, Cross allowed. (Unknown motion is the next test.)
+    expect(r.say()).toContain(withNote(CHECK_TEXT.stationaryResult));
     expect(r.e.snapshot.check).toMatchObject({ summary: 'UNSURE', canCross: true });
   });
 
@@ -171,8 +174,9 @@ describe('guided check in the engine', () => {
     r.run(7000);
     expect(r.prompts.filter(p => p.text === first.text).length).toBeGreaterThanOrEqual(2);
     r.run(25000);
-    expect(r.say()).toContain(CHECK_TEXT.stopped);
-    expect(r.e.snapshot.check).toMatchObject({ stage: 'stopped', text: CHECK_TEXT.stopped });
+    const why = CHECK_STOP.because(CHECK_STOP.reasons.turn);
+    expect(r.say()).toContain(why);
+    expect(r.e.snapshot.check).toMatchObject({ stage: 'stopped', text: why });
     expect(r.e.canCross(r.t)).toBe(false);
   });
 
@@ -199,11 +203,12 @@ describe('crossing countdown', () => {
     r.start();
     r.run(200);
     r.urgent = [];
+    allowCross(r);
     (r as any).collect(r.e.command(UserCommand.START_CROSSING, r.t).cues);
     expect(r.e.mode).toBe(AssistMode.CROSSING);
     expect(r.say()).toContain('Crossing. About 12 steps. Use your cane to find the far kerb.');
     r.walking = true;
-    r.run(8000);
+    r.run(10000); // 12 steps at 1.4 a second take 8.6 s
     const said = r.say();
     expect(said).toContain('Halfway. About 6 steps left.');
     expect(said.filter(t => t === '2 steps left')).toHaveLength(1);
@@ -219,6 +224,7 @@ describe('crossing countdown', () => {
     r.start();
     r.run(200);
     r.urgent = [];
+    allowCross(r);
     (r as any).collect(r.e.command(UserCommand.START_CROSSING, r.t).cues);
     expect(r.say()).toContain('Crossing. About 18 steps. Use your cane to find the far kerb.');
     r.run(10000);

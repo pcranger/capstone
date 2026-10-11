@@ -51,8 +51,8 @@ export class CheckSession {
   summary: CheckSummary | null = null;
   private resultText: string | null = null;
   private resultAt = 0;
-  /** False when a car of unknown motion was seen: Cross stays off (D1). */
-  private crossOk = false;
+  /** True when a car of unknown motion was seen: Cross stays off (D1). */
+  private unknownSeen = false;
   private stoppedText: string = CHECK_TEXT.stopped;
   private blocked: keyof typeof CHECK_STOP.reasons = 'turn';
   private holdMs = 5000;
@@ -95,7 +95,7 @@ export class CheckSession {
   }
 
   canCross(now: number): boolean {
-    return this.stage === 'result' && this.crossOk && (this.summary === 'NONE_SEEN' || this.summary === 'UNSURE') && now - this.resultAt < EXPIRE_MS;
+    return this.stage === 'result' && !this.unknownSeen && (this.summary === 'NONE_SEEN' || this.summary === 'UNSURE') && now - this.resultAt < EXPIRE_MS;
   }
 
   /** What to say when "Cross" is refused. */
@@ -143,7 +143,7 @@ export class CheckSession {
     const holdPhase = isHold(before) ? before : isHold(after) ? after : null;
     if (holdPhase !== null && f.vehicles.some(carNow)) {
       const right = holdPhase === 'RIGHT_HOLD';
-      this.finish(now, right ? 'MOVING_RIGHT' : 'MOVING_LEFT', right ? CHECK_TEXT.vehicleStopRight : CHECK_TEXT.vehicleStopLeft, false);
+      this.finish(now, right ? 'MOVING_RIGHT' : 'MOVING_LEFT', right ? CHECK_TEXT.vehicleStopRight : CHECK_TEXT.vehicleStopLeft);
       return { urgent: this.resultText ?? undefined };
     }
 
@@ -168,7 +168,7 @@ export class CheckSession {
       const summary = r?.summary ?? 'NOT_CHECKED';
       // The fallback note repeats after the result, so the user knows the left look was aimed at a guessed angle.
       const base = summary === 'UNSURE' && r && !r.unknownMotion ? CHECK_TEXT.stationaryResult : CHECK_RESULT_TEXT[summary];
-      this.finish(now, summary, r?.fallbackNote ? `${base} ${CHECK_TEXT.fallbackResult}` : base, !r?.unknownMotion);
+      this.finish(now, summary, r?.fallbackNote ? `${base} ${CHECK_TEXT.fallbackResult}` : base, !!r?.unknownMotion);
       step.urgent = this.resultText ?? undefined;
       return step;
     }
@@ -197,18 +197,18 @@ export class CheckSession {
     if (moving) {
       const right = moving.bearingDeg - (f.heading ?? moving.bearingDeg) >= 0;
       const text = right ? CHECK_RESULT_TEXT.MOVING_RIGHT : CHECK_RESULT_TEXT.MOVING_LEFT;
-      this.finish(now, right ? 'MOVING_RIGHT' : 'MOVING_LEFT', text, false);
+      this.finish(now, right ? 'MOVING_RIGHT' : 'MOVING_LEFT', text);
       return { urgent: text };
     }
     if (f.vehicles.some((v) => !v.supported)) {
-      this.finish(now, 'UNSURE', CHECK_RESULT_TEXT.UNSURE, false);
+      this.finish(now, 'UNSURE', CHECK_RESULT_TEXT.UNSURE, true);
       return { urgent: CHECK_RESULT_TEXT.UNSURE };
     }
     return EMPTY;
   }
 
-  private finish(now: number, summary: CheckSummary, text: string, crossOk: boolean): void {
-    this.crossOk = crossOk;
+  private finish(now: number, summary: CheckSummary, text: string, unknown = false): void {
+    this.unknownSeen = unknown;
     this.stage = 'result';
     this.summary = summary;
     this.resultText = text;
