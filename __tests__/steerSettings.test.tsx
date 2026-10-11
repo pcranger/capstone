@@ -90,6 +90,16 @@ describe('Steering hints switch', () => {
     const later = await new SettingsRepository().load();
     expect(later.veerGuidance).toBe(true);
   });
+  test('the reset is not marked done when the cleared settings could not be saved, so it retries next start', async () => {
+    const storage = require('@react-native-async-storage/async-storage');
+    const saved = JSON.stringify({ ...DEFAULT_SETTINGS, veerGuidance: true });
+    storage.getItem.mockImplementation(async (key: string) => (key === 'crosswise_settings' ? saved : null));
+    storage.setItem.mockImplementationOnce(() => Promise.reject(new Error('disk full')));
+    const first = await new SettingsRepository().load();
+    expect(first.veerGuidance).toBe(false);
+    expect(storage.setItem).not.toHaveBeenCalledWith('crosswise_steer_hints_reset_v1', '1');
+    storage.setItem.mockImplementation(() => Promise.resolve());
+  });
 });
 
 describe('Crossing check steppers', () => {
