@@ -20,7 +20,7 @@ jest.mock('../src/state/controller', () => {
   return {
     controller: {
       settings: new Store({ speech: true }), settingsLoaded: new Store(false), notice: new Store(null), presentation: new Store({ mapOpen: false, expanded: false }),
-      setHomeVisible: jest.fn(), clearNotice: jest.fn(), closeMap: jest.fn(),
+      cameraGranted: jest.fn(), setHomeVisible: jest.fn(), clearNotice: jest.fn(), closeMap: jest.fn(),
     },
   };
 });

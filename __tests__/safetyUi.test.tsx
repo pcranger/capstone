@@ -28,6 +28,7 @@ jest.mock('../src/state/controller', () => {
   const { DEFAULT_SETTINGS } = require('../src/settings/settings');
   const { EMPTY_SNAPSHOT } = require('../src/crossing/crossingEngine');
   return { controller: {
+    cameraGranted: jest.fn(),
     settings: new Store({ ...DEFAULT_SETTINGS, acceptedSafetyNotice: true }), settingsLoaded: new Store(true),
     ui: new Store({ snapshot: EMPTY_SNAPSHOT, fps: 30, inferenceMs: 20, frameBrightness: 0.5, frameAspect: 0.56, caption: null }),
     notice: new Store(null), model: new Store({ kind: 'ready', info: { format: 'END_TO_END', labels: ['car'], hasPedestrianSignalClasses: true, displayName: 'test', inputWidth: 640, backend: 'CPU' } }),

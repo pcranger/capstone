@@ -30,6 +30,7 @@ jest.mock('../src/state/controller', () => {
   const { DEFAULT_SETTINGS } = require('../src/settings/settings');
   const { EMPTY_SNAPSHOT } = require('../src/crossing/crossingEngine');
   const c = {
+    cameraGranted: jest.fn(),
     settings: new Store({ ...DEFAULT_SETTINGS, acceptedSafetyNotice: true }),
     settingsLoaded: new Store(true),
     planner: { state: new Store({ replacing: false }), cancel: jest.fn() },
