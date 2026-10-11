@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { type LayoutChangeEvent, StyleSheet, View } from 'react-native';
+import { Fragment, useMemo, useState } from 'react';
+import { type LayoutChangeEvent, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Text } from './ScaledText';
 import { type Image, Images, NitroImage } from 'react-native-nitro-image';
 import type { MaskImage } from '../state/controller';
@@ -15,6 +15,9 @@ function useLayout(): [{ width: number; height: number }, (e: LayoutChangeEvent)
   const [size, setSize] = useState({ width: 0, height: 0 });
   return [size, (e) => setSize({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })];
 }
+
+/** Height a one-line labelMedium tag needs above a box (16 line height + slack), before font scaling. */
+const LABEL_ROOM = 18;
 
 function colorOf(category: ObjectCategory): string {
   switch (category) {
@@ -39,29 +42,44 @@ export function DetectionOverlay({ snapshot, frameAspect, resizeMode = 'cover', 
   snapshot: EngineSnapshot; frameAspect: number; resizeMode?: 'cover' | 'contain'; visibility?:VehicleVisibility;
 }) {
   const type = useType();
+  const { fontScale } = useWindowDimensions();
   const [size, onLayout] = useLayout();
   const rect = size.width > 0 ? (resizeMode === 'contain' ? containRect : coverRect)(size.width, size.height, frameAspect) : null;
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none" onLayout={onLayout} accessibilityElementsHidden>
       {rect &&
-        snapshot.tracks.filter(t => visibleVehicle(t,visibility)).map((t) => (
-          <View
-            key={t.id}
-            style={{
-              position: 'absolute',
-              left: rect.x + t.box.left * rect.width,
-              top: rect.y + t.box.top * rect.height,
-              width: t.box.width * rect.width,
-              height: t.box.height * rect.height,
-              borderWidth: t.isPrimarySignal ? 4 : 2,
-              borderColor: t.motion === 'MOVING' ? '#FF5252' : t.motion === 'STATIONARY' ? '#69DB92' : '#FFD600',
-            }}
-          >
-            <Text style={[type.labelMedium, { backgroundColor: '#071318E8', color: colorOf(t.category), alignSelf: 'flex-start', paddingHorizontal: 3 }]}>
-              #{t.id} {t.motion ?? 'VEHICLE'} {t.direction === 'LEFT_TO_RIGHT' ? '→' : t.direction === 'RIGHT_TO_LEFT' ? '←' : ''}
-            </Text>
-          </View>
-        ))}
+        snapshot.tracks.filter(t => visibleVehicle(t,visibility)).map((t) => {
+          const left = rect.x + t.box.left * rect.width;
+          const top = rect.y + t.box.top * rect.height;
+          const height = t.box.height * rect.height;
+          // The label sits outside the box: inside, a small far vehicle's box is narrower than the text, which wraps
+          // and its dark background covers the vehicle. Above the box, or below it when the box touches the top edge.
+          const above = top >= LABEL_ROOM * fontScale;
+          return (
+            <Fragment key={t.id}>
+              <View
+                style={{
+                  position: 'absolute',
+                  left,
+                  top,
+                  width: t.box.width * rect.width,
+                  height,
+                  borderWidth: t.isPrimarySignal ? 4 : 2,
+                  borderColor: t.motion === 'MOVING' ? '#FF5252' : t.motion === 'STATIONARY' ? '#69DB92' : '#FFD600',
+                }}
+              />
+              <Text
+                numberOfLines={1}
+                style={[type.labelMedium, {
+                  position: 'absolute', left: Math.max(0, left), ...(above ? { bottom: size.height - top } : { top: top + height }),
+                  backgroundColor: '#071318E8', color: colorOf(t.category), paddingHorizontal: 3,
+                }]}
+              >
+                #{t.id} {t.motion ?? 'VEHICLE'} {t.direction === 'LEFT_TO_RIGHT' ? '→' : t.direction === 'RIGHT_TO_LEFT' ? '←' : ''}
+              </Text>
+            </Fragment>
+          );
+        })}
     </View>
   );
 }
