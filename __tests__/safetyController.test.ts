@@ -313,3 +313,36 @@ describe('dock Stop confirm window and stale questions', () => {
     expect(command).not.toHaveBeenCalled();
   });
 });
+
+describe('camera-help-not-working timer (20 s)', () => {
+  const NOT_WORKING = 'Camera help is not working. Close and reopen CrossWise.';
+  beforeEach(() => { jest.useFakeTimers(); c.ready.set(false); c.notWorking = false; c.model.set({ kind: 'loading' }); });
+  afterEach(() => { clearTimeout(c.notWorkingTimer); jest.useRealTimers(); });
+
+  test('speaks urgently after 20 s when the model never becomes ready', () => {
+    c.armNotWorking();
+    jest.advanceTimersByTime(19_999);
+    expect(said(NOT_WORKING)).toBe(false);
+    jest.advanceTimersByTime(1);
+    expect(said(NOT_WORKING, Priority.HIGH)).toBe(true);
+  });
+
+  test('stays silent when ready arrives first', () => {
+    c.armNotWorking();
+    jest.advanceTimersByTime(5_000);
+    c.ready.set(true);
+    jest.advanceTimersByTime(30_000);
+    expect(said(NOT_WORKING)).toBe(false);
+  });
+
+  test('camera permission granted after a silent timer starts the count again', () => {
+    cameraAccess.has = false;
+    c.armNotWorking();
+    jest.advanceTimersByTime(20_000);
+    expect(said(NOT_WORKING)).toBe(false);
+    cameraAccess.has = true;
+    controller.cameraGranted();
+    jest.advanceTimersByTime(20_000);
+    expect(said(NOT_WORKING)).toBe(true);
+  });
+});

@@ -43,6 +43,7 @@ export function CrossWiseApp() {
   // permission whenever the app returns to the foreground, so the dock and this stay current after a trip to system Settings.
   useEffect(() => {
     cameraAccess.has = permission.hasPermission;
+    if (permission.hasPermission) controller.cameraGranted();
     cameraAccess.ask = () => { void askForCamera(permission.canRequestPermission, permission.requestPermission); };
   }, [permission.hasPermission, permission.canRequestPermission, permission.requestPermission]);
   const requestedCamera = useRef(false);

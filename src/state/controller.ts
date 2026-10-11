@@ -413,6 +413,11 @@ export class CrossWiseController {
     });
   }
 
+  /** Camera permission arrived after the 20 s timer ran silent: start counting again, if still not ready. */
+  cameraGranted(): void {
+    if (!this.ready.value && !this.notWorking && this.model.value.kind === 'loading') this.armNotWorking();
+  }
+
   /** Why Start must not run now (spoken to the user), or null when it may. */
   private startRefusal(): string | null {
     if (!cameraAccess.has) return T.cameraOff;
