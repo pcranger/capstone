@@ -1,5 +1,5 @@
-import { type ReactElement, type ReactNode, useContext, useState } from 'react';
-import { Modal, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { type ReactElement, type ReactNode, useContext, useEffect, useRef, useState } from 'react';
+import { AccessibilityInfo, findNodeHandle, Modal, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import { Text } from './ScaledText';
 import { AssistMode, UserCommand } from '../crossing/crossingEngine';
@@ -7,6 +7,7 @@ import { InterfaceMode } from '../settings/settings';
 import { controller } from '../state/controller';
 import { useStore } from '../state/store';
 import { S } from '../strings';
+import { CHECK_BUTTON } from '../text/checkText';
 import { BigButton, IconPill, TextButton } from './components';
 import { askForCamera } from './askForCamera';
 import { MainScreen } from './MainScreen';
@@ -76,6 +77,16 @@ export function JourneyControls({ stacked, compact = false, permission }: { stac
   const { snapshot } = useStore(controller.ui);
   const assistOn = snapshot.mode !== AssistMode.IDLE;
   const crossing = snapshot.mode === AssistMode.CROSSING;
+  const type = useType();
+  const check = !crossing && assistOn ? snapshot.check : undefined;
+  const showResult = check?.stage === 'result' || check?.stage === 'expired';
+  const stopped = check?.stage === 'stopped';
+  // After a result, screen-reader focus goes to the result text, so the answer is read before the buttons.
+  const resultRef = useRef<View>(null);
+  useEffect(() => {
+    const handle = showResult || stopped ? findNodeHandle(resultRef.current) : null;
+    if (handle) AccessibilityInfo.setAccessibilityFocus(handle);
+  }, [showResult, stopped, check?.text]);
   const button = (text: string, onPress: () => void, color = Colors.SurfaceVariant, enabled = true, primary = false, fill = !stacked && !primary) =>
     <BigButton key={text} text={text} onPress={onPress} multiline color={color} enabled={enabled} primary={primary}
       style={fill ? { flex: 1 } : undefined} />;
@@ -99,7 +110,15 @@ export function JourneyControls({ stacked, compact = false, permission }: { stac
 
   return <View style={styles.footer}>
     {!compact && rows.map((row, i) => <View key={i} style={styles.controls}>{row}</View>)}
-    {primary}
+    {(showResult || stopped) && check?.text && <View ref={resultRef} accessible accessibilityLiveRegion="assertive" style={styles.result}>
+      <Text style={type.titleMedium} maxFontSizeMultiplier={1.3}>{check.text}</Text>
+    </View>}
+    {showResult ? <View style={styles.controls}>
+      {/* "Check again" comes first: it is always allowed. "Cross" only works on a fresh no-vehicle or unsure result. */}
+      {button(CHECK_BUTTON.again, () => controller.command(UserCommand.CHECK_AGAIN), Colors.SurfaceVariant, true, true, true)}
+      {button(CHECK_BUTTON.cross, () => controller.crossingAction('start'), Colors.Crossing, !!check?.canCross, true, true)}
+    </View> : stopped ? button(CHECK_BUTTON.start, () => controller.command(UserCommand.CHECK_AGAIN), Colors.Crossing, true, true)
+      : primary}
     {compact && extras.length > 0 && <TextButton size="large" label={S.actionMoreControls} onPress={() => setSheetOpen(true)} />}
     {compact && <MoreControlsSheet visible={sheetOpen && extras.length > 0} onClose={() => setSheetOpen(false)}>
       {extras.map(x => button(x.text, () => { setSheetOpen(false); x.press(); }, x.color, x.enabled, false, false))}
@@ -111,6 +130,7 @@ const styles = StyleSheet.create({
   header: { position: 'absolute', top: 0, left: 0, right: 0, minHeight: 56, paddingHorizontal: 12, backgroundColor: Colors.Glass },
   dock: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: Colors.Glass },
   footer: { backgroundColor: Colors.Glass, padding: 10, borderTopWidth: 1, borderTopColor: Colors.Hairline, gap: 6 },
+  result: { paddingVertical: 6 },
   controls: { flexDirection: 'row', alignItems: 'stretch', gap: 8 },
   modalRoot: { flex: 1, justifyContent: 'flex-end', backgroundColor: Colors.TopScrim[0] },
   moreSheet: { backgroundColor: Colors.Surface, borderTopLeftRadius: Dimens.radiusCard, borderTopRightRadius: Dimens.radiusCard, padding: Dimens.gutter, gap: Dimens.gapMedium },

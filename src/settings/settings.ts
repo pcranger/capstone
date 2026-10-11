@@ -93,6 +93,8 @@ export function engineSettingsOf(s: AppSettings): EngineSettings {
     vehicleAlerts: s.vehicleAlerts,
     autoDetectCrossing: s.autoDetectCrossing,
     verbosity: s.verbosity,
+    holdSeconds: s.holdSeconds,
+    roadLanes: s.roadLanes,
   };
 }
 
