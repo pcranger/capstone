@@ -18,7 +18,7 @@ import {
   type EngineSnapshot,
   UserCommand,
 } from '../crossing/crossingEngine';
-import { type Cue, Cues, Phrase, Priority } from '../feedback/cue';
+import { type Cue, Cues, Phrase, Priority, ToneKind } from '../feedback/cue';
 import { FeedbackEngine } from '../feedback/feedbackEngine';
 import { SessionLogger } from '../logging/sessionLogger';
 import type { Detection, FrameDetections, ObjectCategory, SignalColor } from '../perception/detection';
@@ -46,6 +46,11 @@ import {
 } from '../settings/settings';
 import { cueText, P, S } from '../strings';
 import { Store } from './store';
+import { T } from '../text/safetyText';
+import { cameraAccess } from './cameraAccess';
+
+/** While the camera cannot see, say so this often, so silence never passes for "no cars". */
+const CANT_SEE_REPEAT_MS = 10_000;
 
 export type ModelState =
   | { kind: 'loading' }
@@ -125,6 +130,12 @@ export class CrossWiseController {
    * the decoded boxes, so a developer can check the on-phone pipeline against a desktop run of the same model.
    */
   readonly debugCapture = new Store(false);
+  /** True once the first camera frame has been analysed. Start is refused before that. */
+  readonly ready = new Store(false);
+  /** Settles when the first-open safety note and "getting ready" have been spoken; the camera permission dialog waits for it. */
+  welcomeDone: Promise<void> = Promise.resolve();
+  private wasBackgrounded = false;
+  private lastCantSeeMs = 0;
 
   private readonly engine = new CrossingEngine();
   private readonly feedback = new FeedbackEngine();
@@ -187,7 +198,11 @@ export class CrossWiseController {
   private async handleVoice(text: string, current: () => boolean): Promise<string | null> {
     if (!current()) return null;
     const intent = voiceIntent(text);
-    if (!intent) return ++this.unknownCommands >= 2 ? V.unknownHelp : V.unknown;
+    if (!intent) {
+      // "Allow camera" is the way forward T.cameraOff promises when the camera permission is missing.
+      if (/\b(allow|grant|enable)\b.*\bcamera\b/i.test(text)) { cameraAccess.ask(); return T.askingCamera; }
+      return ++this.unknownCommands >= 2 ? V.unknownHelp : V.unknown;
+    }
     this.unknownCommands = 0;
     const crossing = this.engine.mode === AssistMode.CROSSING;
     switch (intent.kind) {
@@ -195,18 +210,22 @@ export class CrossWiseController {
       case 'help': return VOICE_QUICK_START;
       case 'start': case 'resume':
         if (this.assistOn) return V.running;
+        { const refusal = this.startRefusal(); if (refusal) return refusal; }
         this.command(UserCommand.START_ASSIST, true); return V.started;
       case 'retry':
-        if (!this.assistOn) { this.command(UserCommand.START_ASSIST, true); return V.started; }
+        if (!this.assistOn) {
+          const refusal = this.startRefusal(); if (refusal) return refusal;
+          this.command(UserCommand.START_ASSIST, true); return V.started;
+        }
         this.repeatGuidance(); return null;
       case 'repeat': this.repeatGuidance(); return null;
       case 'pause':
         // Never switch the traffic watch off in the middle of a crossing.
         if (crossing) return V.finishCrossingFirst;
-        this.command(UserCommand.STOP_ASSIST, true); return V.paused;
+        { const wasOn = this.assistOn; this.command(UserCommand.STOP_ASSIST, true); return wasOn ? T.assistStopped : V.paused; }
       case 'cancel':
         if (crossing) { this.command(UserCommand.END_CROSSING); return V.crossingEnded; }
-        if (this.assistOn) this.command(UserCommand.STOP_ASSIST, true);
+        if (this.assistOn) { this.command(UserCommand.STOP_ASSIST, true); return T.assistStopped; }
         return V.cancelled;
       case 'finishCrossing':
         if (!crossing) return V.noCrossing;
@@ -238,7 +257,7 @@ export class CrossWiseController {
     this.settingsRepository
       .load()
       .catch(() => undefined)
-      .finally(() => this.settingsLoaded.set(true));
+      .then(() => { this.settingsLoaded.set(true); return this.welcome().catch(() => undefined); });
     this.refreshModelLibrary();
     // Sensor-driven guidance (veer, tilt, auto crossing) runs at 10 Hz regardless of camera speed.
     this.sensorTimer = setInterval(() => {
@@ -254,6 +273,31 @@ export class CrossWiseController {
     }, 2_000);
     AppState.addEventListener('change', (s) => this.onAppState(s));
     if (AppState.currentState === 'active') this.onForeground();
+  }
+
+  /**
+   * First open only: a two-sentence safety note, then how to start. Then, every launch, a note that start-up takes a moment.
+   * The flag is saved only after the note was heard to the end (or shown, when speech is off).
+   */
+  private async welcome(): Promise<void> {
+    if (!this.settings.value.acceptedSafetyNotice) {
+      const text = `${T.welcomeSafety} ${T.welcomeStart}`;
+      this.ui.update(s => ({ ...s, caption: text }));
+      let heard = true;
+      if (this.settings.value.speech) heard = (await this.feedback.sayAndWait(T.welcomeSafety)) && (await this.feedback.sayAndWait(T.welcomeStart));
+      else this.notice.set(text);
+      if (heard) this.updateSettings(s => ({ ...s, acceptedSafetyNotice: true }));
+    }
+    if (!this.ready.value) await this.feedback.sayAndWait(T.gettingReady);
+  }
+
+  /** Why Start must not run now (spoken to the user), or null when it may. */
+  private startRefusal(): string | null {
+    if (!cameraAccess.has) return T.cameraOff;
+    const model = this.model.value.kind;
+    // A missing or failed model, or a camera that reported an error, already speak their own reason on Start.
+    if (!this.ready.value && model !== 'missing' && model !== 'failed' && this.cameraStatus.value !== 'unavailable') return T.notReady;
+    return null;
   }
 
   /** Put a model-load failure through the same audio queue as normal guidance. */
@@ -308,6 +352,7 @@ export class CrossWiseController {
 
   private async loadModelFor(s: AppSettings): Promise<void> {
     const generation = ++this.loadGeneration;
+    this.ready.set(false);
     this.engine.invalidatePerception();
     this.model.set({ kind: 'loading' });
     this.refreshModelLibrary();
@@ -377,6 +422,7 @@ export class CrossWiseController {
 
   private onForeground(): void {
     this.sensors.start();
+    if (this.wasBackgrounded) { this.wasBackgrounded = false; this.speakNow(T.backInApp); }
     this.announceDetectionError();
     this.startVoice();
     // A conf file edited in the Files app while we were away takes effect now.
@@ -385,7 +431,8 @@ export class CrossWiseController {
   }
 
   private onBackground(): void {
-    // The camera stops in the background, so any signal state would go stale: say so and stop.
+    // The camera stops in the background, so any signal state would go stale. command() says so, urgently, before it stops.
+    this.wasBackgrounded = true;
     ++this.voiceAudioGeneration; this.voice.stop();
     if (this.engine.mode !== AssistMode.IDLE) this.command(UserCommand.STOP_ASSIST, true);
     this.sensors.stop();
@@ -435,6 +482,7 @@ export class CrossWiseController {
 
     const output = this.engine.onFrame(frame, this.geometry);
     this.deliverEngine(output.cues);
+    if (!this.ready.value) { this.ready.set(true); this.deliver([Cues.tone(ToneKind.READY), Cues.speakText(T.ready, Priority.NORMAL)]); }
 
     const dt = timestampMs - this.lastFrameMs;
     this.lastFrameMs = timestampMs;
@@ -589,6 +637,11 @@ export class CrossWiseController {
   // ---- User actions -----------------------------------------------------------------------------
 
   command(command: UserCommand, quiet = false): void {
+    if (command === UserCommand.START_ASSIST && !this.assistOn) {
+      const refusal = this.startRefusal();
+      if (refusal) { if (!this.voice.processing) this.deliver([Cues.speakText(refusal, Priority.HIGH)]); return; }
+    }
+    const wasOn = this.assistOn;
     const output = this.engine.command(command, nowMs());
     const extra: Cue[] = [];
     if (command === UserCommand.START_ASSIST) {
@@ -600,9 +653,17 @@ export class CrossWiseController {
     } else if (command === UserCommand.STOP_ASSIST) {
       this.logger.stop();
     }
-    const confirmations = quiet || this.voice.processing
+    let confirmations = quiet || this.voice.processing
       ? output.cues.filter(c => c.kind !== 'speak' || ![Phrase.ASSIST_STARTED, Phrase.ASSIST_STOPPED, Phrase.CROSSING_ENDED].includes(c.phrase)) : output.cues;
-    this.deliverEngine([...confirmations, ...extra]);
+    const stopped: Cue[] = [];
+    if (wasOn && output.snapshot.mode === AssistMode.IDLE) {
+      // Camera help stopped, for whatever reason (button, voice, background): never silently. A long buzz, and urgent words
+      // (a voice command carries the words in its own reply, so only the buzz is added there).
+      confirmations = confirmations.filter(c => c.kind !== 'speak' || c.phrase !== Phrase.ASSIST_STOPPED);
+      stopped.push(Cues.haptic(HapticPattern.CRITICAL));
+      if (!this.voice.processing) stopped.unshift(Cues.speakText(T.assistStopped, Priority.CRITICAL));
+    }
+    this.deliverEngine([...stopped, ...confirmations, ...extra]);
     this.publish(output.snapshot, { force: true });
     this.updateKeepAwake(output.snapshot.mode !== AssistMode.IDLE);
   }
@@ -669,12 +730,16 @@ export class CrossWiseController {
   }
 
   private checkTrafficAvailability():void {
-    if(!this.assistOn || !this.homeVisible || AppState.currentState!=='active' || nowMs()-this.assistStartedAt<3000)return;
+    if(!this.assistOn || AppState.currentState!=='active' || nowMs()-this.assistStartedAt<3000)return;
     const failure=this.model.value.kind!=='ready'?P.detectionUnavailable:
       !this.hasRecentFrame || nowMs()-this.lastFrameMs>2000?V.trafficUnavailable:this.brightness<.12?V.cameraBlocked:null;
-    if(failure===this.trafficFailure)return;
+    if(failure===this.trafficFailure){
+      // Speech once per change is not enough: silence must not pass for "no cars". Repeat while it still cannot see, even with Settings open.
+      if(failure && nowMs()-this.lastCantSeeMs>=CANT_SEE_REPEAT_MS){this.lastCantSeeMs=nowMs();this.deliver([Cues.speakText(T.stillCantSee,Priority.HIGH)]);}
+      return;
+    }
     const wasFailed=!!this.trafficFailure;this.trafficFailure=failure;
-    if(failure){this.engine.invalidatePerception();this.feedback.silenceRoutine();this.deliver([Cues.speakText(failure,Priority.HIGH)]);}
+    if(failure){this.lastCantSeeMs=nowMs();this.engine.invalidatePerception();this.feedback.silenceRoutine();this.deliver([Cues.speakText(failure,Priority.HIGH)]);}
     else if(wasFailed)this.speakNow(V.trafficRestored);
   }
 

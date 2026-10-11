@@ -65,6 +65,8 @@ export enum ToneKind {
   ALERT = 'ALERT',
   CRITICAL = 'CRITICAL',
   VEER = 'VEER',
+  /** First camera frame analysed: the app can now see. */
+  READY = 'READY',
   LOST = 'LOST',
 }
 

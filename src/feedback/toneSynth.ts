@@ -21,6 +21,8 @@ export function notesFor(kind: ToneKind): [Note[], number] {
       return [[note(1760, 60), note(2349, 90)], TONE_GAIN];
     case ToneKind.WALK_CHIME:
       return [[note(880, 90), note(1175, 90), note(1568, 160)], TONE_GAIN];
+    case ToneKind.READY:
+      return [[note(1047, 110, 60), note(1047, 110, 60), note(1568, 240)], TONE_GAIN];
     case ToneKind.STOP:
       return [[note(440, 260)], TONE_GAIN];
     case ToneKind.ALERT:
