@@ -6,11 +6,13 @@ into this repository; it no longer depends on a symlink to the iOS checkout.
 The former Kotlin/Compose implementation is retained in `android-legacy/` for
 reference only.
 
-## Current interface
+## How it works
 
-- Full-screen camera. User mode has compact status and optional controls; Developer mode adds labelled boxes, counts and expandable diagnostics.
-- On-device voice commands: `manual`, `man`, `start`, `repeat`, `retry`, `pause`, `resume`, `cancel`, `finish crossing`, `stop listening`. Offline English recognition must be available on the device.
-- Settings contains mode selection, the manual, precautions, practice cues and developer controls. Volume keys retain normal volume behavior.
+1. Stand at the kerb facing the road and press the one big Start button (or say "start").
+2. Turn right until the phone points up the road, hold for 5 s, then turn round to the left, past the road, and hold.
+3. Face the road. The phone says what the camera saw. It never says "safe".
+4. Press "Check again", or "Cross" for step counts and warnings. Voice: start, check again, cross, stop, repeat, help.
+5. Guides: [docs/HOW-TO-USE.md](docs/HOW-TO-USE.md) for users and trainers; [docs/KERB-TEST.md](docs/KERB-TEST.md) for the kerb test with a sighted helper.
 
 The custom CrossWise model (crosswise.tflite: pedestrian signals, crosswalks, people and vehicles) is bundled and selected by default; the YOLO26n BDD100K vehicle model is also bundled and selectable in Developer mode. Detection does not establish that crossing is safe. Models and optical motion estimates still require outdoor evaluation.
 
