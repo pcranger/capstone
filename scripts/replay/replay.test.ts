@@ -8,13 +8,16 @@
  * By default the heading is fixed at 0 (camera on the road) except during the scripted look turns of each check, and
  * the same video frames keep playing during those turns (the video cannot show what a real left or right look would).
  */
-import * as fs from 'fs';
 import { AssistMode, CrossingEngine, UserCommand } from '../../src/crossing/crossingEngine';
 import { BoxF } from '../../src/core/geometry';
 import type { Detection, FrameDetections } from '../../src/perception/detection';
 import { isVehicle } from '../../src/perception/detection';
 import { categoryFor } from '../../src/perception/labelMapper';
 import { cueText } from '../../src/strings';
+
+// The project has no Node type definitions (and tsconfig stays as is), so describe the two calls we need.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const fs = require('fs') as { readFileSync(p: string, enc: string): string; writeFileSync(p: string, data: string): void };
 
 interface ReplayFrame {
   t_ms: number; frameWidth: number; frameHeight: number; brightness: number;
