@@ -9,6 +9,7 @@ import { SettingsScreen } from '../src/ui/SettingsScreen';
 import { InterfaceModeSelector } from '../src/ui/InterfaceModeSelector';
 import { controller } from '../src/state/controller';
 import { P, S } from '../src/strings';
+import { T } from '../src/text/safetyText';
 
 const { create, act } = require('react-test-renderer');
 const mockCameraMount = jest.fn();
@@ -212,11 +213,14 @@ test('a slider follows external settings changes after a local drag', async () =
   expect(onCommit).not.toHaveBeenCalled();
 });
 
-test('first launch goes straight to the journey; general precautions are in Settings', async () => {
+// cw-safety: the safety note is now SPOKEN on first open (controller.welcome, tested in safetyController.test.ts), never a blocking screen.
+test('first launch goes straight to the journey; the spoken safety note is not a blocking screen; precautions are in Settings', async () => {
   controller.settings.set({ ...DEFAULT_SETTINGS, acceptedSafetyNotice: false });
   await render(<CrossWiseApp />);
   expect(button(S.actionStartAssist)).toBeDefined();
   expect(button(S.safetyAccept)).toBeUndefined();
+  expect(button(T.welcomeSafety)).toBeUndefined();
+  expect(renderedText()).not.toContain(T.welcomeSafety);
   expect(renderedText()).not.toContain(S.safetyBody);
   await press('Settings');
   expect(renderedText()).toContain('Precautions and limitations');
@@ -292,6 +296,9 @@ test('Android Back closes settings without unmounting the camera', async () => {
     await press('Settings');
     await act(async () => { expect(back()).toBe(true); });
     expect(button(S.actionStartAssist)).toBeDefined();
+    // cw-safety: Back at the home screen would close the app and its warnings, so the first Back only asks; a second within 3 s closes.
+    expect(back()).toBe(true);
+    expect(controller.speakNow).toHaveBeenCalledWith(T.backConfirm);
     expect(back()).toBe(false);
     expect(mockCameraMount).toHaveBeenCalledTimes(1);
     expect(mockCameraUnmount).not.toHaveBeenCalled();

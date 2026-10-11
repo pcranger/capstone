@@ -1,4 +1,4 @@
-import { type ReactElement, type ReactNode, useContext, useState } from 'react';
+import { type ReactElement, type ReactNode, useContext, useEffect, useRef, useState } from 'react';
 import { Modal, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import { Text } from './ScaledText';
@@ -6,6 +6,8 @@ import { AssistMode, UserCommand } from '../crossing/crossingEngine';
 import { InterfaceMode } from '../settings/settings';
 import { controller } from '../state/controller';
 import { useStore } from '../state/store';
+import { pressStop } from '../state/safetyGuards';
+import { T } from '../text/safetyText';
 import { S } from '../strings';
 import { BigButton, IconPill, TextButton } from './components';
 import { askForCamera } from './askForCamera';
@@ -64,6 +66,9 @@ function MoreControlsSheet({ visible, onClose, children }: { visible: boolean; o
   </Modal>;
 }
 
+/** The big button ignores presses this long after its label changes, so a second tap meant for the old label cannot hit the new one. */
+const LABEL_LOCK_MS = 1_500;
+
 interface CameraPermission { hasPermission: boolean; canRequestPermission: boolean; requestPermission: () => unknown }
 interface Extra { text: string; press: () => void; color?: string; enabled?: boolean }
 
@@ -81,16 +86,27 @@ export function JourneyControls({ stacked, compact = false, permission }: { stac
       style={fill ? { flex: 1 } : undefined} />;
 
   // One primary button (56 dp), always in the same place, that walks through the states. (ui-p2c J2)
-  const primary = crossing ? button(S.actionEndCrossing, () => controller.crossingAction('finish'), Colors.Crossing, true, true)
-    : assistOn ? button(S.actionStartCrossing, () => controller.crossingAction('start'), Colors.Crossing, true, true)
+  const [primaryLabel, primaryPress]: [string, () => void] = crossing ? [S.actionEndCrossing, () => controller.crossingAction('finish')]
+    : assistOn ? [S.actionStartCrossing, () => controller.crossingAction('start')]
     // SIM-1: no camera permission, no camera help. The primary button asks for the camera instead.
     : permission && !permission.hasPermission
-      ? button(permission.canRequestPermission ? S.actionGrantCamera : S.actionOpenSettings,
-        () => { void askForCamera(permission.canRequestPermission, permission.requestPermission); }, Colors.Crossing, true, true)
-    : button(S.actionStartAssist, () => controller.command(UserCommand.START_ASSIST, true), Colors.Crossing, true, true);
+      ? [permission.canRequestPermission ? S.actionGrantCamera : S.actionOpenSettings,
+        () => { void askForCamera(permission.canRequestPermission, permission.requestPermission); }]
+    : [S.actionStartAssist, () => controller.command(UserCommand.START_ASSIST, true)];
+  // The same place on screen means something else after each press: say what it does now, and hold off further presses briefly.
+  const labelChangedAt = useRef(0);
+  const lastLabel = useRef(primaryLabel);
+  useEffect(() => {
+    if (lastLabel.current === primaryLabel) return;
+    const lead = lastLabel.current === S.actionStartAssist && primaryLabel === S.actionStartCrossing ? T.cameraHelpOnLead : '';
+    lastLabel.current = primaryLabel;
+    labelChangedAt.current = Date.now();
+    controller.speakNow(T.nextButton(primaryLabel, lead));
+  }, [primaryLabel]);
+  const primary = button(primaryLabel, () => { if (Date.now() - labelChangedAt.current >= LABEL_LOCK_MS) primaryPress(); }, Colors.Crossing, true, true);
   const extras = [
     assistOn && { text: 'Repeat', press: () => controller.repeatGuidance() },
-    assistOn && { text: S.actionStopAssist, press: () => controller.command(UserCommand.STOP_ASSIST, true), color: Colors.DontWalk },
+    assistOn && { text: S.actionStopAssist, press: pressStop, color: Colors.DontWalk },
   ].filter(Boolean) as Extra[];
   // At most two buttons share a row; a lone button, or the larger text sizes, take the full width. (ui-p2c J11)
   const more = extras.map(x => button(x.text, x.press, x.color, x.enabled));

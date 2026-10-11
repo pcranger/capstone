@@ -4,6 +4,9 @@ import { Text } from './ScaledText';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useCameraPermission } from 'react-native-vision-camera';
 import { controller } from '../state/controller';
+import { cameraAccess } from '../state/cameraAccess';
+import { pressBack } from '../state/safetyGuards';
+import { askForCamera } from './askForCamera';
 import { useStore } from '../state/store';
 import { S } from '../strings';
 import { GuideScreen } from './GuideScreen';
@@ -24,17 +27,26 @@ export function CrossWiseApp() {
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
       if (panel) { setPanel(panel === 'settings' ? null : 'settings'); return true; }
-      return false;
+      // Back on the home screen closes the app, and with it the vehicle warnings: ask first.
+      return pressBack();
     });
     return () => subscription.remove();
   }, [panel]);
   const close = useCallback(() => setPanel(null), []);
+  // The controller refuses voice "Start" without the camera, and voice "Allow camera" asks through here. The hook re-reads the
+  // permission whenever the app returns to the foreground, so the dock and this stay current after a trip to system Settings.
+  useEffect(() => {
+    cameraAccess.has = permission.hasPermission;
+    cameraAccess.ask = () => { void askForCamera(permission.canRequestPermission, permission.requestPermission); };
+  }, [permission.hasPermission, permission.canRequestPermission, permission.requestPermission]);
   const requestedCamera = useRef(false);
   const [permissionsReady, setPermissionsReady] = useState(false);
   useEffect(() => {
     if (!loaded || requestedCamera.current) return;
     requestedCamera.current = true;
     void (async () => {
+      // The spoken welcome and safety note come first, so the permission dialog does not cover them.
+      try { await controller.welcomeDone; } catch { /* the welcome is best effort */ }
       try { if (!permission.hasPermission && permission.canRequestPermission) await permission.requestPermission(); }
       catch { /* The camera panel keeps its permission/retry control; the camera permission control remains available. */ }
       finally { setPermissionsReady(true); }
