@@ -105,7 +105,7 @@ describe('Crossing check steppers', () => {
       expect(node.props.accessibilityRole).toBe('adjustable');
       expect(node.props.accessibilityActions).toEqual([{ name: 'increment' }, { name: 'decrement' }]);
     }
-    expect(byId('stepper-hold').props.accessibilityValue).toEqual({ text: '5 seconds' });
+    expect(byId('stepper-hold').props.accessibilityValue).toEqual({ min: 3, max: 8, now: 5, text: '5 seconds' });
   });
   test('hold time steps 3 to 8 and stops at both ends', async () => {
     await render(<SettingsScreen onBack={() => undefined} />);
@@ -130,7 +130,7 @@ describe('Crossing check steppers', () => {
     await act(async () => { up.props.onPress(); });
     expect(controller.settings.value.holdSeconds).toBe(6);
     await act(async () => { byId('stepper-hold-down').props.onPress(); byId('stepper-hold-down').props.onPress(); });
-    expect(controller.settings.value.holdSeconds).toBeLessThanOrEqual(5);
+    expect(controller.settings.value.holdSeconds).toBe(4);
     for (const b of [up, down]) { expect(flat(b).width).toBeGreaterThanOrEqual(48); expect(flat(b).height).toBeGreaterThanOrEqual(48); }
     expect(flat(byId('stepper-hold')).minHeight).toBeGreaterThanOrEqual(48);
   });
