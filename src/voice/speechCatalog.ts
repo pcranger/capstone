@@ -25,7 +25,7 @@ export const V = {
 };
 /** Follow-ups that keep the microphone armed so the next command needs no second tap. Keep this explicit. */
 export function expectsVoiceAnswer(text: string): boolean {
-  return [V.unknown, V.unknownHelp, T.stopConfirm, VT.confirmAgain('cancel')].includes(text);
+  return [V.unknown, V.unknownHelp, T.stopConfirm].includes(text);
 }
 /** Internal errors stay available to diagnostics; speech gives a short recovery action. */
 export function spokenError(error: unknown, _context: 'voice' = 'voice'): string {

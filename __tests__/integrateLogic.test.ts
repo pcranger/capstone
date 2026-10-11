@@ -92,8 +92,34 @@ describe('D1 and the late-car evidence', () => {
       expect(out.cues.some(c => c.kind === 'speakText' && c.text === CHECK_TEXT.notYet)).toBe(true);
     }
     Object.assign((e as any).check, { stage: 'result', summary: 'NONE_SEEN', resultAt: 100 });
+    // A clear result alone is not enough: there must be a usable camera frame in the last 1.5 s.
+    const refused = e.command(UserCommand.START_CROSSING, 200);
+    expect(e.mode).toBe(AssistMode.SEARCHING);
+    expect(refused.cues.some(c => c.kind === 'speakText' && c.text === CHECK_TEXT.cantSee)).toBe(true);
+    Object.assign(e as any, { trafficUsable: true, lastTrafficFrameMs: 100 });
     e.command(UserCommand.START_CROSSING, 200);
     expect(e.mode).toBe(AssistMode.CROSSING);
+    // 2 s without a frame: refused again.
+    const late = new CrossingEngine();
+    late.command(UserCommand.START_ASSIST, 0);
+    Object.assign((late as any).check, { stage: 'result', summary: 'NONE_SEEN', resultAt: 100 });
+    Object.assign(late as any, { trafficUsable: true, lastTrafficFrameMs: 100 });
+    late.command(UserCommand.START_CROSSING, 2_200);
+    expect(late.mode).toBe(AssistMode.SEARCHING);
+  });
+
+  test('losing the camera or tracking expires a finished clear result; so does an unusable frame', () => {
+    const lost = new CrossingEngine();
+    lost.command(UserCommand.START_ASSIST, 0);
+    Object.assign((lost as any).check, { stage: 'result', summary: 'NONE_SEEN', resultAt: 100 });
+    expect(lost.canCross(200)).toBe(true);
+    lost.invalidatePerception(); // what setCameraStatus, inferenceFailed and checkTrafficAvailability call
+    expect(lost.canCross(300)).toBe(false);
+    const dark = new CheckSession();
+    dark.begin(0);
+    Object.assign(dark, { stage: 'result', summary: 'NONE_SEEN', resultAt: 0 });
+    dark.frame(500, { heading: 0, pitch: 5, usable: false, walking: false, vehicles: [] });
+    expect(dark.canCross(600)).toBe(false);
   });
 });
 
@@ -111,8 +137,13 @@ describe('steer hint and tones', () => {
   test('the Ready tone is a low falling pair and nothing like the Walk chime', () => {
     const [ready] = notesFor(ToneKind.READY);
     const [walk] = notesFor(ToneKind.WALK_CHIME);
-    expect(ready.map(n => n.frequencyHz)).toEqual([784, 523]);
-    expect(ready.some(n => walk.some(w => w.frequencyHz === n.frequencyHz))).toBe(false);
+    const [lost] = notesFor(ToneKind.LOST);
+    expect(ready).toHaveLength(1);
+    expect(ready[0]).toMatchObject({ frequencyHz: 523, durationMs: 300 });
+    // Not the Walk chime's rising three, not the Lost cue's falling two, and no pitch in common with either.
+    expect(ready.length).not.toBe(walk.length);
+    expect(ready.length).not.toBe(lost.length);
+    expect(ready.some(n => [...walk, ...lost].some(w => w.frequencyHz === n.frequencyHz))).toBe(false);
   });
 });
 

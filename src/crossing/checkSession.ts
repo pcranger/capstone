@@ -89,9 +89,10 @@ export class CheckSession {
     this.headings = [];
   }
 
-  /** Perception was lost: a check in progress starts over (silently); a finished result is kept until it expires. */
+  /** Perception was lost: a check in progress starts over (silently); a finished result expires, so Cross is off until a new check. */
   interrupt(now: number): void {
     if (this.stage === 'waiting' || this.stage === 'running') this.begin(now, this.holdMs / 1000);
+    else if (this.stage === 'result') this.stage = 'expired';
   }
 
   canCross(now: number): boolean {
@@ -193,6 +194,8 @@ export class CheckSession {
    */
   private invalidateResult(now: number, f: CheckFrame): CheckStep {
     if (!this.canCross(now)) return EMPTY;
+    // The camera cannot judge this frame (too dark, tilted, walking, tracking lost): a clear result no longer stands.
+    if (!f.usable) { this.stage = 'expired'; return EMPTY; }
     const moving = f.vehicles.find(carNow);
     if (moving) {
       const right = moving.bearingDeg - (f.heading ?? moving.bearingDeg) >= 0;

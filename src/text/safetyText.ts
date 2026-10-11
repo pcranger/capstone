@@ -9,6 +9,7 @@ export const T = {
   welcomeSafety: 'CrossWise helps you check for cars, but it can miss them. Always use your cane and your own judgement.',
   welcomeStart: 'Say Start, or press the big button at the bottom.',
   gettingReady: 'Getting ready.',
+  practiceOff: 'Practice is off while camera help is on.',
   stillGettingReady: 'Still getting ready. The first time can take up to ten seconds.',
   notWorking: 'Camera help is not working. Close and reopen CrossWise.',
   ready: 'Ready',

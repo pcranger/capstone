@@ -92,7 +92,7 @@ describe('10a the microphone re-opens by itself after the app has spoken', () =>
 });
 
 describe('10b the new commands', () => {
-  test('"check again" is Retry: starts camera help when it is off, repeats the status when it is on', async () => {
+  test('"check again" starts camera help when it is off, and a new guided check when it is on', async () => {
     const command = jest.spyOn(c, 'command').mockImplementation(() => undefined);
     const repeat = jest.spyOn(c, 'repeatGuidance').mockImplementation(() => undefined);
     expect(await say('Check again')).toBe(V.started);
@@ -138,7 +138,7 @@ describe('10c a crossing needs "cancel" twice within 3 seconds', () => {
 
   test('the first "cancel" only asks; the second inside the window ends the crossing', async () => {
     const command = jest.spyOn(c, 'command').mockImplementation(() => undefined);
-    expect(await say('Cancel')).toBe('Say cancel again to stop crossing warnings.');
+    expect(await say('Cancel')).toBe(T.stopConfirm);
     expect(command).not.toHaveBeenCalled();
     now += 2_900;
     expect(await say('cancel')).toBe(V.crossingEnded);
@@ -148,9 +148,9 @@ describe('10c a crossing needs "cancel" twice within 3 seconds', () => {
   test('a second "cancel" after 3 seconds, or after another command, asks again instead of acting', async () => {
     const command = jest.spyOn(c, 'command').mockImplementation(() => undefined);
     await say('cancel'); now += 3_100;
-    expect(await say('cancel')).toBe(VT.confirmAgain('cancel'));
+    expect(await say('cancel')).toBe(T.stopConfirm);
     await say('repeat'); now += 100;
-    expect(await say('cancel')).toBe(VT.confirmAgain('cancel'));
+    expect(await say('cancel')).toBe(T.stopConfirm);
     expect(command).not.toHaveBeenCalledWith(UserCommand.END_CROSSING);
   });
 
@@ -158,14 +158,38 @@ describe('10c a crossing needs "cancel" twice within 3 seconds', () => {
     jest.spyOn(c, 'command').mockImplementation(() => undefined);
     await say('cancel');
     now += 3_000; // the question takes this long to read aloud
-    refreshConfirm(); // what the voice turn does once the question has been spoken
+    refreshConfirm('cancel'); // what the voice turn does once the question has been spoken
     now += 2_500;
     expect(await say('cancel')).toBe(V.crossingEnded);
   });
 
-  test('outside a crossing, "cancel" still acts at once', async () => {
+  test('outside a crossing with camera help off, "cancel" just says cancelled', async () => {
     setMode(AssistMode.IDLE);
     expect(await say('cancel')).toBe(V.cancelled);
+  });
+
+  test('"pause" and "cancel" while camera help is on ask like "stop" before they switch it off', async () => {
+    const command = jest.spyOn(c, 'command').mockImplementation(() => undefined);
+    setMode(AssistMode.SEARCHING);
+    expect(await say('pause')).toBe(T.stopConfirm);
+    expect(command).not.toHaveBeenCalled();
+    expect(await say('pause')).toBeNull();
+    expect(command).toHaveBeenCalledWith(UserCommand.STOP_ASSIST, true);
+    command.mockClear(); now += 10_000;
+    expect(await say('cancel')).toBe(T.stopConfirm);
+    expect(command).not.toHaveBeenCalled();
+    expect(await say('cancel')).toBeNull();
+    expect(command).toHaveBeenCalledWith(UserCommand.STOP_ASSIST, true);
+  });
+
+  test('a stale "stop" question is not confirmed by a later single "stop", and refresh touches only its own question', async () => {
+    const command = jest.spyOn(c, 'command').mockImplementation(() => undefined);
+    setMode(AssistMode.SEARCHING);
+    expect(await say('stop')).toBe(T.stopConfirm);
+    now += 2_500; refreshConfirm('cancel'); // another question was read out: must not extend the stop question
+    now += 2_000;
+    expect(await say('stop')).toBe(T.stopConfirm); // 4.5 s after asking: too late, asks again
+    expect(command).not.toHaveBeenCalled();
   });
 
   test('"stop" during a crossing asks twice as well', async () => {

@@ -115,6 +115,8 @@ const HEADING_AVERAGE_MS = 1_000;
 /** Estimated pace while the walking detector says walking (it does not count steps). */
 const STEPS_PER_SECOND = 1.4;
 const STEPS_PER_LANE = 6;
+/** Cross needs a usable camera frame this recent. */
+const SEEING_MS = 1_500;
 
 export class CrossingEngine {
   settings: EngineSettings;
@@ -406,8 +408,11 @@ export class CrossingEngine {
     if (this.mode !== AssistMode.SEARCHING && this.mode !== AssistMode.WAITING) return;
     // The one place Cross is gated: button, voice and Developer auto-detect all arrive here. Auto-detect refuses silently
     // (it retries every tick); an explicit request says why.
-    if (!this.check.canCross(nowMs)) {
-      if (!detected) cues.push(Cues.speakText(this.check.refusal(nowMs), Priority.HIGH));
+    // A clear result is not enough: the camera must also have given a usable frame in the last 1.5 s.
+    const clear = this.check.canCross(nowMs);
+    const seeing = this.trafficUsable && nowMs - this.lastTrafficFrameMs <= SEEING_MS;
+    if (!clear || !seeing) {
+      if (!detected) cues.push(Cues.speakText(clear ? CHECK_TEXT.cantSee : this.check.refusal(nowMs), Priority.HIGH));
       return;
     }
     this.mode = AssistMode.CROSSING;

@@ -14,6 +14,7 @@ export const CHECK_TEXT = {
   vehicleStopLeft: 'Vehicle on your left. Wait. Check again.',
   expired: 'Check expired. Check again.',
   stopped: 'Stopped. Press Start to try again.',
+  cantSee: 'Camera cannot see clearly. Check again.',
   alertsOff: 'Vehicle alerts are off, so no check can run. Turn them on in Settings.',
   stationaryResult: 'Vehicle seen, not moving. Check again.',
   notYet: 'Not yet. Check again.',

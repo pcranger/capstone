@@ -156,6 +156,9 @@ export class CrossWiseController {
   private readyTimer: ReturnType<typeof setTimeout> | null = null;
   /** True when the user started this listening turn (double-tap, button, first open); false on a silent re-arm. */
   private userTurn = true;
+  /** Which question the shared confirm line was last asked for, so only that one is refreshed when it has been read out. */
+  private askedKey: 'stop' | 'cancel' | null = null;
+  private ask(key: 'stop' | 'cancel'): string { this.askedKey = key; return T.stopConfirm; }
   private wasBackgrounded = false;
   private lastCantSeeMs = 0;
 
@@ -181,10 +184,11 @@ export class CrossWiseController {
     say: async text => {
       this.ui.update(s => ({ ...s, caption: text }));
       const completed = await this.feedback.sayAndWait(text);
-      refreshConfirm(); // a question's 3 s window starts when it has been read out
+      // The window of the question just read out starts now; any other pending question keeps its own time.
+      if (text === T.stopConfirm && this.askedKey) refreshConfirm(this.askedKey);
       return completed;
     },
-    bargeIn: text => text !== T.stopConfirm && text !== VT.confirmAgain('cancel'),
+    bargeIn: text => text !== T.stopConfirm,
     ready: () => this.feedback.dispatch([Cues.haptic(HapticPattern.CENTERED_TICK)]),
     handle: (text, current) => this.handleVoice(text, current),
     cancel: () => undefined,
@@ -217,7 +221,6 @@ export class CrossWiseController {
   /** Re-opens the microphone after a finished turn. Any stop, hidden screen or newer start bumps the generation and cancels this. */
   private rearmVoice(id: number): void {
     if (id !== this.voiceAudioGeneration || this.voice.state.value.phase === 'error') return;
-    refreshConfirm();
     this.startVoice(false, false);
   }
   stopVoice(): void {
@@ -245,7 +248,7 @@ export class CrossWiseController {
       return ++this.unknownCommands >= 2 ? V.unknownHelp : V.unknown;
     }
     this.unknownCommands = 0;
-    if (intent.kind !== 'cancel' && intent.kind !== 'stop') clearConfirm();
+    if (intent.kind !== 'cancel' && intent.kind !== 'stop' && intent.kind !== 'pause') clearConfirm();
     const crossing = this.engine.mode === AssistMode.CROSSING;
     switch (intent.kind) {
       case 'stopListening': this.stopVoice(); return null;
@@ -264,7 +267,7 @@ export class CrossWiseController {
       case 'stop':
         if (!this.assistOn) return VT.alreadyOff;
         // A misheard word must not switch the vehicle warnings off: "stop" is asked twice whenever camera help is on.
-        if (!confirmTwice('stop')) return T.stopConfirm;
+        if (!confirmTwice('stop')) return this.ask('stop');
         this.command(UserCommand.STOP_ASSIST, true); return null; // command() says "Camera help off." urgently
       case 'help': return VOICE_QUICK_START;
       case 'start': case 'resume':
@@ -289,13 +292,18 @@ export class CrossWiseController {
         // Never switch the traffic watch off in the middle of a crossing.
         if (crossing) return V.finishCrossingFirst;
         if (!this.assistOn) return VT.alreadyOff;
+        // Same question and same key as "stop": a misheard word must not silence the warnings.
+        if (!confirmTwice('stop')) return this.ask('stop');
         this.command(UserCommand.STOP_ASSIST, true); return null;
       case 'cancel':
         if (crossing) {
-          if (!confirmTwice('cancel')) return VT.confirmAgain('cancel');
+          if (!confirmTwice('cancel')) return this.ask('cancel');
           this.command(UserCommand.END_CROSSING); return V.crossingEnded;
         }
-        if (this.assistOn) { this.command(UserCommand.STOP_ASSIST, true); return null; }
+        if (this.assistOn) {
+          if (!confirmTwice('stop')) return this.ask('stop');
+          this.command(UserCommand.STOP_ASSIST, true); return null;
+        }
         return V.cancelled;
       case 'finishCrossing':
         if (!crossing) return V.noCrossing;
@@ -800,7 +808,7 @@ export class CrossWiseController {
 
   /** Plays cues on demand, for the Practice screen: the real sounds, with no traffic involved. */
   practice(cues: Cue[]): void {
-    if (this.assistOn) return; // a live check owns the speaker; rehearsal would sound like the real thing
+    if (this.assistOn) { this.speakNow(T.practiceOff); return; } // a live check owns the speaker
     this.deliver(cues.map(c => c.kind === 'speakText' ? { ...c, text: practiceText(c.text) } : c));
   }
 

@@ -27,7 +27,7 @@ describe('CrossingEngine', () => {
   let spoken: [number, Phrase][];
   let now: number;
   /** Cross needs a fresh clear check result (D1); these tests are about the crossing itself, so give the engine one. */
-  const allowCross = () => { const c = (engine as any).check; c.stage = 'result'; c.summary = 'NONE_SEEN'; c.resultAt = now; };
+  const allowCross = () => { const c = (engine as any).check; c.stage = 'result'; c.summary = 'NONE_SEEN'; c.resultAt = now; (engine as any).vehicleMotion.reliable = true; (engine as any).trafficUsable = true; (engine as any).lastTrafficFrameMs = now; };
   let heading: number;
   let walking: boolean;
 
@@ -49,7 +49,7 @@ describe('CrossingEngine', () => {
     const end = now + durationMs;
     while (now < end) {
       collect(engine.onSensors(now, { timestampMs: now, headingDeg: heading, pitchDeg: 5 }, walking));
-      collect(engine.onFrame(frame(now, ...detections(now)), geometry));
+      collect(engine.onFrame({ ...frame(now, ...detections(now)), brightness: 0.5 }, geometry));
       now += 100;
     }
   };
@@ -70,6 +70,10 @@ describe('CrossingEngine', () => {
 
     // The user starts walking toward the signal: crossing mode starts by itself.
     allowCross(); // auto-detect needs a fresh clear check too (D1)
+    // ...and a camera that can judge motion (a usable frame within 1.5 s).
+    const vm = (engine as any).vehicleMotion;
+    const real = vm.update.bind(vm);
+    const usable = jest.spyOn(vm, 'update').mockImplementation((...args: unknown[]) => { const r = real(...args); vm.reliable = true; return r; });
     walking = true;
     run(2_000, () => [det(ObjectCategory.PED_WALK)]);
     expect(engine.mode).toBe(AssistMode.CROSSING);
@@ -83,6 +87,7 @@ describe('CrossingEngine', () => {
     expect(phrases()).not.toContain(Phrase.SIGNAL_LOST);
 
     // A car on the left approaches fast (contact in ~2.5 s).
+    usable.mockRestore(); // confirmedMotion() replaces the motion estimate on the prototype
     confirmedMotion();
     const carStart = now;
     run(1_500, (t) => {

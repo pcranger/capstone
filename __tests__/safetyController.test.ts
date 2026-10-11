@@ -8,7 +8,7 @@ import { type Cue, HapticPattern, Priority, ToneKind } from '../src/feedback/cue
 import { DEFAULT_SETTINGS } from '../src/settings/settings';
 import { cameraAccess } from '../src/state/cameraAccess';
 import { controller } from '../src/state/controller';
-import { pressBack, pressStop } from '../src/state/safetyGuards';
+import { pressBack, pressStop, refreshConfirm } from '../src/state/safetyGuards';
 import { P } from '../src/strings';
 import { T } from '../src/text/safetyText';
 
@@ -93,7 +93,7 @@ describe('1 - camera help never stops silently', () => {
     expect(command).toHaveBeenCalledWith(UserCommand.STOP_ASSIST, true);
     command.mockClear(); speak.mockClear();
     dateNow.mockReturnValue(1_010_000); pressStop();
-    dateNow.mockReturnValue(1_014_000); pressStop(); // 4 s later: too late, asks again
+    dateNow.mockReturnValue(1_017_000); pressStop(); // 7 s later: too late even for the 6 s button window, asks again
     expect(command).not.toHaveBeenCalled();
     expect(speak).toHaveBeenCalledTimes(2);
   });
@@ -119,6 +119,9 @@ describe('1 - camera help never stops silently', () => {
   test('voice "pause" while on: command() speaks the safety words urgently; the reply is empty so they are said once', async () => {
     controller.command(UserCommand.START_ASSIST, true);
     (fb.dispatch as jest.Mock).mockClear();
+    // "pause" asks first, like "stop"; the second one acts.
+    expect(await c.handleVoice('pause', () => true)).toBe(T.stopConfirm);
+    expect(controller.assistOn).toBe(true);
     expect(await c.handleVoice('pause', () => true)).toBeNull();
     expect(controller.assistOn).toBe(false);
     expect(said(T.assistStopped, Priority.CRITICAL)).toBe(true);
@@ -245,5 +248,22 @@ describe('13 - silence never passes for "no cars"', () => {
     mockNow += 12_000; c.lastFrameMs = mockNow;
     c.checkTrafficAvailability();
     expect(cues().some(q => q.kind === 'speakText' && q.text === T.stillCantSee)).toBe(false);
+  });
+});
+
+describe('dock Stop confirm window and stale questions', () => {
+  test('the button gets 6 s because the question takes about 3 s to read; an old question never confirms', () => {
+    jest.spyOn(controller, 'speakHigh').mockImplementation(() => undefined);
+    const command = jest.spyOn(controller, 'command').mockImplementation(() => undefined);
+    const dateNow = jest.spyOn(Date, 'now');
+    c.ui.update((u: { snapshot: object }) => ({ ...u, snapshot: { ...u.snapshot, mode: AssistMode.CROSSING } }));
+    dateNow.mockReturnValue(5_000_000); pressStop();
+    dateNow.mockReturnValue(5_005_000); pressStop(); // 5 s after the first press: inside 6 s
+    expect(command).toHaveBeenCalledTimes(1);
+    command.mockClear();
+    dateNow.mockReturnValue(5_100_000); pressStop();
+    dateNow.mockReturnValue(5_105_000); refreshConfirm('stop'); // the question was read out late, at 5 s
+    dateNow.mockReturnValue(5_109_000); pressStop(); // 9 s after asking: past the 8 s ceiling, asks again
+    expect(command).not.toHaveBeenCalled();
   });
 });

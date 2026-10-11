@@ -1,7 +1,5 @@
 /** Voice-control wording added by the blind-user review (items 10 and 11). New text lives here, not in strings.ts. */
 export const VT = {
-  /** First "cancel" or "stop" during a crossing; the same word again within safetyGuards CONFIRM_MS acts. */
-  confirmAgain: (word: string) => `Say ${word} again to stop crossing warnings.`,
   crossNeedsHelp: 'Start camera help first.',
   alreadyOff: 'Camera help already off.',
   crossAlready: 'Crossing guidance already on.',
