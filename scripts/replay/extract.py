@@ -157,6 +157,21 @@ def detect(tensor, lb):
     return found
 
 
+def frame_at(cap, video, t_ms, delta, src_fps, sane):
+    """The frame `delta` source frames from t_ms. Seeking is unreliable on files with a bad fps, so read forward there."""
+    if sane:
+        cap.set(cv2.CAP_PROP_POS_FRAMES, max(0, round(t_ms / 1000 * src_fps) + delta))
+        return cap.read()
+    target, last, scan = t_ms + delta * 1000 / 15, None, cv2.VideoCapture(video)
+    while True:
+        ok, img = scan.read()
+        if not ok:
+            return (last is not None), last
+        last = img
+        if scan.get(cv2.CAP_PROP_POS_MSEC) >= target:
+            return True, img
+
+
 def shrink(bgr):
     if max(bgr.shape[:2]) > 1280:  # 4K: the model sees 416 px anyway
         k = 1280 / max(bgr.shape[:2])
@@ -198,6 +213,7 @@ def main():
 
     cap = cv2.VideoCapture(args.video)
     src_fps = cap.get(cv2.CAP_PROP_FPS) or 30
+    sane_fps = 1 <= src_fps <= 120  # some webm files report their 1000 Hz timebase as fps: use the frame's own time then
     out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     png_at = [float(s) for s in args.png_at.split(',') if s.strip()]
@@ -209,7 +225,7 @@ def main():
         ok, bgr = cap.read()
         if not ok:
             break
-        t = idx / src_fps
+        t = idx / src_fps if sane_fps else cap.get(cv2.CAP_PROP_POS_MSEC) / 1000
         if args.max_seconds and t >= args.max_seconds:
             break
         bgr = shrink(bgr)
@@ -239,8 +255,7 @@ def main():
         busiest = max(frames, key=lambda f: sum(b['label'] in VEHICLES for b in f['boxes']))
         parts = []
         for d in (-round(.6 * src_fps), 0, round(.6 * src_fps)):
-            cap.set(cv2.CAP_PROP_POS_FRAMES, max(0, round(busiest['t_ms'] / 1000 * src_fps) + d))
-            ok, bgr = cap.read()
+            ok, bgr = frame_at(cap, args.video, busiest['t_ms'], d, src_fps, sane_fps)
             if ok:
                 bgr = shrink(bgr)
                 lb = letterbox_of(bgr.shape[1], bgr.shape[0], 416, 416)
