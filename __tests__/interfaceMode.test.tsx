@@ -20,7 +20,7 @@ jest.mock('../src/camera/CameraSurface', () => ({ CameraSurface: () => {
   return React.createElement('CameraSurface');
 } }));
 jest.mock('react-native-safe-area-context', () => ({ ...jest.requireActual('react-native-safe-area-context'), useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
-jest.mock('../src/ui/VoiceControl', () => ({ VoiceControl: () => null, VoiceStatus: () => null }));
+jest.mock('../src/ui/VoiceControl', () => ({ VoiceControl: () => null, VoiceStatus: () => null, VoiceToggle: () => null }));
 jest.mock('../src/ui/VoiceCheck', () => ({ VoiceCheck: () => null }));
 jest.mock('@expo/vector-icons', () => ({ MaterialIcons: () => null }));
 jest.mock('react-native-vision-camera', () => ({ useCameraPermission: () => ({ hasPermission: true, canRequestPermission: false }) }));

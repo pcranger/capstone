@@ -19,12 +19,16 @@ import { askForCamera } from './askForCamera';
 import { BigButton, TextButton } from './components';
 import { DetectionOverlay, SegmentationOverlay } from './Overlays';
 import { Colors, Dimens, useType } from './theme';
+import { VoiceToggle } from './VoiceControl';
+import { liveRegionFor, useScreenReaderEnabled } from '../voice/useScreenReader';
 
 /** One full-screen camera surface. UI overlays never resize the camera or its box coordinate space. */
 export function MainScreen({ height, topInset = 0, bottomInset = 0, hasPermission, canRequestPermission, requestPermission }: {
   height?: number; topInset?: number; bottomInset?: number; hasPermission: boolean; canRequestPermission: boolean; requestPermission: () => unknown;
 }) {
   const type = useType();
+  // The app speaks hazards and warnings itself, so a screen reader must not announce the same banner again (it can still be swiped to).
+  const live = liveRegionFor(useScreenReaderEnabled());
   const window = useWindowDimensions();
   const settings = useStore(controller.settings);
   const ui = useStore(controller.ui);
@@ -119,7 +123,7 @@ export function MainScreen({ height, topInset = 0, bottomInset = 0, hasPermissio
       </View>
     </ScrollView>}
     {(developer ? detailsOpen : hasPermission) && <ScrollView style={[styles.status, { top: topInset + (developer ? 60 : 0), maxHeight: Math.max(80, Math.min(window.height * (developer ? 0.38 : 0.28), window.height - topInset - bottomInset - 160)) }]}>
-      {hasPermission && <View accessible accessibilityLabel={message} accessibilityHint={hint} accessibilityLiveRegion="polite"
+      {hasPermission && <View accessible accessibilityLabel={message} accessibilityHint={hint} accessibilityLiveRegion={live}
         style={[styles.banner, { backgroundColor: tone }]}>
         <MaterialIcons name={icon} size={28} color={onTone} />
         <View style={{ flex: 1 }}>
@@ -128,7 +132,7 @@ export function MainScreen({ height, topInset = 0, bottomInset = 0, hasPermissio
         </View>
       </View>}
       {/* J16: one slim line for headphones and battery; the label carries every warning. */}
-      {hasPermission && warnings.length > 0 && <View accessible accessibilityLabel={warnings.map(w => w[1]).join(' ')} accessibilityLiveRegion="polite" style={styles.warnLine}>
+      {hasPermission && warnings.length > 0 && <View accessible accessibilityLabel={warnings.map(w => w[1]).join(' ')} accessibilityLiveRegion={live} style={styles.warnLine}>
         <MaterialIcons name={warnings[0][0] === 'battery' ? 'battery-alert' : 'headset-off'} size={24} color={Colors.Warn} />
         <Text style={[type.bodyMedium, { flex: 1 }]} numberOfLines={2}>{warnings[0][1]}{warnings.length > 1 ? ` (+${warnings.length - 1} more)` : ''}</Text>
       </View>}
@@ -141,6 +145,8 @@ export function MainScreen({ height, topInset = 0, bottomInset = 0, hasPermissio
           brightness={telemetry.frameBrightness} model={model.kind === 'ready' ? `${model.info.displayName} · ${model.info.backend} · ${model.info.inputWidth}px` : 'Model unavailable'} />}
       </View>}
     </ScrollView>}
+    {/* Above the dock, so it never sits inside the dock's own buttons. */}
+    {hasPermission && <VoiceToggle bottom={bottomInset + 8} />}
   </View>;
 }
 

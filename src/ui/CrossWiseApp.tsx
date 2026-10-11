@@ -5,7 +5,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useCameraPermission } from 'react-native-vision-camera';
 import { controller } from '../state/controller';
 import { useStore } from '../state/store';
-import { S } from '../strings';
+import { P, S } from '../strings';
+import { liveRegionFor, useScreenReaderEnabled } from '../voice/useScreenReader';
 import { GuideScreen } from './GuideScreen';
 import { JourneyScreen } from './JourneyScreen';
 import { PracticeScreen } from './PracticeScreen';
@@ -18,6 +19,8 @@ export function CrossWiseApp() {
   const type = useType();
   const loaded = useStore(controller.settingsLoaded);
   const notice = useStore(controller.notice);
+  // "Vehicle detection unavailable." is also spoken by the app (announceDetectionError); a screen reader must not repeat it.
+  const live = liveRegionFor(useScreenReaderEnabled());
   const permission = useCameraPermission();
   const [panel, setPanel] = useState<Panel>(null);
   const [dockHeight, setDockHeight] = useState(120);
@@ -67,7 +70,7 @@ export function CrossWiseApp() {
         {panel === 'guide' && <GuideScreen onBack={() => setPanel('settings')} />}
         {panel === 'practice' && <PracticeScreen onBack={() => setPanel('settings')} />}
       </View>}
-      {notice && <Pressable accessibilityRole="alert" accessibilityLiveRegion="polite" accessibilityLabel={notice}
+      {notice && <Pressable accessibilityRole="alert" accessibilityLiveRegion={notice === P.detectionUnavailable ? live : 'polite'} accessibilityLabel={notice}
         accessibilityHint={S.noticeDismissHint} onPress={() => controller.clearNotice()}
         style={[styles.notice, { bottom: dockHeight + 8 }]}>
         <Text style={type.bodyLarge}>{notice}</Text>
