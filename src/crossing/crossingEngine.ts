@@ -280,11 +280,13 @@ export class CrossingEngine {
     const looming = this.hazardMonitor.assess(tracks, now, frameAspect, this.mode === AssistMode.CROSSING);
     this.hazards = this.settings.vehicleAlerts ? tracks.filter(t => t.group === TrackGroup.VEHICLE && t.isSeenAt(now) && (motion.get(t.id)?.state === 'MOVING' || !motion.get(t.id)?.supported || looming.some(h => h.trackId === t.id))).map(t => {
       const estimate = motion.get(t.id);
-      const urgent = looming.find(h => h.trackId === t.id);
+      const growing = looming.find(h => h.trackId === t.id);
+      // CW-14: growth must hold for a few frames in a row. A 1-2 frame jump (sway, walking jolt, box jitter) is not "approaching".
+      const urgent = growing?.sustained ? growing : undefined;
       // Direction is camera-relative. During a scan or stale orientation, do not claim a body-relative side.
       const steady = current && previous && this.directionAnchor!==null && Math.abs(Angles.wrap180(current.headingDeg-this.directionAnchor))<12 && Math.abs(Angles.wrap180(current.headingDeg-previous.headingDeg)) < 2 && Math.abs(now-current.timestampMs)<300;
       const direction = steady ? estimate?.direction : 'UNKNOWN';
-      return { trackId:t.id, category:t.category, uncertain:!estimate?.supported, approaching:!!urgent && !!estimate?.supported, level:urgent?.level ?? HazardLevel.WARNING,
+      return { trackId:t.id, category:t.category, uncertain:!estimate?.supported, approaching:!!urgent && !!estimate?.supported, pending:!!growing && !urgent && !!estimate?.supported && estimate.state!=='MOVING', level:urgent?.level ?? HazardLevel.WARNING,
         side:direction==='LEFT_TO_RIGHT'?Side.LEFT:direction==='RIGHT_TO_LEFT'?Side.RIGHT:Side.AHEAD,
         ttcSeconds:urgent?.ttcSeconds ?? Infinity, heightFraction:t.box.height };
     }).sort((a,b)=>a.ttcSeconds-b.ttcSeconds || b.heightFraction-a.heightFraction) : [];
@@ -529,19 +531,22 @@ export class CrossingEngine {
   }
 
   private hazardCues(nowMs: number): Cue[] {
+    // CW-14: a far, unsure car that is not growing (box under hazardMonitor's 5% height floor) is shown, not spoken.
+    const speakable = this.hazards.filter((h) => !h.pending && !(h.uncertain && !Number.isFinite(h.ttcSeconds) && h.heightFraction < 0.05));
     const firstApproach = (h: VehicleHazard) => h.approaching && !this.approachHeard.has(h.trackId);
-    if(nowMs-this.lastVehicleCueMs<3000 && !this.hazards.some(h=>h.level===HazardLevel.CRITICAL || firstApproach(h))) return [];
+    if(nowMs-this.lastVehicleCueMs<3000 && !speakable.some(h=>h.level===HazardLevel.CRITICAL || firstApproach(h))) return [];
     for (const [id, value] of [...this.announcedHazards.entries()]) {
       if (!this.hazards.some((h) => h.trackId === id) && nowMs - value[1] > 5_000) { this.announcedHazards.delete(id); this.approachHeard.delete(id); }
     }
     // One announcement per frame: the most urgent hazard that is new, escalated, or due for a repeat.
-    const hazard = this.hazards.find((h) => {
+    const hazard = speakable.find((h) => {
       const previous = this.announcedHazards.get(h.trackId);
       return (
         previous === undefined ||
         firstApproach(h) ||
         (h.level === HazardLevel.CRITICAL && previous[0] === HazardLevel.WARNING) ||
-        nowMs - previous[1] >= 3_000
+        // CW-14: a car whose motion is unsure and that is not growing is told once ("Vehicle detected"), not every 3 s.
+        (nowMs - previous[1] >= 3_000 && (!h.uncertain || Number.isFinite(h.ttcSeconds)))
       );
     });
     if (!hazard) return [];
