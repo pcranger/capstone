@@ -10,7 +10,7 @@ export const BUNDLED_MODELS: { name: string; module: number }[] = [
   // ml/kaggle_output/artifacts/crosswise_v1_best.tflite: the trained pedestrian-signal detector (9 classes).
   { name: 'crosswise.tflite', module: require('./crosswise.tflite') },
   // Same weights re-exported at 416 px with a raw [1, 13, 3549] head (no TopK/NMS ops in the graph) so the whole
-  // network runs on the Android GPU. The default (CW-23); see Documents/Whale/Secretary/drafts/capstone/models/EXPORT.md.
+  // network runs on the Android GPU. The default (CW-23).
   { name: 'crosswise-416.tflite', module: require('./crosswise-416.tflite') },
   // Same weights at 640 px with a raw head (no TopK), for measuring the Android GPU path (CW-23).
   { name: 'crosswise-640-raw.tflite', module: require('./crosswise-640-raw.tflite') },
