@@ -213,14 +213,16 @@ export class SettingsRepository {
     // veerGuidance:true although nobody could choose it. Reset it once; later choices are kept.
     let steerReset = false;
     try { steerReset = (await AsyncStorage.getItem(STEER_RESET_KEY)) != null; } catch { /* treat as not yet reset */ }
-    if (!steerReset) {
-      if (this.current.veerGuidance) this.current = { ...this.current, veerGuidance: false };
-      try { await AsyncStorage.setItem(STEER_RESET_KEY, '1'); } catch { console.warn('Could not record the steering reset'); }
-    }
+    if (!steerReset && this.current.veerGuidance) this.current = { ...this.current, veerGuidance: false };
     // Rewrite both legacy stores now, not only after the user next changes a preference.
     this.file.write(this.current);
+    let saved = true;
     try { await AsyncStorage.setItem(STORE_KEY, JSON.stringify(this.current)); }
-    catch { console.warn('Could not migrate settings'); }
+    catch { saved = false; console.warn('Could not migrate settings'); }
+    // The reset is marked done only after the cleared value is saved, so a failed save retries it on the next start.
+    if (!steerReset && saved) {
+      try { await AsyncStorage.setItem(STEER_RESET_KEY, '1'); } catch { console.warn('Could not record the steering reset'); }
+    }
     this.emit();
     return this.current;
   }

@@ -36,7 +36,7 @@ jest.mock('../src/state/controller', () => {
 let tree: any;
 const render = async (element: React.ReactElement) => { await act(async () => { tree = create(element); }); };
 const screenReader = (on: boolean) => jest.spyOn(AccessibilityInfo, 'isScreenReaderEnabled').mockResolvedValue(on);
-const toggle = () => tree.root.findAll((n: any) => n.props.accessibilityRole === 'button' && /^Voice commands, (on|off)$/.test(n.props.accessibilityLabel ?? ''))[0];
+const toggle = () => tree.root.findAll((n: any) => n.props.accessibilityRole === 'switch' && n.props.accessibilityLabel === 'Voice commands')[0];
 const withHazard = () => controller.ui.set({ ...controller.ui.value, snapshot: { ...EMPTY_SNAPSHOT, mode: AssistMode.SEARCHING, hazards: [{ side: Side.LEFT }] } as any });
 
 beforeEach(() => {
@@ -50,12 +50,12 @@ afterEach(async () => { if (tree) await act(async () => tree.unmount()); tree = 
 describe('10d the large Voice commands button', () => {
   test('is a button named for its state, at least 56 dp, and flips with the chosen mode', async () => {
     await render(<VoiceToggle bottom={120} />);
-    expect(toggle().props.accessibilityLabel).toBe('Voice commands, on');
+    expect(toggle().props.accessibilityState).toEqual({ checked: true });
     const style = StyleSheet.flatten(toggle().props.style);
     expect(style.minWidth).toBeGreaterThanOrEqual(56);
     expect(style.minHeight).toBeGreaterThanOrEqual(56);
     await act(async () => controller.voiceMode.set(false));
-    expect(toggle().props.accessibilityLabel).toBe('Voice commands, off');
+    expect(toggle().props.accessibilityState).toEqual({ checked: false });
     await act(async () => toggle().props.onPress());
     expect(controller.toggleVoice).toHaveBeenCalledTimes(1);
   });
@@ -95,6 +95,47 @@ describe('11 one event, one voice', () => {
     const banner = tree.root.findAll((n: any) => typeof n.type === 'string' && n.props.accessible === true && /vehicle/i.test(n.props.accessibilityLabel ?? ''));
     expect(banner.length).toBeGreaterThan(0);
     expect(JSON.stringify(tree.toJSON())).toContain('Listening…');
+  });
+
+  const bannerRegion = (label: RegExp) => tree.root.findAll((n: any) => typeof n.type === 'string' && n.props.accessible === true && label.test(n.props.accessibilityLabel ?? ''))[0]?.props.accessibilityLiveRegion;
+  const mainScreen = () => render(<MainScreen hasPermission canRequestPermission={false} requestPermission={() => {}} />);
+  const assist = () => controller.ui.set({ ...controller.ui.value, snapshot: { ...EMPTY_SNAPSHOT, mode: AssistMode.SEARCHING } as any });
+
+  test('states the app does NOT speak stay polite even with a screen reader and speech on (Too dark, loading)', async () => {
+    screenReader(true); assist();
+    controller.ui.set({ ...controller.ui.value, frameBrightness: 0.1 });
+    await mainScreen();
+    expect(bannerRegion(/Too dark/)).toBe('polite');
+    await act(async () => tree.unmount());
+    controller.ui.set({ ...controller.ui.value, frameBrightness: 0.5 });
+    controller.model.set({ kind: 'loading' } as any);
+    await mainScreen();
+    expect(bannerRegion(/Loading detection/)).toBe('polite');
+    controller.model.set({ kind: 'ready', info: { format: 'END_TO_END', labels: ['car'], hasPedestrianSignalClasses: true, displayName: 'test', inputWidth: 640, backend: 'CPU' } } as any);
+  });
+
+  test('spoken states: camera blocked is none with a screen reader and speech on, polite once speech is off', async () => {
+    screenReader(true); assist();
+    controller.ui.set({ ...controller.ui.value, frameBrightness: 0.01 });
+    await mainScreen();
+    expect(bannerRegion(/Camera blocked/)).toBe('none');
+    await act(async () => controller.settings.set({ ...controller.settings.value, speech: false }));
+    expect(bannerRegion(/Camera blocked/)).toBe('polite');
+    controller.ui.set({ ...controller.ui.value, frameBrightness: 0.5 });
+  });
+
+  test('hazard banner is polite when speech is off, even with a screen reader on', async () => {
+    screenReader(true); withHazard();
+    controller.settings.set({ ...controller.settings.value, speech: false });
+    await mainScreen();
+    expect(bannerRegion(/vehicle/i)).toBe('polite');
+  });
+
+  test('"Voice commands are off" stays polite with a screen reader on', async () => {
+    screenReader(true);
+    controller.settings.set({ ...controller.settings.value, speech: false });
+    await render(<VoiceStatus onHelp={() => {}} />);
+    expect(live()[0].props.accessibilityLiveRegion).toBe('polite');
   });
 
   test('turning the screen reader on while the screen is open switches the regions off', async () => {

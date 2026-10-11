@@ -11,7 +11,7 @@ const { create, act } = require('react-test-renderer');
 
 jest.mock('../src/camera/CameraSurface', () => ({ CameraSurface: () => null }));
 jest.mock('react-native-safe-area-context', () => ({ ...jest.requireActual('react-native-safe-area-context'), useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
-jest.mock('../src/ui/VoiceControl', () => ({ VoiceControl: () => null, VoiceStatus: () => null }));
+jest.mock('../src/ui/VoiceControl', () => ({ VoiceControl: () => null, VoiceStatus: () => null, VoiceToggle: () => null }));
 jest.mock('../src/ui/VoiceCheck', () => ({ VoiceCheck: () => null }));
 jest.mock('@expo/vector-icons', () => ({ MaterialIcons: () => null }));
 jest.mock('react-native-vision-camera', () => ({ useCameraPermission: () => ({ hasPermission: true, canRequestPermission: false }) }));
@@ -90,6 +90,16 @@ describe('Steering hints switch', () => {
     const later = await new SettingsRepository().load();
     expect(later.veerGuidance).toBe(true);
   });
+  test('the reset is not marked done when the cleared settings could not be saved, so it retries next start', async () => {
+    const storage = require('@react-native-async-storage/async-storage');
+    const saved = JSON.stringify({ ...DEFAULT_SETTINGS, veerGuidance: true });
+    storage.getItem.mockImplementation(async (key: string) => (key === 'crosswise_settings' ? saved : null));
+    storage.setItem.mockImplementationOnce(() => Promise.reject(new Error('disk full')));
+    const first = await new SettingsRepository().load();
+    expect(first.veerGuidance).toBe(false);
+    expect(storage.setItem).not.toHaveBeenCalledWith('crosswise_steer_hints_reset_v1', '1');
+    storage.setItem.mockImplementation(() => Promise.resolve());
+  });
 });
 
 describe('Crossing check steppers', () => {
@@ -105,7 +115,7 @@ describe('Crossing check steppers', () => {
       expect(node.props.accessibilityRole).toBe('adjustable');
       expect(node.props.accessibilityActions).toEqual([{ name: 'increment' }, { name: 'decrement' }]);
     }
-    expect(byId('stepper-hold').props.accessibilityValue).toEqual({ text: '5 seconds' });
+    expect(byId('stepper-hold').props.accessibilityValue).toEqual({ min: 3, max: 8, now: 5, text: '5 seconds' });
   });
   test('hold time steps 3 to 8 and stops at both ends', async () => {
     await render(<SettingsScreen onBack={() => undefined} />);
@@ -130,7 +140,7 @@ describe('Crossing check steppers', () => {
     await act(async () => { up.props.onPress(); });
     expect(controller.settings.value.holdSeconds).toBe(6);
     await act(async () => { byId('stepper-hold-down').props.onPress(); byId('stepper-hold-down').props.onPress(); });
-    expect(controller.settings.value.holdSeconds).toBeLessThanOrEqual(5);
+    expect(controller.settings.value.holdSeconds).toBe(4);
     for (const b of [up, down]) { expect(flat(b).width).toBeGreaterThanOrEqual(48); expect(flat(b).height).toBeGreaterThanOrEqual(48); }
     expect(flat(byId('stepper-hold')).minHeight).toBeGreaterThanOrEqual(48);
   });

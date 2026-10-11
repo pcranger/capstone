@@ -191,7 +191,7 @@ export const S = {
 
   practiceTitle: 'Practice the cues',
   practiceIntro:
-    'Every sound, word and vibration the app can produce, on demand, with no traffic involved. Learn them here before you stand at a curb. Use headphones to hear left and right.',
+    'Every sound, word and vibration the app can produce, on demand, with no traffic involved. Learn them here before you stand at a curb. Left and right are clearest on stereo sound; one earbud or bone-conduction audio keeps traffic audible.',
   practiceSignals: 'Signal phases',
   practiceHazards: 'Vehicles',
   practiceGuidance: 'Aiming and drift',

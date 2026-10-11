@@ -14,7 +14,7 @@ import { SignalPhase } from '../signal/signalPhaseTracker';
 import { InterfaceMode } from '../settings/settings';
 import { controller } from '../state/controller';
 import { useStore, useSampledStore } from '../state/store';
-import { S } from '../strings';
+import { P, S } from '../strings';
 import { askForCamera } from './askForCamera';
 import { BigButton, TextButton } from './components';
 import { DetectionOverlay, SegmentationOverlay } from './Overlays';
@@ -28,8 +28,7 @@ export function MainScreen({ height, topInset = 0, bottomInset = 0, hasPermissio
   height?: number; topInset?: number; bottomInset?: number; hasPermission: boolean; canRequestPermission: boolean; requestPermission: () => unknown;
 }) {
   const type = useType();
-  // The app speaks hazards and warnings itself, so a screen reader must not announce the same banner again (it can still be swiped to).
-  const live = liveRegionFor(useScreenReaderEnabled());
+  const screenReaderOn = useScreenReaderEnabled();
   const window = useWindowDimensions();
   const settings = useStore(controller.settings);
   const ui = useStore(controller.ui);
@@ -69,15 +68,20 @@ export function MainScreen({ height, topInset = 0, bottomInset = 0, hasPermissio
   }
   if (hazard && assistOn) status = S.hazardBanner(hazard.side === Side.LEFT ? S.sideLeft : hazard.side === Side.RIGHT ? S.sideRight : S.sideAhead);
   let unavailable: string | null = null;
+  // True only for banner states the app also says aloud (controller: detection unavailable, traffic unavailable, camera blocked).
+  let spokenState = false;
   if (!hasPermission) unavailable = 'Camera permission is off. Camera help needs it.';
-  else if (model.kind !== 'ready') unavailable = model.kind === 'loading' ? 'Loading detection…' : (developer ? 'Detection unavailable. Check the model in Settings → Developer.' : STEER.detectionUnavailableUser);
-  else if (camera !== 'running' || !fresh) unavailable = perceptionMessage(camera,fresh,pipeline,nowMs());
-  else if (assistOn && ui.frameBrightness < 0.04) unavailable = 'Camera blocked or too dark. Check the lens.';
+  else if (model.kind !== 'ready') { unavailable = model.kind === 'loading' ? 'Loading detection…' : (developer ? 'Detection unavailable. Check the model in Settings → Developer.' : STEER.detectionUnavailableUser); spokenState = model.kind !== 'loading'; }
+  else if (camera !== 'running' || !fresh) { unavailable = perceptionMessage(camera,fresh,pipeline,nowMs()); spokenState = unavailable !== P.cameraStarting && unavailable !== P.detectionWaiting; }
+  else if (assistOn && ui.frameBrightness < 0.04) { unavailable = 'Camera blocked or too dark. Check the lens.'; spokenState = true; }
   else if (assistOn && ui.frameBrightness < 0.12) unavailable = 'Too dark. Improve the camera view.';
   const pitch = ui.snapshot.pitchDeg;
   const posture = fresh && assistOn && pitch !== null ? pitch < -35 ? 'Raise phone. Point the camera ahead.' : pitch > 50 ? 'Lower phone. Point the camera ahead.' : null : null;
   const message = unavailable ?? (hazard && assistOn ? status : posture ?? status);
   const hazardShown = !unavailable && !!hazard && assistOn;
+  // The app speaks those states itself, so with speech and a screen reader on the banner is not announced a second time (it can still be swiped to).
+  // Everything else (device warnings, loading, permission, "Too dark", "Raise phone") is only on screen, so it stays polite.
+  const bannerLive = liveRegionFor(screenReaderOn && settings.speech && (hazardShown || (!!unavailable && spokenState)));
   // J8: one state banner. Hazard keeps its Package 1 look (yellow fill, black text); every other state uses its colour.
   const signalTone: Record<SignalPhase, string> = {
     [SignalPhase.UNKNOWN]: Colors.Unknown, [SignalPhase.WALK]: Colors.Walk, [SignalPhase.WALK_FLASHING]: Colors.Caution,
@@ -124,7 +128,7 @@ export function MainScreen({ height, topInset = 0, bottomInset = 0, hasPermissio
       </View>
     </ScrollView>}
     {(developer ? detailsOpen : hasPermission) && <ScrollView style={[styles.status, { top: topInset + (developer ? 60 : 0), maxHeight: Math.max(80, Math.min(window.height * (developer ? 0.38 : 0.28), window.height - topInset - bottomInset - 160)) }]}>
-      {hasPermission && <View accessible accessibilityLabel={message} accessibilityHint={hint} accessibilityLiveRegion={live}
+      {hasPermission && <View accessible accessibilityLabel={message} accessibilityHint={hint} accessibilityLiveRegion={bannerLive}
         style={[styles.banner, { backgroundColor: tone }]}>
         <MaterialIcons name={icon} size={28} color={onTone} />
         <View style={{ flex: 1 }}>
@@ -133,7 +137,7 @@ export function MainScreen({ height, topInset = 0, bottomInset = 0, hasPermissio
         </View>
       </View>}
       {/* J16: one slim line for headphones and battery; the label carries every warning. */}
-      {hasPermission && warnings.length > 0 && <View accessible accessibilityLabel={warnings.map(w => w[1]).join(' ')} accessibilityLiveRegion={live} style={styles.warnLine}>
+      {hasPermission && warnings.length > 0 && <View accessible accessibilityLabel={warnings.map(w => w[1]).join(' ')} accessibilityLiveRegion="polite" style={styles.warnLine}>
         <MaterialIcons name={warnings[0][0] === 'battery' ? 'battery-alert' : 'headset-off'} size={24} color={Colors.Warn} />
         <Text style={[type.bodyMedium, { flex: 1 }]} numberOfLines={2}>{warnings[0][1]}{warnings.length > 1 ? ` (+${warnings.length - 1} more)` : ''}</Text>
       </View>}

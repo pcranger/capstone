@@ -27,11 +27,12 @@ const FONT_CHOICES: [AppFont, string][] = [
  * A whole number with minus and plus buttons. For a screen reader the row is one adjustable control (swipe up or down
  * to change it); the two buttons are for touch and stay out of the reading order, like the slider's thumb.
  */
-export function StepperRow({ label, valueText, value, min, max, onChange, testID }: {
-  label: string; valueText: string; value: number; min: number; max: number; onChange: (v: number) => void; testID?: string;
+export function StepperRow({ label, valueText, value, min, max, onStep, testID }: {
+  label: string; valueText: string; value: number; min: number; max: number; onStep: (delta: number) => void; testID?: string;
 }) {
   const type = useType();
-  const step = (delta: number) => onChange(Math.min(max, Math.max(min, value + delta)));
+  // The caller adds the step to the latest stored value, so two quick presses never both start from the same stale number.
+  const step = onStep;
   const onAction = (e: AccessibilityActionEvent) => {
     if (e.nativeEvent.actionName === 'increment') step(1);
     else if (e.nativeEvent.actionName === 'decrement') step(-1);
@@ -46,7 +47,7 @@ export function StepperRow({ label, valueText, value, min, max, onChange, testID
   );
   return (
     <View testID={testID} accessible accessibilityRole="adjustable" accessibilityLabel={label}
-      accessibilityValue={{ text: valueText }}
+      accessibilityValue={{ min, max, now: value, text: valueText }}
       accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]} onAccessibilityAction={onAction}
       style={{ minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: Dimens.gapMedium }}>
       <Text style={[type.titleMedium, { flex: 1 }]}>{`${label}: ${valueText}`}</Text>
@@ -75,6 +76,8 @@ export function SettingsScreen({ onBack, onOpenGuide, onOpenPractice }: {
   const update = (transform: (s: AppSettings) => AppSettings) => controller.updateSettings(transform);
   const set = <K extends keyof AppSettings>(key: K) => (value: AppSettings[K]) =>
     update((s) => ({ ...s, [key]: value }));
+  const stepBy = (key: 'holdSeconds' | 'roadLanes', min: number, max: number) => (delta: number) =>
+    update((s) => ({ ...s, [key]: Math.min(max, Math.max(min, s[key] + delta)) }));
 
   /** Turning Developer on asks first (it shows test tools); turning it off, or going back to User, never does. */
   const chooseMode = (mode: InterfaceMode) => {
@@ -118,7 +121,6 @@ export function SettingsScreen({ onBack, onOpenGuide, onOpenPractice }: {
       <SectionCard title={S.settingsSectionFeedback}>
         <SwitchRow label={S.settingsSpeech} value={settings.speech} onChange={set('speech')} />
         <SwitchRow label={S.settingsTones} value={settings.tones} onChange={set('tones')} />
-        <Hint>{S.warnNoHeadphones}</Hint>
         <SwitchRow label={S.settingsHaptics} value={settings.haptics} onChange={set('haptics')} />
         <SwitchRow label={STEER.settingsSteerHints} value={settings.veerGuidance} onChange={set('veerGuidance')} />
         <Hint>{STEER.settingsSteerHintsExplain}</Hint>
@@ -149,9 +151,9 @@ export function SettingsScreen({ onBack, onOpenGuide, onOpenPractice }: {
 
       <SectionCard title={STEER.settingsSectionCrossingCheck}>
         <StepperRow label={STEER.settingsHoldName} valueText={STEER.settingsHoldValue(settings.holdSeconds)} value={settings.holdSeconds} min={3} max={8}
-          onChange={set('holdSeconds')} testID="stepper-hold" />
+          onStep={stepBy('holdSeconds', 3, 8)} testID="stepper-hold" />
         <StepperRow label={STEER.settingsRoadName} valueText={STEER.settingsRoadValue(settings.roadLanes)} value={settings.roadLanes} min={1} max={4}
-          onChange={set('roadLanes')} testID="stepper-lanes" />
+          onStep={stepBy('roadLanes', 1, 4)} testID="stepper-lanes" />
       </SectionCard>
 
       <SectionCard title={S.settingsSectionDisplay}>
@@ -197,7 +199,7 @@ export function SettingsScreen({ onBack, onOpenGuide, onOpenPractice }: {
         </Pressable>
         {precautionsOpen && <>
         <Text style={type.bodyMedium}>{S.safetyBody}</Text>
-        <Text style={type.bodyMedium}>Stereo headphones separate left and right tones. Phone speakers may play both together.</Text>
+        <Text style={type.bodyMedium}>Left and right tones are clearest on stereo sound. Phone speakers may play both together. To keep hearing traffic, use one earbud or bone-conduction audio.</Text>
         {model.kind === 'ready' && !model.info.hasPedestrianSignalClasses && <Text style={type.bodyMedium}>{S.warnBaselineModel}</Text>}
         </>}
       </SectionCard>

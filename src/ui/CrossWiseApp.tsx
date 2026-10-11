@@ -17,11 +17,14 @@ import { SettingsScreen } from './SettingsScreen';
 import { Colors, Dimens, useType } from './theme';
 
 const NOTICE_MS = 8_000;
+// The Voice commands switch (64 dp) sits just above the dock on the right; the notice goes above it so they never overlap.
+const VOICE_TOGGLE_ROW = Dimens.touchTarget + 8 + 8;
 type Panel = 'settings' | 'guide' | 'practice' | null;
 export function CrossWiseApp() {
   const type = useType();
   const loaded = useStore(controller.settingsLoaded);
   const notice = useStore(controller.notice);
+  const speechOn = useStore(controller.settings).speech;
   // "Vehicle detection unavailable." is also spoken by the app (announceDetectionError); a screen reader must not repeat it.
   const live = liveRegionFor(useScreenReaderEnabled());
   const permission = useCameraPermission();
@@ -84,7 +87,7 @@ export function CrossWiseApp() {
       </View>}
       {notice && <Pressable accessibilityRole="alert" accessibilityLiveRegion={notice === P.detectionUnavailable ? live : 'polite'} accessibilityLabel={notice}
         accessibilityHint={S.noticeDismissHint} onPress={() => controller.clearNotice()}
-        style={[styles.notice, { bottom: dockHeight + 8 }]}>
+        style={[styles.notice, { bottom: dockHeight + 8 + (permission.hasPermission && speechOn ? VOICE_TOGGLE_ROW : 0) }]}>
         <Text style={type.bodyLarge}>{notice}</Text>
       </Pressable>}
     </View>
