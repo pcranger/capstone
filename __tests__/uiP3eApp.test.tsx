@@ -19,7 +19,7 @@ jest.mock('../src/state/controller', () => {
   const { Store } = require('../src/state/store');
   return {
     controller: {
-      settingsLoaded: new Store(false), notice: new Store(null), presentation: new Store({ mapOpen: false, expanded: false }),
+      settings: new Store({ speech: true }), settingsLoaded: new Store(false), notice: new Store(null), presentation: new Store({ mapOpen: false, expanded: false }),
       setHomeVisible: jest.fn(), clearNotice: jest.fn(), closeMap: jest.fn(),
     },
   };
@@ -35,5 +35,18 @@ test('while settings load: a spinner, the words, and one polite progress live re
   expect(tree.root.findAllByType(ActivityIndicator)).toHaveLength(1);
   await act(async () => controller.settingsLoaded.set(true));
   expect(tree.root.findAll((n: any) => n.props.accessibilityRole === 'progressbar')).toHaveLength(0);
+  await act(async () => tree.unmount());
+});
+
+test('the 8-second notice sits above the Voice commands switch while it is shown, and drops to the dock when speech is off', async () => {
+  const { StyleSheet } = require('react-native');
+  let tree: any;
+  await act(async () => controller.settingsLoaded.set(true));
+  await act(async () => { tree = create(<CrossWiseApp />); });
+  await act(async () => (controller as any).notice.set('Saved.'));
+  const bottom = () => StyleSheet.flatten(tree.root.findAll((n: any) => n.props.accessibilityRole === 'alert')[0].props.style).bottom;
+  expect(bottom()).toBe(120 + 64 + 8 + 8);
+  await act(async () => (controller as any).settings.set({ speech: false }));
+  expect(bottom()).toBe(120 + 8);
   await act(async () => tree.unmount());
 });

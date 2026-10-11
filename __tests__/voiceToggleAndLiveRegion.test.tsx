@@ -36,7 +36,7 @@ jest.mock('../src/state/controller', () => {
 let tree: any;
 const render = async (element: React.ReactElement) => { await act(async () => { tree = create(element); }); };
 const screenReader = (on: boolean) => jest.spyOn(AccessibilityInfo, 'isScreenReaderEnabled').mockResolvedValue(on);
-const toggle = () => tree.root.findAll((n: any) => n.props.accessibilityRole === 'button' && /^Voice commands, (on|off)$/.test(n.props.accessibilityLabel ?? ''))[0];
+const toggle = () => tree.root.findAll((n: any) => n.props.accessibilityRole === 'switch' && n.props.accessibilityLabel === 'Voice commands')[0];
 const withHazard = () => controller.ui.set({ ...controller.ui.value, snapshot: { ...EMPTY_SNAPSHOT, mode: AssistMode.SEARCHING, hazards: [{ side: Side.LEFT }] } as any });
 
 beforeEach(() => {
@@ -50,12 +50,12 @@ afterEach(async () => { if (tree) await act(async () => tree.unmount()); tree = 
 describe('10d the large Voice commands button', () => {
   test('is a button named for its state, at least 56 dp, and flips with the chosen mode', async () => {
     await render(<VoiceToggle bottom={120} />);
-    expect(toggle().props.accessibilityLabel).toBe('Voice commands, on');
+    expect(toggle().props.accessibilityState).toEqual({ checked: true });
     const style = StyleSheet.flatten(toggle().props.style);
     expect(style.minWidth).toBeGreaterThanOrEqual(56);
     expect(style.minHeight).toBeGreaterThanOrEqual(56);
     await act(async () => controller.voiceMode.set(false));
-    expect(toggle().props.accessibilityLabel).toBe('Voice commands, off');
+    expect(toggle().props.accessibilityState).toEqual({ checked: false });
     await act(async () => toggle().props.onPress());
     expect(controller.toggleVoice).toHaveBeenCalledTimes(1);
   });

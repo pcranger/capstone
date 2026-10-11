@@ -11,12 +11,11 @@ import { Colors, Dimens, useType } from './theme';
 
 /** One recovery control; the usual entry is the automatic spoken startup. */
 export function VoiceControl({ onHelp }: { onHelp?: () => void }) {
-  const state = useStore(controller.voice.state);
+  const mode = useStore(controller.voiceMode);
   const settings = useStore(controller.settings);
-  const active = !['off', 'error'].includes(state.phase);
   if (!settings.speech) return <IconPill icon="mic-off" label="Voice settings" onPress={() => onHelp?.()} />;
-  return <IconPill icon={active ? 'mic' : 'mic-off'} label={active ? S.voiceStop : state.phase === 'error' ? S.voiceRetry : S.voiceStart}
-    onPress={() => active ? controller.stopVoice() : controller.startVoice(true)} />;
+  // Shows what the user chose (voiceMode), not the microphone's momentary state, so the pill does not flip between prompts.
+  return <IconPill icon={mode ? 'mic' : 'mic-off'} label={mode ? S.voiceStop : S.voiceStart} onPress={() => controller.toggleVoice()} />;
 }
 
 /**
@@ -31,7 +30,7 @@ export function VoiceToggle({ bottom }: { bottom: number }) {
   // With speech switched off the top control already sends the user to Settings; a button that does nothing would only confuse.
   if (!settings.speech) return null;
   return <View pointerEvents="box-none" style={[styles.slot, { bottom }]}>
-    <Pressable accessibilityRole="button" accessibilityLabel={on ? VT.toggleOn : VT.toggleOff} accessibilityHint={VT.toggleHint}
+    <Pressable accessibilityRole="switch" accessibilityState={{ checked: on }} accessibilityLabel={VT.toggleLabel} accessibilityHint={VT.toggleHint}
       onPress={() => controller.toggleVoice()} style={[styles.toggle, { backgroundColor: on ? Colors.Crossing : Colors.SurfaceVariant }]}>
       <MaterialIcons name={on ? 'mic' : 'mic-off'} size={28} color={Colors.OnSurface} />
       <Text style={type.titleMedium} maxFontSizeMultiplier={1.3}>{on ? VT.toggleOnText : VT.toggleOffText}</Text>

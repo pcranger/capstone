@@ -6,6 +6,7 @@ export const VT = {
   alreadyOff: 'Camera help already off.',
   crossAlready: 'Crossing guidance already on.',
   /** Always-visible mic button above the dock. The label is what a screen reader reads. */
+  toggleLabel: 'Voice commands',
   toggleOn: 'Voice commands, on',
   toggleOff: 'Voice commands, off',
   toggleHint: 'Double-tap to switch voice commands on or off.',
