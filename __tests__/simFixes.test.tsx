@@ -13,9 +13,6 @@ jest.mock('../src/camera/CameraSurface', () => ({ CameraSurface: () => null }));
 jest.mock('react-native-safe-area-context', () => ({ ...jest.requireActual('react-native-safe-area-context'), useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
 jest.mock('@expo/vector-icons', () => ({ MaterialIcons: () => null }));
 jest.mock('../src/ui/VoiceControl', () => ({ VoiceControl: () => null, VoiceStatus: () => null }));
-jest.mock('../src/ui/MapPanel', () => ({ MapPanel: () => null }));
-jest.mock('../src/ui/DestinationSheet', () => ({ DestinationSheet: () => null }));
-jest.mock('../src/config/services', () => ({ nativeMapConfigured: true, services: { mapsRestApiKey: 'fixture', geminiApiKey: 'fixture' } }));
 jest.mock('../src/ui/Overlays', () => ({ DetectionOverlay: () => null, SegmentationOverlay: () => null, SegmentationLegend: () => null }));
 jest.mock('../modules/crosswise-native', () => ({ __esModule: true, default: null }));
 jest.mock('../src/perception/modelLoader', () => ({ displayNameOf: () => 'test.tflite', referenceOf: () => 'asset:test.tflite' }));
@@ -27,16 +24,12 @@ jest.mock('../src/state/controller', () => {
   const { EMPTY_SNAPSHOT } = require('../src/crossing/crossingEngine');
   const c = {
     settings: new Store({ ...DEFAULT_SETTINGS, acceptedSafetyNotice: true }),
-    presentation: new Store({ mapOpen: false, expanded: false }),
-    openMap: () => c.presentation.update((s: any) => ({ ...s, mapOpen: true })),
-    closeMap: () => c.presentation.update((s: any) => ({ ...s, mapOpen: false })),
-    journey: { state: new Store({ phase: 'idle', crossing: false }), running: false },
     planner: { state: new Store({ replacing: false }) },
     ui: new Store({ snapshot: EMPTY_SNAPSHOT, fps: 30, inferenceMs: 20, frameBrightness: 0.5, frameAspect: 0.56, caption: null }),
     model: new Store({ kind: 'ready', info: { format: 'END_TO_END', labels: ['car'], hasPedestrianSignalClasses: true, displayName: 'test', inputWidth: 640, backend: 'CPU' } }),
     cameraStatus: new Store('running'), pipeline: new Store({ receivedAt: 0, latencyMs: 0, slowFrames: 0, error: null }), cameraDetail: new Store(null),
     hasRecentFrame: true, mask: new Store(null),
-    repeatGuidance: jest.fn(), crossingAction: jest.fn(), command: jest.fn(), startJourney: jest.fn(), pauseJourney: jest.fn(), stopNavigation: jest.fn(),
+    repeatGuidance: jest.fn(), crossingAction: jest.fn(), command: jest.fn(),
     changeDestination: jest.fn(), finishJourney: jest.fn(), stopVoice: jest.fn(),
   };
   return { controller: c };
@@ -52,7 +45,6 @@ beforeEach(() => {
   jest.clearAllMocks();
   controller.settings.set({ ...DEFAULT_SETTINGS, acceptedSafetyNotice: true });
   controller.ui.set({ ...controller.ui.value, snapshot: EMPTY_SNAPSHOT, frameBrightness: 0.5 });
-  controller.presentation.set({ mapOpen: false, expanded: false });
 });
 afterEach(async () => { if (tree) await act(async () => tree.unmount()); tree = undefined; });
 

@@ -19,9 +19,6 @@ jest.mock('../src/camera/CameraSurface', () => ({ CameraSurface: () => null }));
 jest.mock('react-native-safe-area-context', () => ({ ...jest.requireActual('react-native-safe-area-context'), useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
 jest.mock('@expo/vector-icons', () => ({ MaterialIcons: () => null }));
 jest.mock('../src/ui/VoiceControl', () => ({ VoiceControl: () => null, VoiceStatus: () => null }));
-jest.mock('../src/ui/MapPanel', () => ({ MapPanel: () => null }));
-jest.mock('../src/ui/DestinationSheet', () => ({ DestinationSheet: () => null }));
-jest.mock('../src/config/services', () => ({ nativeMapConfigured: true, services: { mapsRestApiKey: 'fixture', geminiApiKey: 'fixture' } }));
 jest.mock('../src/ui/Overlays', () => ({ DetectionOverlay: () => null, SegmentationOverlay: () => null, SegmentationLegend: () => null }));
 jest.mock('../modules/crosswise-native', () => ({
   __esModule: true,
@@ -36,16 +33,12 @@ jest.mock('../src/state/controller', () => {
   const { EMPTY_SNAPSHOT } = require('../src/crossing/crossingEngine');
   const c = {
     settings: new Store({ ...DEFAULT_SETTINGS, acceptedSafetyNotice: true }),
-    presentation: new Store({ mapOpen: false, expanded: false }),
-    openMap: () => c.presentation.update((s: any) => ({ ...s, mapOpen: true })),
-    closeMap: () => c.presentation.update((s: any) => ({ ...s, mapOpen: false })),
-    journey: { state: new Store({ phase: 'idle', crossing: false }), running: false },
     planner: { state: new Store({ replacing: false }) },
     ui: new Store({ snapshot: EMPTY_SNAPSHOT, fps: 30, inferenceMs: 20, frameBrightness: 0.5, frameAspect: 0.56, caption: null }),
     model: new Store({ kind: 'ready', info: { format: 'END_TO_END', labels: ['car'], hasPedestrianSignalClasses: true, displayName: 'test', inputWidth: 640, backend: 'CPU' } }),
     cameraStatus: new Store('running'), pipeline: new Store({ receivedAt: 0, latencyMs: 0, slowFrames: 0, error: null }), cameraDetail: new Store(null),
     hasRecentFrame: true, mask: new Store(null),
-    repeatGuidance: jest.fn(), crossingAction: jest.fn(), command: jest.fn(), startJourney: jest.fn(), pauseJourney: jest.fn(), stopNavigation: jest.fn(),
+    repeatGuidance: jest.fn(), crossingAction: jest.fn(), command: jest.fn(),
     changeDestination: jest.fn(), finishJourney: jest.fn(), stopVoice: jest.fn(),
   };
   return { controller: c };
@@ -69,8 +62,6 @@ beforeEach(() => {
   setReduce(false);
   controller.settings.set({ ...DEFAULT_SETTINGS, acceptedSafetyNotice: true });
   controller.ui.set({ ...controller.ui.value, snapshot: EMPTY_SNAPSHOT, frameBrightness: 0.5 });
-  controller.presentation.set({ mapOpen: false, expanded: false });
-  controller.journey.state.set({ phase: 'idle', crossing: false } as any);
 });
 afterEach(async () => { if (tree) await act(async () => tree.unmount()); tree = undefined; jest.restoreAllMocks(); });
 
@@ -96,11 +87,10 @@ describe('X1 and J17 press feedback', () => {
 describe('J12 the dock shows at most three actions, never scrolls, and More controls opens a sheet', () => {
   test('every state shows 3 or fewer buttons in the dock', async () => {
     const states: [AssistMode, object][] = [
-      [AssistMode.IDLE, { phase: 'idle' }], [AssistMode.SEARCHING, { phase: 'idle' }], [AssistMode.SEARCHING, { phase: 'walking' }],
-      [AssistMode.IDLE, { phase: 'paused' }], [AssistMode.CROSSING, { phase: 'paused', crossing: true }],
+      [AssistMode.IDLE, { phase: 'idle' }], [AssistMode.SEARCHING, { phase: 'idle' }], [AssistMode.CROSSING, { phase: 'idle' }],
     ];
-    for (const [mode, journey] of states) {
-      setMode(mode); controller.journey.state.set({ crossing: false, ...journey } as any);
+    for (const [mode] of states) {
+      setMode(mode);
       for (const compact of [false, true]) {
         await render(<JourneyControls stacked={false} compact={compact} />);
         expect(labels().length).toBeLessThanOrEqual(3);
@@ -131,24 +121,6 @@ describe('J12 the dock shows at most three actions, never scrolls, and More cont
   });
 });
 
-describe('X2 the destination sheet slides 200 ms on transform', () => {
-  const journey = () => render(<JourneyScreen onSettings={() => {}} hidden={false} hasPermission canRequestPermission={false} requestPermission={() => {}} />);
-  test('expanding animates once, 200 ms, on the native driver', async () => {
-    await journey(); await act(async () => {});
-    const timing = jest.spyOn(Animated, 'timing');
-    await act(async () => controller.presentation.update((s: any) => ({ ...s, expanded: true })));
-    expect(timingCalls(timing, 200)).toHaveLength(1);
-    expect(timing).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ toValue: 0, duration: 200, useNativeDriver: true }));
-  });
-  test('with Reduce Motion the height change is instant', async () => {
-    setReduce(true);
-    await journey(); await act(async () => {});
-    const timing = jest.spyOn(Animated, 'timing');
-    await act(async () => controller.presentation.update((s: any) => ({ ...s, expanded: true })));
-    expect(timingCalls(timing, 200)).toHaveLength(0);
-  });
-});
-
 describe('J16 slim warnings line', () => {
   test('no warning, no line', async () => {
     await mainScreen(); await act(async () => {});
@@ -170,7 +142,7 @@ describe('J18 and X3 tokens', () => {
       .toEqual(['#FFD87A', '#80DEEA', '#1464C0', '#FF7777', '#69DB92', '#89959B']);
   });
   test('those screens no longer carry the literals', () => {
-    for (const file of ['MainScreen', 'JourneyScreen', 'DestinationSheet', 'VehicleVisibilityControls', 'MapPanel']) {
+    for (const file of ['MainScreen', 'JourneyScreen', 'VehicleVisibilityControls']) {
       const source = fs.readFileSync(`${process.cwd()}/src/ui/${file}.tsx`, 'utf8');
       expect(source).not.toMatch(/#FFD87A|#80DEEA|#FF7777|#69DB92|#89959B|#1464C0|rgba\(20,100,192/i);
     }

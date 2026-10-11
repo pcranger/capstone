@@ -23,13 +23,8 @@ jest.mock('react-native-safe-area-context', () => ({ ...jest.requireActual('reac
 jest.mock('../src/ui/VoiceControl', () => ({ VoiceControl: () => null, VoiceStatus: () => null }));
 jest.mock('../src/ui/VoiceCheck', () => ({ VoiceCheck: () => null }));
 jest.mock('@expo/vector-icons', () => ({ MaterialIcons: () => null }));
-jest.mock('../src/config/services', () => ({ nativeMapConfigured: true, services: {
-  mapsRestApiKey: 'private-map-fixture', geminiApiKey: 'private-ai-fixture',
-} }));
 jest.mock('react-native-vision-camera', () => ({ useCameraPermission: () => ({ hasPermission: true, canRequestPermission: false }) }));
 jest.mock('../src/ui/Overlays', () => ({ DetectionOverlay: () => 'DetectionOverlay', SegmentationOverlay: () => null, SegmentationLegend: () => null }));
-jest.mock('../src/ui/MapPanel', () => ({ MapPanel: (props: any) => require('react').createElement('MapPanel', props) }));
-jest.mock('../src/ui/DestinationSheet', () => ({ DestinationSheet: () => 'DestinationSheet' }));
 jest.mock('../modules/crosswise-native', () => ({ __esModule: true, default: null }));
 jest.mock('../src/perception/modelLoader', () => ({ displayNameOf: () => 'test.tflite', referenceOf: () => 'asset:test.tflite' }));
 jest.mock('expo-file-system', () => ({ File: class { exists = false; create() {} write() {} }, Paths: {} }));
@@ -41,17 +36,13 @@ jest.mock('../src/state/controller', () => {
   const c = {
     settings: new Store({ ...DEFAULT_SETTINGS, acceptedSafetyNotice: true }),
     settingsLoaded: new Store(true),
-    presentation: new Store({ mapOpen: false, expanded: false }),
     planner: { state: new Store({ replacing: false }), cancel: jest.fn() },
-    openMap: () => c.presentation.update((s: any) => ({ ...s, mapOpen: true })),
-    closeMap: () => c.presentation.update((s: any) => ({ ...s, mapOpen: false })),
-    journey: { state: new Store({ phase: 'idle', crossing: false }), running: false },
     ui: new Store({ snapshot: EMPTY_SNAPSHOT, fps: 30, inferenceMs: 20, frameBrightness: 0.5, frameAspect: 0.56, caption: null }),
     notice: new Store(null), model: new Store({ kind: 'ready', info: { format: 'END_TO_END', labels: ['car'], hasPedestrianSignalClasses: true, displayName: 'test', inputWidth: 640, backend: 'CPU' } }),
     cameraStatus: new Store('running'), pipeline:new Store({receivedAt:0,latencyMs:0,slowFrames:0,error:null}),cameraDetail:new Store(null), hasRecentFrame: true, repeatGuidance: jest.fn(), crossingAction: jest.fn(),
     mask: new Store(null), describing: new Store(false), modelLibrary: new Store([]),
     previewSpeech: jest.fn(async()=>true), stopSpeechPreview: jest.fn(),
-    sayNavigation: jest.fn(), setHomeVisible: jest.fn(), command: jest.fn(), clearNotice: jest.fn(),
+    speakNow: jest.fn(), setHomeVisible: jest.fn(), command: jest.fn(), clearNotice: jest.fn(),
     logger: { sessions: () => [] },
     updateSettings: jest.fn((fn: (s: typeof DEFAULT_SETTINGS) => typeof DEFAULT_SETTINGS): void => { c.settings.set(fn(c.settings.value)); }),
   };
@@ -73,12 +64,10 @@ function renderedText() { return JSON.stringify(tree.toJSON()); }
 beforeEach(() => {
   controller.settings.set({ ...DEFAULT_SETTINGS, acceptedSafetyNotice: true });
   controller.ui.set({ ...controller.ui.value, snapshot: EMPTY_SNAPSHOT, frameBrightness: 0.5 });
-  controller.presentation.set({ mapOpen: false, expanded: false });
   mockCameraMount.mockClear(); mockCameraUnmount.mockClear();
   (controller.command as jest.Mock).mockClear();
   (controller.repeatGuidance as jest.Mock).mockClear(); (controller.crossingAction as jest.Mock).mockClear();
   controller.cameraStatus.set('running');
-  controller.journey.state.set({ phase: 'idle', crossing: false } as any);
 });
 afterEach(async () => { if (tree) await act(async () => tree.unmount()); tree = null; });
 
@@ -142,38 +131,18 @@ test('changing mode on Settings keeps that tab and the camera mounted', async ()
   expect(mockCameraUnmount).not.toHaveBeenCalled();
 });
 
-test('Developer settings shows service readiness without any key editor or credential value', async () => {
-  controller.settings.set({ ...controller.settings.value, interfaceMode: InterfaceMode.DEVELOPER });
-  await render(<SettingsScreen onBack={() => undefined} />);
-  expect(renderedText()).toContain('configured');
-  expect(renderedText()).not.toContain('private-map-fixture');
-  expect(renderedText()).not.toContain('private-ai-fixture');
-  expect(tree.root.findAllByType(require('react-native').TextInput)).toHaveLength(0);
-});
-
 test.each([S.settingsOpenGuide, S.practiceTitle])('help page %s and settings preserve the running camera', async link => {
   const snapshot = { ...EMPTY_SNAPSHOT, mode: AssistMode.CROSSING };
   controller.ui.set({ ...controller.ui.value, snapshot });
   await render(<CrossWiseApp />);
-  expect(button('Show map')).toBeDefined();
+  expect(button(S.actionEndCrossing)).toBeDefined();
   await press('Settings'); await press(link);
   await press(S.actionBackToSettings);
   expect(tree.root.findAllByType(SettingsScreen)).toHaveLength(1);
   await press('Developer mode'); await press('Turn on'); await press('User mode'); await press(S.actionBack);
-  expect(button('Show map')).toBeDefined();
+  expect(button(S.actionEndCrossing)).toBeDefined();
   expect(controller.ui.value.snapshot).toBe(snapshot);
   expect(controller.command).not.toHaveBeenCalled();
-  expect(mockCameraMount).toHaveBeenCalledTimes(1);
-  expect(mockCameraUnmount).not.toHaveBeenCalled();
-});
-
-test('camera is the default view; destination planning does not restart it', async () => {
-  await render(<CrossWiseApp />);
-  expect(button('Show map').props.accessibilityState.expanded).toBe(false);
-  expect(tree.root.findAll((n: any) => n.props.testID === 'full-map')[0].props.accessibilityElementsHidden).toBe(true);
-  expect(button(S.tabNavigate)).toBeUndefined();
-  await press('Show map');
-  expect(renderedText()).toContain('DestinationSheet');
   expect(mockCameraMount).toHaveBeenCalledTimes(1);
   expect(mockCameraUnmount).not.toHaveBeenCalled();
 });
@@ -203,12 +172,11 @@ test('camera interruption suppresses old observations and provides recovery', as
   expect(mockCameraMount).toHaveBeenCalledTimes(2);
 });
 
-test('camera denial leaves destination planning and permission recovery available', async () => {
+test('camera denial leaves permission recovery available', async () => {
   const request = jest.fn();
   await render(<MainScreen height={200} hasPermission={false} canRequestPermission requestPermission={request} />);
   expect(mockCameraMount).not.toHaveBeenCalled();
   expect(renderedText()).toContain('Camera is off');
-  expect(renderedText()).toContain('Routes still work without it');
   await press('Allow camera'); expect(request).toHaveBeenCalledTimes(1);
 });
 
@@ -244,35 +212,10 @@ test('a slider follows external settings changes after a local drag', async () =
   expect(onCommit).not.toHaveBeenCalled();
 });
 
-test('paused unfinished crossing exposes only explicit footpath recovery and End, with Resume after confirmation', async () => {
-  controller.journey.state.set({ phase: 'paused', crossing: true } as any);
-  await render(<JourneyControls stacked />);
-  expect(button('I’m on the footpath')).toBeDefined(); expect(button('Resume')).toBeUndefined(); expect(button('End journey')).toBeDefined();
-  await act(async () => controller.journey.state.set({ phase: 'paused', crossing: false } as any));
-  expect(button('I’m on the footpath')).toBeUndefined(); expect(button('Resume')).toBeDefined();
-});
-
-test('30 full map transitions preserve the native camera, map and crossing', async () => {
-  const snapshot = { ...EMPTY_SNAPSHOT, mode: AssistMode.CROSSING };
-  controller.ui.set({ ...controller.ui.value, snapshot });
-  await render(<CrossWiseApp />);
-  const map = tree.root.findByType('MapPanel');
-  for (let i = 0; i < 30; i++) {
-    await press('Show map');
-    expect(tree.root.findByType(MainScreen).props.hidden).toBe(true);
-    expect(tree.root.findByType('MapPanel').props.fullScreen).toBe(true);
-    await press('Close full-screen map');
-    expect(tree.root.findByType(MainScreen).props.hidden).toBe(false);
-  }
-  expect(tree.root.findByType('MapPanel')).toBe(map);
-  expect(mockCameraMount).toHaveBeenCalledTimes(1); expect(mockCameraUnmount).not.toHaveBeenCalled();
-  expect(controller.ui.value.snapshot).toBe(snapshot); expect(controller.command).not.toHaveBeenCalled();
-});
-
 test('first launch goes straight to the journey; general precautions are in Settings', async () => {
   controller.settings.set({ ...DEFAULT_SETTINGS, acceptedSafetyNotice: false });
   await render(<CrossWiseApp />);
-  expect(button('Show map')).toBeDefined();
+  expect(button(S.actionStartAssist)).toBeDefined();
   expect(button(S.safetyAccept)).toBeUndefined();
   expect(renderedText()).not.toContain(S.safetyBody);
   await press('Settings');
@@ -290,20 +233,15 @@ test('User camera keeps one primary button in view and the routine buttons behin
   await press('More controls'); expect(button('Stop camera help')).toBeDefined(); expect(button('I’m crossing')).toBeDefined();
   await press('Close'); expect(button('Stop camera help')).toBeUndefined(); // UI P3e J12: the sheet's Close button
 });
-test('compact crossing controls never hide unfinished-crossing recovery', async () => {
-  controller.journey.state.set({ phase: 'paused', crossing: true } as any);
-  await render(<JourneyControls compact stacked />);
-  expect(button('I’m on the footpath')).toBeDefined(); expect(button('Resume')).toBeUndefined();
-});
-test('in-app help teaches exact voice turns, search versus start, fallback and recovery', async () => {
+test('in-app help teaches exact voice turns, fallback and recovery', async () => {
   await render(<SettingsScreen onBack={() => {}} />);
-  expect(renderedText()).not.toContain('Navigate to Sydney Town Hall');
+  expect(renderedText()).not.toContain('turns camera help on');
   await press('Commands and voice setup');
   await press('If voice fails');
   const text = renderedText();
-  for (const phrase of ['Manual', 'Navigate to Sydney Town Hall', 'Save as Home', 'cannot hear commands', 'Finish crossing', 'Enable Dictation']) expect(text).toContain(phrase);
+  for (const phrase of ['Manual', 'turns camera help on', 'cannot hear commands', 'Finish crossing', 'Enable Dictation']) expect(text).toContain(phrase);
   expect(button('Read voice instructions')).toBeDefined(); expect(button('Open app settings')).toBeDefined();
-  await press('Read voice instructions'); expect(controller.sayNavigation).toHaveBeenCalledWith(expect.stringContaining('Navigate to Town Hall'));
+  await press('Read voice instructions'); expect(controller.speakNow).toHaveBeenCalledWith(expect.stringContaining('Finish crossing'));
 });
 
 test('voice help enables spoken guidance when speech was disabled', async () => {
@@ -343,7 +281,7 @@ test('User status gives actionable posture guidance without developer measuremen
 });
 
 
-test('Android Back closes settings and the map without unmounting the camera', async () => {
+test('Android Back closes settings without unmounting the camera', async () => {
   let back = () => false;
   const spy = jest.spyOn(BackHandler, 'addEventListener').mockImplementation((_event, handler) => {
     back = handler as () => boolean;
@@ -351,12 +289,9 @@ test('Android Back closes settings and the map without unmounting the camera', a
   });
   try {
     await render(<CrossWiseApp />);
-    await press('Show map');
-    await act(async () => { expect(back()).toBe(true); });
-    expect(controller.presentation.value.mapOpen).toBe(false);
     await press('Settings');
     await act(async () => { expect(back()).toBe(true); });
-    expect(button('Show map')).toBeDefined();
+    expect(button(S.actionStartAssist)).toBeDefined();
     expect(back()).toBe(false);
     expect(mockCameraMount).toHaveBeenCalledTimes(1);
     expect(mockCameraUnmount).not.toHaveBeenCalled();

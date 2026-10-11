@@ -19,11 +19,8 @@ jest.mock('react-native-safe-area-context', () => ({ ...jest.requireActual('reac
 jest.mock('../src/ui/VoiceControl', () => ({ VoiceControl: () => null, VoiceStatus: () => null }));
 jest.mock('../src/ui/VoiceCheck', () => ({ VoiceCheck: () => null }));
 jest.mock('@expo/vector-icons', () => ({ MaterialIcons: () => null }));
-jest.mock('../src/config/services', () => ({ nativeMapConfigured: true, services: { mapsRestApiKey: 'fixture', geminiApiKey: 'fixture' } }));
 jest.mock('react-native-vision-camera', () => ({ useCameraPermission: () => ({ hasPermission: true, canRequestPermission: false }) }));
 jest.mock('../src/ui/Overlays', () => ({ DetectionOverlay: () => null, SegmentationOverlay: () => null, SegmentationLegend: () => null }));
-jest.mock('../src/ui/MapPanel', () => ({ MapPanel: () => null }));
-jest.mock('../src/ui/DestinationSheet', () => ({ DestinationSheet: () => null }));
 jest.mock('../modules/crosswise-native', () => ({ __esModule: true, default: null }));
 jest.mock('../src/perception/modelLoader', () => ({ displayNameOf: () => 'test.tflite', referenceOf: () => 'asset:test.tflite' }));
 jest.mock('expo-file-system', () => ({ File: class { exists = false; create() {} write() {} }, Paths: {} }));
@@ -35,11 +32,7 @@ jest.mock('../src/state/controller', () => {
   const c = {
     settings: new Store({ ...DEFAULT_SETTINGS, acceptedSafetyNotice: true }),
     settingsLoaded: new Store(true),
-    presentation: new Store({ mapOpen: false, expanded: false }),
     planner: { state: new Store({ replacing: false }), cancel: jest.fn() },
-    openMap: () => c.presentation.update((s: any) => ({ ...s, mapOpen: true })),
-    closeMap: () => c.presentation.update((s: any) => ({ ...s, mapOpen: false })),
-    journey: { state: new Store({ phase: 'idle', crossing: false }), running: false },
     ui: new Store({ snapshot: EMPTY_SNAPSHOT, fps: 30, inferenceMs: 20, frameBrightness: 0.5, frameAspect: 0.56, caption: null }),
     notice: new Store(null),
     model: new Store({ kind: 'ready', info: { format: 'END_TO_END', labels: ['car'], hasPedestrianSignalClasses: true, displayName: 'test', inputWidth: 640, backend: 'CPU' } }),
@@ -47,7 +40,7 @@ jest.mock('../src/state/controller', () => {
     hasRecentFrame: true, repeatGuidance: jest.fn(), crossingAction: jest.fn(),
     mask: new Store(null), describing: new Store(false), modelLibrary: new Store([]),
     previewSpeech: jest.fn(async () => true), stopSpeechPreview: jest.fn(),
-    sayNavigation: jest.fn(), setHomeVisible: jest.fn(), command: jest.fn(), clearNotice: jest.fn(), stopVoice: jest.fn(),
+    speakNow: jest.fn(), setHomeVisible: jest.fn(), command: jest.fn(), clearNotice: jest.fn(), stopVoice: jest.fn(),
     logger: { sessions: () => [] },
     updateSettings: jest.fn((fn: (s: typeof DEFAULT_SETTINGS) => typeof DEFAULT_SETTINGS): void => { c.settings.set(fn(c.settings.value)); }),
   };
@@ -65,7 +58,6 @@ beforeEach(() => {
   jest.clearAllMocks();
   controller.settings.set({ ...DEFAULT_SETTINGS, acceptedSafetyNotice: true });
   controller.ui.set({ ...controller.ui.value, snapshot: EMPTY_SNAPSHOT, frameBrightness: 0.5 });
-  controller.presentation.set({ mapOpen: false, expanded: false });
   controller.notice.set(null);
 });
 afterEach(async () => { if (tree) await act(async () => tree.unmount()); tree = undefined; jest.useRealTimers(); });
@@ -94,17 +86,6 @@ describe('J1/J6 journey status row', () => {
     controller.settings.set({ ...controller.settings.value, largeStatus: true });
     await mainScreen();
     expect(flat(textOf(S.cameraHelpOff)).fontSize).toBe(26);
-  });
-});
-
-describe('J4/J5 journey and map targets', () => {
-  test('Show map is at least 96 x 56 dp, the sheet handle 56 dp high, and the map pills are 12 dp apart', async () => {
-    await render(<CrossWiseApp />);
-    expect(flat(byLabel('Show map')[0])).toMatchObject({ minWidth: 96, height: 56 });
-    await act(async () => controller.openMap());
-    expect(flat(byLabel('Expand destination panel')[0]).minHeight).toBe(56);
-    const stack = tree.root.findAll((n: any) => { const s = flat(n); return s.right === 12 && s.gap === 12 && s.position === 'absolute'; });
-    expect(stack.length).toBeGreaterThan(0);
   });
 });
 

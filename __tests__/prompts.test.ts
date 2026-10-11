@@ -12,16 +12,6 @@ test('routine observation prompts are brief, nonempty and do not promise a clear
   expect(phraseText(Phrase.WALK_ALREADY_ON)).toMatch(/Start time unknown/);
 });
 
-test('short route narration retains named instructions without repetitive state narration', () => {
-  const instruction = 'Turn left onto George Street, then continue towards Bathurst Street';
-  const text = P.instruction(1, instruction, null);
-  expect(text).toContain(instruction);
-  expect(text).not.toContain('Step 2.');
-  expect(text).not.toContain('Distance unavailable.');
-  expect(text).not.toContain('0 metres');
-  expect(P.instruction(1, 'Turn left.', 40)).toBe('Turn left. About 40 metres remaining.');
-});
-
 test('Developer preview covers the complete fixed speech catalogs with unique entries',()=>{
   const {SPEECH_SAMPLES,previewCues}=require('../src/voice/speechPreview');
   const {V}=require('../src/voice/speechCatalog');

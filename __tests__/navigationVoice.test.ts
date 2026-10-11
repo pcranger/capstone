@@ -3,17 +3,17 @@ const deferred = <T,>() => { let resolve!: (value: T) => void; let reject!: (err
   const promise = new Promise<T>((a, b) => { resolve = a; reject = b; }); return { promise, resolve, reject }; };
 const flush = async () => { for (let i = 0; i < 16; i++) await Promise.resolve(); };
 
-test('commands preserve explicit intent and never interpret acknowledgements as permission to move', () => {
-  expect(voiceIntent('Navigate to Central Library.')).toEqual({ kind: 'destination', query: 'Central Library', navigate: true });
-  expect(voiceIntent('Search for Central Library')).toEqual({ kind: 'destination', query: 'Central Library', navigate: false });
-  expect(voiceIntent('Central Library')).toBeNull();
-  expect(voiceIntent('Central Library')).toBeNull();
-  expect(voiceIntent('Save as Home')).toEqual({ kind: 'save', alias: 'Home' });
-  expect(voiceIntent('second')).toEqual({ kind: 'choose', index: 1 });
-  expect(voiceIntent('Next instruction')).toEqual({kind:'next'});
-  expect(voiceIntent('Arrived')).toEqual({kind:'arrived'});
-  expect(voiceIntent('Finish crossing')).toEqual({kind:'finishCrossing'});
-  for (const word of ['yes', 'no', 'okay', 'stop', 'cross now', 'I am across', 'Held', 'And journey', 'where am I', 'save as', 'navigate to']) expect(voiceIntent(word)).toBeNull();
+test.each([
+  ['Start', 'start'], ['start.', 'start'], ['Pause', 'pause'], ['Resume', 'resume'], ['Repeat', 'repeat'], ['Retry', 'retry'],
+  ['Cancel', 'cancel'], ['Finish crossing', 'finishCrossing'], ['Stop listening', 'stopListening'],
+])('%s is the explicit command %s', (text, kind) => {
+  expect(voiceIntent(text)).toEqual({ kind });
+});
+
+test('removed navigation phrases and acknowledgements are never commands', () => {
+  for (const text of ['Navigate to Central Library.', 'Search for Central Library', 'Central Library', 'Save as Home', 'second', 'Next instruction',
+    'Arrived', 'Stop navigation', 'End journey', 'Confirm', 'Start journey', 'yes', 'no', 'okay', 'stop', 'cross now', 'I am across', 'Held',
+    'And journey', 'where am I']) expect(voiceIntent(text)).toBeNull();
 });
 
 test('first-time flow waits for completed speech, gives readiness feedback and executes one final transcript', async () => {
@@ -50,12 +50,11 @@ test('a permission failure is spoken once and does not enter a retry or question
   expect(voice.state.value.phase).toBe('error'); expect(voice.active).toBe(false);
 });
 
-test('long help/end phrases are explicit commands, misheard or ambient text never becomes a place', () => {
+test('help phrases are explicit commands, ambient text never is', () => {
   expect(voiceIntent('Voice help')).toEqual({ kind: 'help' });
   expect(voiceIntent('Manual')).toEqual({ kind: 'help' });
   expect(voiceIntent('man')).toEqual({ kind: 'help' });
   expect(voiceIntent('What can I say?')).toBeNull();
-  expect(voiceIntent('Stop navigation')).toEqual({ kind: 'end' });
   for (const text of ['Held', 'And journey', 'Hello there', 'Where am I', 'Sydney Town Hall']) expect(voiceIntent(text)).toBeNull();
 });
 

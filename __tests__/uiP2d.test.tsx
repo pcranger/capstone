@@ -11,7 +11,6 @@ const { create, act } = require('react-test-renderer');
 
 jest.mock('react-native-safe-area-context', () => ({ ...jest.requireActual('react-native-safe-area-context'), useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
 jest.mock('@expo/vector-icons', () => ({ MaterialIcons: () => null }));
-jest.mock('../src/config/services', () => ({ nativeMapConfigured: true, services: { mapsRestApiKey: 'fixture', geminiApiKey: 'fixture' } }));
 jest.mock('../src/perception/modelLoader', () => ({ displayNameOf: () => 'test.tflite', referenceOf: () => 'asset:test.tflite' }));
 jest.mock('expo-file-system', () => ({ File: class { exists = false; create() {} write() {} }, Paths: {} }));
 jest.mock('@react-native-async-storage/async-storage', () => ({ getItem: jest.fn(), setItem: jest.fn(() => Promise.resolve()) }));
@@ -25,7 +24,7 @@ jest.mock('../src/state/controller', () => {
     model: new Store({ kind: 'ready', info: { format: 'END_TO_END', labels: ['car'], hasPedestrianSignalClasses: true, displayName: 'test', inputWidth: 640, inputHeight: 640, backend: 'CPU' } }),
     modelLibrary: new Store([]),
     logger: { sessions: () => [] },
-    sayNavigation: jest.fn(), stopVoice: jest.fn(), previewSpeech: jest.fn(), stopSpeechPreview: jest.fn(),
+    speakNow: jest.fn(), stopVoice: jest.fn(), previewSpeech: jest.fn(), stopSpeechPreview: jest.fn(),
     updateSettings: jest.fn((fn: (s: typeof DEFAULT_SETTINGS) => typeof DEFAULT_SETTINGS): void => { c.settings.set(fn(c.settings.value)); }),
   };
   return { controller: c };
@@ -57,7 +56,6 @@ describe('S4 settings card order', () => {
     await render(<SettingsScreen onBack={() => {}} />);
     const h = headers();
     expect(h.indexOf(S.settingsSectionAdvanced)).toBeGreaterThan(h.indexOf('Precautions and limitations'));
-    expect(h.indexOf('Services')).toBeGreaterThan(h.indexOf(S.settingsSectionAdvanced));
   });
 });
 
@@ -90,17 +88,14 @@ describe('G2/M3 Guide', () => {
     await render(<GuideScreen onBack={() => {}} />);
     await expandAll();
     const text = allText();
-    for (const name of ['Start camera help', 'Stop camera help', 'I’m crossing', 'I’m on the footpath', 'More controls', 'Start voice commands', 'Choose destination',
-      'Show map', 'Close full-screen map', 'Expand destination panel', 'Collapse destination panel']) expect(text).toContain(name);
+    for (const name of ['Start camera help', 'Stop camera help', 'I’m crossing', 'I’m on the footpath', 'More controls', 'Start voice commands']) expect(text).toContain(name);
     for (const old of ['inward arrows', 'Expand and Collapse', 'Start camera assistance', 'Stop assistance', 'Crossing help', 'Hide map', 'Open full-screen map']) expect(text).not.toContain(old);
   });
-  test('About holds the Google Maps note and the terms and privacy links', async () => {
+  test('About holds the privacy link and no Google Maps note', async () => {
     const open = jest.spyOn(Linking, 'openURL').mockResolvedValue(true as never);
     await render(<GuideScreen onBack={() => {}} />);
     await press(S.guideSectionAbout);
-    expect(allText()).toContain(S.guideAboutMaps);
-    await press(S.guideLinkMapsTerms);
-    expect(open).toHaveBeenLastCalledWith('https://maps.google.com/help/terms_maps/');
+    expect(allText()).not.toContain('Google Maps');
     await press(S.guideLinkPrivacy);
     expect(open).toHaveBeenLastCalledWith('https://policies.google.com/privacy');
     open.mockRestore();

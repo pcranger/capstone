@@ -1,6 +1,5 @@
 import { Priority, ToneKind, Verbosity } from '../src/feedback/cue';
 import { renderTone } from '../src/feedback/toneSynth';
-import { decodePolyline } from '../src/nav/navigation';
 import { paintSegMask, segPostProcess } from '../src/perception/segmentation';
 import { AppFont, DEFAULT_SETTINGS, mergeSettings } from '../src/settings/settings';
 
@@ -54,19 +53,6 @@ describe('Settings file merge', () => {
       .customModelPath).toBeNull();
     expect(mergeSettings(DEFAULT_SETTINGS, { customModelPath: '  ' }).customModelPath).toBeNull();
   });
-});
-
-describe('Navigation', () => {
-  test('decodes Google polylines', () => {
-    const points = decodePolyline('_p~iF~ps|U_ulLnnqC_mqNvxq`@');
-    expect(points).toHaveLength(3);
-    expect(points[0].latitude).toBeCloseTo(38.5, 5);
-    expect(points[0].longitude).toBeCloseTo(-120.2, 5);
-    expect(points[2].latitude).toBeCloseTo(43.252, 5);
-    expect(points[2].longitude).toBeCloseTo(-126.453, 5);
-  });
-
-
 });
 
 describe('Segmentation', () => {
