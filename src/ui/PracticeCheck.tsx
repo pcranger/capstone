@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { type Cue, Cues, Priority, ToneKind } from '../feedback/cue';
 import { controller } from '../state/controller';
 import { S } from '../strings';
-import { CHECK_TEXT, checkEventText } from '../text/checkText';
+import { CHECK_TEXT, checkEventText, practiceText } from '../text/checkText';
 import { BigButton, Hint } from './components';
 import { Colors } from './theme';
 
@@ -15,9 +15,9 @@ const say = (text: string): Cue => Cues.speakText(text, Priority.HIGH);
 export const PRACTICE_CHECK_SCRIPT: { at: number; cues: Cue[] }[] = [
   { at: 0, cues: [say(CHECK_TEXT.practiceOnly), say(CHECK_TEXT.start)] },
   { at: 6000, cues: [say(checkEventText('HOLD'))] },
-  { at: 12000, cues: [Cues.tone(ToneKind.CENTERED), say(checkEventText('TURN_LEFT'))] },
+  { at: 12000, cues: [Cues.tone(ToneKind.CENTERED), say(practiceText(checkEventText('TURN_LEFT')))] },
   { at: 18000, cues: [say(checkEventText('HOLD'))] },
-  { at: 24000, cues: [Cues.tone(ToneKind.CENTERED), say(checkEventText('FACE_ROAD'))] },
+  { at: 24000, cues: [Cues.tone(ToneKind.CENTERED), say(practiceText(checkEventText('FACE_ROAD')))] },
   { at: 28000, cues: [say(CHECK_TEXT.practiceOnly)] },
 ];
 

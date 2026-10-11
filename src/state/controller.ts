@@ -2,6 +2,7 @@ import { EMPTY_PIPELINE, perceptionMessage } from '../perception/pipelineHealth'
 import { NativeSpeechInput } from '../voice/nativeSpeech';
 import { VoiceAudioCheck } from '../voice/audioCheck';
 import { V } from '../voice/speechCatalog';
+import { practiceText } from '../text/checkText';
 import { VT } from '../text/voiceText';
 import { clearConfirm, confirmTwice, refreshConfirm } from './safetyGuards';
 import { NavigationVoice, voiceIntent, VOICE_QUICK_START } from '../voice/navigationVoice';
@@ -966,9 +967,5 @@ export class CrossWiseController {
   }
 }
 
-/** Practice rehearses turns only; it must not announce a result the camera never produced. */
-function practiceText(text: string): string {
-  return /side checked/i.test(text) ? text.replace(/(Right|Left) side checked\.?/i, 'Practice: $1 turn done.') : text;
-}
 
 export const controller = new CrossWiseController();

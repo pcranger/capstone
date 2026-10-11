@@ -50,6 +50,11 @@ const EVENT_TEXT: Record<CheckEventKind, string> = {
 };
 export const checkEventText = (kind: CheckEventKind): string => EVENT_TEXT[kind];
 
+/** Practice rehearses turns only; it must not announce a result the camera never produced. */
+export function practiceText(text: string): string {
+  return /side checked/i.test(text) ? text.replace(/(Right|Left) side checked\.?/i, 'Practice: $1 turn done.') : text;
+}
+
 /** The spoken result. URGENT speech; never the word "safe". */
 export const CHECK_RESULT_TEXT: Record<CheckSummary, string> = {
   NONE_SEEN: 'No vehicles seen on either side. Cross if you judge it clear.',
