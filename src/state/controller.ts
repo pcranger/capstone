@@ -646,7 +646,12 @@ export class CrossWiseController {
     const actual = mode === AssistMode.CROSSING ? 'finish' : 'start';
     if (expected !== actual) return;
     if (expected === 'finish') this.command(UserCommand.END_CROSSING);
-    else if (mode !== AssistMode.IDLE) this.command(UserCommand.START_CROSSING);
+    else if (mode !== AssistMode.IDLE) {
+      // Cross works only on a fresh NONE_SEEN or UNSURE result from the guided check.
+      const now = nowMs();
+      if (this.engine.canCross(now)) this.command(UserCommand.START_CROSSING);
+      else this.deliver([Cues.speakText(this.engine.crossRefusal(now), Priority.HIGH)]);
+    }
   }
 
   repeatGuidance(): void {
@@ -682,7 +687,7 @@ export class CrossWiseController {
       if(!await this.feedback.whenIdle() || !this.homeVisible || !this.engine.canSpeakScan(instruction.token,nowMs()) || this.voice.processing)return;
       ++this.voiceAudioGeneration;this.voice.stop();
       this.speakingScanToken=instruction.token;
-      const text=phraseText(instruction.phrase);
+      const text=instruction.text;
       this.ui.update(s=>({...s,caption:text}));
       if(await this.feedback.sayAndWait(text))this.engine.acknowledgeScan(instruction.token);
     } finally {

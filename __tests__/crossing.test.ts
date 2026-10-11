@@ -212,22 +212,8 @@ describe('speech evidence and scan delivery', () => {
     e.onSensors(t,{timestampMs:t,headingDeg:heading,pitchDeg:5},false);
     return e.onFrame({...frame(t,...detections),brightness:.5},geometry);
   };
-  test('scan cannot advance until its instruction finishes, and a vehicle invalidates a pending summary',()=>{
-    const e=ready();tick(e,100);
-    const left=e.scanInstruction!;expect(left.phrase).toBe(Phrase.SCAN_LEFT);
-    for(let t=200;t<=2600;t+=100)tick(e,t,320);
-    expect(e.scanInstruction).toEqual(left);
-    expect(e.canSpeakScan(left.token,3100)).toBe(false);
-    e.acknowledgeScan(left.token);
-    for(let t=2700;t<=4700;t+=100)tick(e,t,320);
-    expect(e.scanInstruction?.phrase).toBe(Phrase.SCAN_RIGHT);
-    e.acknowledgeScan(e.scanInstruction!.token);
-    for(let t=4800;t<=6800;t+=100)tick(e,t,40);
-    const complete=e.scanInstruction!;expect(complete.phrase).toBe(Phrase.SCAN_COMPLETE);
-    tick(e,6900,40,[det(ObjectCategory.CAR)]);
-    expect(e.canSpeakScan(complete.token,6900)).toBe(false);
-    expect(e.scanInstruction).toBeNull();
-  });
+  // Removed with the old left-first TrafficScan: 'scan cannot advance until its instruction finishes, and a vehicle
+  // invalidates a pending summary'. The guided check is covered by crossingCheckEngine.test.ts.
   test('repeat cannot report no vehicles when vehicle alerts are disabled or the frame is stale',()=>{
     const e=ready();tick(e,100);
     for(const [time,enabled] of [[100,false],[1000,true]] as const){
@@ -256,8 +242,11 @@ test('disabling vehicle alerts invalidates a ready scan instruction immediately'
   const e=new CrossingEngine();e.command(UserCommand.START_ASSIST,0);
   const motion=(e as any).vehicleMotion;motion.reliable=true;
   jest.spyOn(motion,'update').mockReturnValue(new Map());
-  e.onSensors(100,{timestampMs:100,headingDeg:0,pitchDeg:5},false);
-  e.onFrame({...frame(100),brightness:.5},{hfovDeg:60,vfovDeg:90});
-  const token=e.scanInstruction!.token;expect(e.canSpeakScan(token,100)).toBe(true);
-  e.settings.vehicleAlerts=false;expect(e.canSpeakScan(token,100)).toBe(false);
+  // The check starts once the phone has been steady for a second.
+  for(let t=100;t<=1300;t+=100){
+    e.onSensors(t,{timestampMs:t,headingDeg:0,pitchDeg:5},false);
+    e.onFrame({...frame(t),brightness:.5},{hfovDeg:60,vfovDeg:90});
+  }
+  const token=e.scanInstruction!.token;expect(e.canSpeakScan(token,1300)).toBe(true);
+  e.settings.vehicleAlerts=false;expect(e.canSpeakScan(token,1300)).toBe(false);
 });

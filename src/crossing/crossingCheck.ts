@@ -10,7 +10,7 @@ import { Angles, clamp } from '../core/geometry';
 
 export const CHECK_EVENT_KINDS = [
   'HOLD', 'HOLD_STILL', 'KEEP_TURNING_RIGHT', 'KEEP_TURNING_LEFT', 'TOO_FAR', 'LITTLE_MORE', 'LITTLE_BACK',
-  'TURN_LEFT', 'FACE_ROAD', 'DONE',
+  'TURN_LEFT', 'FACE_ROAD', 'WRONG_WAY', 'DONE',
 ] as const;
 export type CheckEventKind = (typeof CHECK_EVENT_KINDS)[number];
 export interface CheckEvent { kind: CheckEventKind }
@@ -63,6 +63,8 @@ const UNUSABLE_LIMIT_MS = 3000;
 const EVENT_GAP_MS = 1500;
 const GUIDE_GAP_MS = 2000;
 const ROAD_OFF_DEG = 20;
+const WRONG_WAY_DEG = 30;
+const WRONG_WAY_GAP_MS = 1500;
 
 interface Evidence {
   moving: Set<number>;
@@ -105,6 +107,9 @@ export class CrossingCheck {
   private lastTurnEmit = -Infinity;
   private lastStillEmit = -Infinity;
   private lastGuideEmit = -Infinity;
+  private lastWrongEmit = -Infinity;
+  /** Most anticlockwise rel seen in this left turn; a rise from it means turning the wrong way. */
+  private leftMinRel: number | null = null;
 
   constructor(opts?: { holdMs?: number }) {
     this.holdMs = opts?.holdMs ?? 5000;
@@ -112,6 +117,16 @@ export class CrossingCheck {
 
   get phase(): CheckPhase | null {
     return this._phase;
+  }
+
+  /** Milliseconds of the current hold counted so far. */
+  get heldMsSoFar(): number {
+    return this.heldMs;
+  }
+
+  /** True once a moving car has told us the road's angle. */
+  get roadKnown(): boolean {
+    return this.roadBearingRight !== null;
   }
 
   /** Left target relative to the start heading (negative = left). -90 until the right hold has finished. */
@@ -141,6 +156,8 @@ export class CrossingCheck {
     this.lastTurnEmit = -Infinity;
     this.lastStillEmit = -Infinity;
     this.lastGuideEmit = -Infinity;
+    this.lastWrongEmit = -Infinity;
+    this.leftMinRel = null;
   }
 
   result(): CheckResult | null {
@@ -187,6 +204,7 @@ export class CrossingCheck {
       if (inWindow) return this.holdFrame(input, dt, heading);
       this._phase = isRight ? 'RIGHT_TURN' : 'LEFT_TURN';
       this.heldMs = 0;
+      this.leftMinRel = null;
     }
     // Turn phases.
     if (inWindow) {
@@ -194,6 +212,19 @@ export class CrossingCheck {
       this.heldMs = 0;
       this.holdHeading = heading;
       return { kind: 'HOLD' };
+    }
+    let wrong: boolean;
+    if (isRight) wrong = rel < -WRONG_WAY_DEG;
+    else {
+      // The left turn starts from about +90, so "clockwise of the anchor" alone is the normal start. Wrong way is
+      // clockwise of the anchor AND turning clockwise away from the furthest-left point reached so far.
+      this.leftMinRel = this.leftMinRel === null ? rel : Math.min(this.leftMinRel, rel);
+      wrong = rel > WRONG_WAY_DEG && rel - this.leftMinRel > WRONG_WAY_DEG;
+    }
+    if (wrong) {
+      if (t - this.lastWrongEmit < WRONG_WAY_GAP_MS) return null;
+      this.lastWrongEmit = t;
+      return { kind: 'WRONG_WAY' };
     }
     const tooLittle = isRight ? d < 0 : d > 0;
     const pastEdge = Math.abs(d) - TURN_HALF_WINDOW;
@@ -266,6 +297,7 @@ export class CrossingCheck {
         const rr = Angles.wrap180(this.roadBearingRight - this.anchor);
         this._leftTarget = clamp(Angles.wrap180(rr + 180), -130, -50);
       } else this._leftTarget = -90;
+      this.leftMinRel = null;
       return this.go('LEFT_TURN', 'TURN_LEFT');
     }
     this.leftDone = true;

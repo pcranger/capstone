@@ -1,5 +1,7 @@
 import { VehicleMotion, type MotionState, type MotionDirection } from '../tracking/vehicleMotion';
-import { TrafficScan } from './trafficScan';
+import { CheckSession, type CheckStep, type CheckView } from './checkSession';
+import type { CheckVehicle } from './crossingCheck';
+import { CHECK_TEXT, crossingHalfText, crossingStartText } from '../text/checkText';
 import { Angles, type BoxF } from '../core/geometry';
 import { type Cue, Cues, HapticPattern, Phrase, Priority, ToneKind, Verbosity } from '../feedback/cue';
 import type { FrameDetections, ObjectCategory } from '../perception/detection';
@@ -37,6 +39,7 @@ export enum UserCommand {
   START_CROSSING = 'START_CROSSING',
   END_CROSSING = 'END_CROSSING',
   TOGGLE_CROSSING = 'TOGGLE_CROSSING',
+  CHECK_AGAIN = 'CHECK_AGAIN',
   REPEAT_STATUS = 'REPEAT_STATUS',
 }
 
@@ -46,6 +49,10 @@ export interface EngineSettings {
   veerGuidance: boolean;
   vehicleAlerts: boolean;
   autoDetectCrossing: boolean;
+  /** Seconds each look is held (settings.holdSeconds). */
+  holdSeconds?: number;
+  /** Lanes of road to cross; each is about six steps (settings.roadLanes). */
+  roadLanes?: number;
   verbosity: Verbosity;
 }
 
@@ -83,6 +90,8 @@ export interface EngineSnapshot {
   walking: boolean;
   tracks: TrackView[];
   crossingElapsedMs: number | null;
+  /** The guided crossing check, while one is on screen. */
+  check?: CheckView;
 }
 
 export const EMPTY_SNAPSHOT: EngineSnapshot = {
@@ -103,15 +112,24 @@ export interface EngineOutput {
 }
 
 const HEADING_AVERAGE_MS = 1_000;
+/** Estimated pace while the walking detector says walking (it does not count steps). */
+const STEPS_PER_SECOND = 1.8;
+const STEPS_PER_LANE = 6;
 
 export class CrossingEngine {
   settings: EngineSettings;
 
   private readonly vehicleMotion = new VehicleMotion();
-  private readonly trafficScan = new TrafficScan();
+  private readonly check = new CheckSession();
   private scanSequence=0;
-  private scanBlocked=true;
-  scanInstruction: { phrase:Phrase; token:number } | null = null;
+  /** The routine check prompt waiting to be spoken. Results and warnings are urgent cues, not this. */
+  scanInstruction: { text:string; token:number } | null = null;
+  private crossSteps = 0;
+  private crossTarget = 0;
+  private crossTickMs = 0;
+  private crossHalfSaid = false;
+  private crossTwoSaid = false;
+  private crossEndSaid = false;
   private lastTrafficFrameMs = -Infinity;
   private trafficUsable = false;
   private directionAnchor: number | null = null;
@@ -159,6 +177,7 @@ export class CrossingEngine {
       walking: this.walking,
       tracks: this.trackViews,
       crossingElapsedMs: this.crossingStartMs !== null ? this.lastTimestampMs - this.crossingStartMs : null,
+      check: this.mode === AssistMode.SEARCHING || this.mode === AssistMode.WAITING ? this.check.view(this.lastTimestampMs) : undefined,
     };
   }
 
@@ -171,13 +190,14 @@ export class CrossingEngine {
           this.mode = AssistMode.SEARCHING;
           this.invalidatePerception(); this.directionAnchor=null;
           cues.push(Cues.speak(Phrase.ASSIST_STARTED, Priority.HIGH));
+          this.beginCheck(nowMs, cues);
         }
         break;
       case UserCommand.STOP_ASSIST:
         if (this.mode !== AssistMode.IDLE) {
           this.endCrossingInternal();
           this.mode = AssistMode.IDLE;
-          this.invalidatePerception(); this.directionAnchor=null;
+          this.invalidatePerception(); this.directionAnchor=null; this.check.reset();
           cues.push(Cues.speak(Phrase.ASSIST_STOPPED, Priority.HIGH));
         }
         break;
@@ -191,6 +211,9 @@ export class CrossingEngine {
         if (this.mode === AssistMode.CROSSING) this.endCrossing(nowMs, cues);
         else this.startCrossing(nowMs, false, cues);
         break;
+      case UserCommand.CHECK_AGAIN:
+        if (this.mode === AssistMode.SEARCHING || this.mode === AssistMode.WAITING) this.beginCheck(nowMs, cues);
+        break;
       case UserCommand.REPEAT_STATUS:
         if (this.mode !== AssistMode.IDLE) cues.push(...this.statusCues(nowMs));
         break;
@@ -200,11 +223,28 @@ export class CrossingEngine {
 
   acknowledgeScan(token:number): void { if(this.scanInstruction?.token===token)this.scanInstruction=null; }
   canSpeakScan(token:number, now:number):boolean {
-    return this.settings.vehicleAlerts && this.scanInstruction?.token===token && !this.scanBlocked && this.trafficUsable && now-this.lastTrafficFrameMs<400 && !this.walking && (this.mode===AssistMode.SEARCHING || this.mode===AssistMode.WAITING);
+    return this.settings.vehicleAlerts && this.scanInstruction?.token===token && this.trafficUsable && now-this.lastTrafficFrameMs<400 && (this.mode===AssistMode.SEARCHING || this.mode===AssistMode.WAITING);
+  }
+  /** Cross is allowed only on a fresh NONE_SEEN or UNSURE result (never expired, never MOVING_*, never NOT_CHECKED). */
+  canCross(now: number): boolean { return this.check.canCross(now); }
+  /** The line to speak when Cross is refused. */
+  crossRefusal(now: number): string { return this.check.refusal(now); }
+  /** Starts a fresh check (also used for Check again). */
+  private beginCheck(now: number, cues: Cue[]): void {
+    this.scanInstruction=null;this.scanSequence++;
+    this.check.begin(now, this.settings.holdSeconds ?? 5);
+    cues.push(Cues.speakText(CHECK_TEXT.gettingReady, Priority.HIGH));
+  }
+  /** Turns one check step into the routine prompt, urgent speech and tones. */
+  private applyStep(step: CheckStep, cues: Cue[]): void {
+    if (step.urgent) { this.scanInstruction=null;this.scanSequence++; cues.push(Cues.speakText(step.urgent, Priority.CRITICAL)); }
+    else if (step.prompt) this.scanInstruction={ text: step.prompt, token: ++this.scanSequence };
+    if (step.tick) cues.push(Cues.tone(ToneKind.SONAR));
+    if (step.end) cues.push(Cues.tone(ToneKind.CENTERED));
   }
   invalidatePerception(): void {
-    this.scanInstruction=null;this.scanSequence++;this.scanBlocked=true;
-    this.vehicleMotion.reset(); this.trafficScan.reset(); this.hazards=[]; this.trackViews=[];
+    this.scanInstruction=null;this.scanSequence++;
+    this.vehicleMotion.reset(); this.check.interrupt(this.lastTimestampMs); this.hazards=[]; this.trackViews=[];
     this.lastTrafficFrameMs=-Infinity; this.trafficUsable=false;
     this.tracker.clear(); this.signal.reset(); this.lastFrameOrientation=null;
   }
@@ -232,6 +272,7 @@ export class CrossingEngine {
       }
       case AssistMode.SEARCHING:
       case AssistMode.WAITING:
+        this.applyStep(this.check.tick(nowMs), cues);
         this.curbGuidance(nowMs, cues);
         break;
     }
@@ -293,21 +334,15 @@ export class CrossingEngine {
     }).sort((a,b)=>a.ttcSeconds-b.ttcSeconds || b.heightFraction-a.heightFraction) : [];
     if (this.mode !== AssistMode.IDLE) cues.push(...this.hazardCues(now));
     if(this.mode===AssistMode.SEARCHING || this.mode===AssistMode.WAITING) {
-      const usable=this.settings.vehicleAlerts && this.vehicleMotion.reliable && !this.walking && !!current && Math.abs(now-current.timestampMs)<300 && Math.abs(current.pitchDeg)<30 && (frame.brightness ?? 0)>.12;
-      const blocked=(signalSnapshot.trusted && isDontWalkPhase(signalSnapshot.phase)) || tracks.some(t=>t.group===TrackGroup.VEHICLE && now-t.lastSeenMs<900 && (motion.get(t.id)?.state!=='STATIONARY' || !motion.get(t.id)?.supported || looming.some(h=>h.trackId===t.id)));
-      this.scanBlocked=blocked || !usable;
-      if(this.scanBlocked && this.scanInstruction) {
-        this.scanInstruction=null;this.scanSequence++;this.trafficScan.interrupt(now);
-      }
-      if(this.scanInstruction && !this.scanBlocked) this.trafficScan.pause(now);
-      else {
-        const scan=this.trafficScan.update(now,current?.headingDeg ?? null,usable,blocked);
-        if(scan) {
-          const phrase=scan==='START'?Phrase.SCAN_LEFT:scan==='RESTART'?Phrase.SCAN_RESTART:scan==='RIGHT'?Phrase.SCAN_RIGHT:Phrase.SCAN_COMPLETE;
-          this.scanInstruction={phrase,token:++this.scanSequence};
-        }
-      }
-    } else {this.trafficScan.reset();this.scanInstruction=null;}
+      // Walking is passed to the check separately, so a walking user hears "Hold still" instead of a silent unusable frame.
+      const usable=this.settings.vehicleAlerts && this.vehicleMotion.reliable && !!current && Math.abs(now-current.timestampMs)<300 && Math.abs(current.pitchDeg)<30 && (frame.brightness ?? 0)>.12;
+      const vehicles: CheckVehicle[] = tracks.filter(t=>t.group===TrackGroup.VEHICLE && t.isSeenAt(now)).map(t=>({
+        id:t.id, moving:motion.get(t.id)?.state==='MOVING', supported:!!motion.get(t.id)?.supported,
+        approaching:this.hazards.some(h=>h.trackId===t.id && h.approaching),
+        bearingDeg:(current?.headingDeg ?? 0)+Angles.bearingFromImageX(t.box.centerX, this.geometry.hfovDeg), heightFraction:t.box.height,
+      }));
+      this.applyStep(this.check.frame(now,{ heading:current?.headingDeg ?? null, pitch:current?.pitchDeg ?? null, usable, walking:this.walking, vehicles }), cues);
+    } else if(this.mode===AssistMode.CROSSING) {this.scanInstruction=null;}
 
 
     // Aiming sonar toward the signal (or crosswalk) while at the curb.
@@ -362,21 +397,23 @@ export class CrossingEngine {
       this.walkingSinceMs = null;
     }
     this.walking = isWalking;
-    if(isWalking) {this.trafficScan.reset();this.scanInstruction=null;this.scanSequence++;}
   }
 
   private startCrossing(nowMs: number, detected: boolean, cues: Cue[]): void {
     if (this.mode !== AssistMode.SEARCHING && this.mode !== AssistMode.WAITING) return;
     this.mode = AssistMode.CROSSING;
+    this.check.reset();this.scanInstruction=null;this.scanSequence++;
     this.crossingStartMs = nowMs;
+    this.crossSteps = 0; this.crossTickMs = nowMs; this.crossHalfSaid = this.crossTwoSaid = this.crossEndSaid = false;
+    this.crossTarget = (this.settings.roadLanes ?? 2) * STEPS_PER_LANE;
     this.aim.reset();
     const heading = this.orientation;
     if (heading !== null && this.settings.veerGuidance) {
       // Average the last second: a single reading can sit at the extreme of walking sway.
       this.veer.lock(this.averageHeading() ?? heading.headingDeg, nowMs);
-      cues.push(Cues.speak(detected ? Phrase.CROSSING_DETECTED : Phrase.CROSSING_STARTED, Priority.HIGH));
+      cues.push(detected ? Cues.speak(Phrase.CROSSING_DETECTED, Priority.HIGH) : Cues.speakText(crossingStartText(this.crossTarget), Priority.HIGH));
     } else {
-      cues.push(Cues.speak(Phrase.CROSSING_STARTED, Priority.HIGH));
+      cues.push(Cues.speakText(crossingStartText(this.crossTarget), Priority.HIGH));
     }
   }
 
@@ -387,6 +424,7 @@ export class CrossingEngine {
     this.signal.reset();
     this.tracker.clear();
     cues.push(Cues.speak(Phrase.CROSSING_ENDED, Priority.NORMAL));
+    this.check.begin(nowMs, this.settings.holdSeconds ?? 5);
   }
 
   private endCrossingInternal(): void {
@@ -397,6 +435,7 @@ export class CrossingEngine {
   }
 
   private crossingGuidance(nowMs: number, cues: Cue[]): void {
+    this.countSteps(nowMs, cues);
     const sample = this.orientation;
     if (sample === null || !this.settings.veerGuidance) return;
     const status = this.veer.update(sample.headingDeg, nowMs);
@@ -404,6 +443,17 @@ export class CrossingEngine {
     this.veerStatus = status;
     // Phone heading remains diagnostic only. Camera scanning is not walking drift.
     return;
+  }
+
+  /** Counts steps (estimated from the walking flag) and speaks halfway, "2 steps left" and the end. */
+  private countSteps(nowMs: number, cues: Cue[]): void {
+    if (this.walking) this.crossSteps += (Math.max(0, nowMs - this.crossTickMs) / 1000) * STEPS_PER_SECOND;
+    this.crossTickMs = nowMs;
+    const say = (text: string) => cues.push(Cues.speakText(text, Priority.HIGH));
+    const half = Math.floor(this.crossTarget / 2);
+    if (!this.crossHalfSaid && this.crossSteps >= half) { this.crossHalfSaid = true; say(crossingHalfText(this.crossTarget - half)); }
+    if (!this.crossTwoSaid && this.crossSteps >= this.crossTarget - 2) { this.crossTwoSaid = true; say(CHECK_TEXT.twoLeft); }
+    if (!this.crossEndSaid && this.crossSteps >= this.crossTarget) { this.crossEndSaid = true; say(CHECK_TEXT.crossingEnd); }
   }
 
   private curbGuidance(nowMs: number, cues: Cue[]): void {

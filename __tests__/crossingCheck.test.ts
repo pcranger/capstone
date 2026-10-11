@@ -109,8 +109,10 @@ describe('CrossingCheck', () => {
     const far = new Rig(new CrossingCheck());
     expect(kinds(far.feed(1400, 150))).toEqual(['TOO_FAR']);
     expect(kinds(far.feed(1500, 150))).toEqual(['TOO_FAR']);
-    // facing left of the start while the right turn is due still reads "keep turning right"
-    expect(kinds(new Rig(new CrossingCheck()).feed(100, -100))).toEqual(['KEEP_TURNING_RIGHT']);
+    // facing a little left of the start while the right turn is due still reads "keep turning right"
+    // (more than 30 degrees anticlockwise is now WRONG_WAY, tested below)
+    expect(kinds(new Rig(new CrossingCheck()).feed(100, -20))).toEqual(['KEEP_TURNING_RIGHT']);
+    expect(kinds(new Rig(new CrossingCheck()).feed(100, -100))).toEqual(['WRONG_WAY']);
     // 130 is still accepted, 135 is not
     expect(kinds(new Rig(new CrossingCheck()).feed(100, 130))).toEqual(['HOLD']);
     expect(kinds(new Rig(new CrossingCheck()).feed(100, 135))).toEqual(['TOO_FAR']);
@@ -314,5 +316,35 @@ describe('crossing check settings', () => {
     expect(mergeSettings(DEFAULT_SETTINGS, { roadLanes: 3 }).roadLanes).toBe(3);
     expect(mergeSettings(DEFAULT_SETTINGS, { roadLanes: 2.6 }).roadLanes).toBe(3);
     expect(mergeSettings(DEFAULT_SETTINGS, { roadLanes: 'x' }).roadLanes).toBe(2);
+  });
+});
+
+describe('WRONG_WAY', () => {
+  test('right turn: more than 30 degrees anticlockwise of the anchor, rate-limited to 1.5 s', () => {
+    const rig = new Rig(new CrossingCheck());
+    expect(kinds(rig.feed(300, -20))).not.toContain('WRONG_WAY');
+    const out = rig.feed(3000, -45);
+    expect(kinds(out).filter((k) => k === 'WRONG_WAY')).toHaveLength(2);
+    expect(kinds(out)).not.toContain('KEEP_TURNING_RIGHT');
+  });
+
+  test('left turn: the normal start at +90 is not wrong, turning further clockwise is', () => {
+    const rig = new Rig(new CrossingCheck());
+    rightHold(rig);
+    expect(rig.check.phase).toBe('LEFT_TURN');
+    expect(kinds(rig.feed(1000, 90))).not.toContain('WRONG_WAY');
+    expect(kinds(rig.feed(1000, 40))).not.toContain('WRONG_WAY');
+    const out = rig.feed(3000, 90); // back clockwise by 50 degrees from the furthest-left point
+    expect(kinds(out).filter((k) => k === 'WRONG_WAY')).toHaveLength(2);
+  });
+
+  test('wrong way never appears in a normal full check', () => {
+    const rig = new Rig(new CrossingCheck());
+    rightHold(rig);
+    rig.feed(500, 60);
+    rig.feed(500, 0);
+    leftHold(rig);
+    expect(rig.events.some((e) => e.kind === 'WRONG_WAY')).toBe(false);
+    expect(rig.check.phase).toBe('FACE_ROAD');
   });
 });
