@@ -63,7 +63,7 @@ export function JourneyScreen({ onSettings, hidden, hasPermission, canRequestPer
   return <View style={styles.root} onLayout={event => setHeight(event.nativeEvent.layout.height)}
     accessibilityElementsHidden={hidden} importantForAccessibility={hidden ? 'no-hide-descendants' : 'auto'}>
     <MainScreen hasPermission={hasPermission} canRequestPermission={canRequestPermission} requestPermission={requestPermission}
-      topInset={headerHeight} bottomInset={dockHeight} hidden={mapOpen} />
+      topInset={headerHeight} bottomInset={dockHeight} hidden={mapOpen || hidden} />
     <View style={[styles.header, mapOpen && { opacity: 0 }]} pointerEvents={mapOpen ? 'none' : 'auto'}
       accessibilityElementsHidden={mapOpen} importantForAccessibility={mapOpen ? 'no-hide-descendants' : 'auto'}
       onLayout={event => setHeaderHeight(event.nativeEvent.layout.height)}>

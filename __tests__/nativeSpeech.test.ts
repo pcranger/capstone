@@ -1,5 +1,6 @@
 import { Platform } from 'react-native';
 import { NativeSpeechInput } from '../src/voice/nativeSpeech';
+import { IOS_AUDIO_SESSION } from '../src/feedback/audioPolicy';
 import CrossWiseNative from '../modules/crosswise-native';
 import { ExpoSpeechRecognitionModule as native } from 'expo-speech-recognition';
 jest.mock('../modules/crosswise-native', () => ({ __esModule: true, default: { speechCapabilities: jest.fn((locales: string[]) => locales.map(locale => ({ locale, supported: true, available: true, onDevice: true }))) } }));
@@ -11,7 +12,7 @@ jest.mock('expo-speech-recognition', () => {
     supportsOnDeviceRecognition: jest.fn(() => true), getSupportedLocales: jest.fn(async () => ({ locales: ['en-US'], installedLocales: ['en_US'] })),
     getPermissionsAsync: jest.fn(async () => ({ granted: false, canAskAgain: true })),
     requestPermissionsAsync: jest.fn(async () => ({ granted: true })), start: jest.fn(), abort: jest.fn(),
-    getAudioSessionCategoryAndOptionsIOS: jest.fn(() => ({ category: 'playback', mode: 'default', categoryOptions: ['duckOthers'] })),
+    getAudioSessionCategoryAndOptionsIOS: jest.fn(() => ({ category: 'playback', mode: 'default', categoryOptions: ['mixWithOthers'] })),
     setCategoryIOS: jest.fn(), setAudioSessionActiveIOS: jest.fn(),
   } };
 });
@@ -25,8 +26,9 @@ test('only a final result after native end is accepted, duplicate finals do not 
   emit('result', { isFinal: true, results: [{ transcript: 'search town hall' }] });
   emit('result', { isFinal: true, results: [{ transcript: 'confirm' }] }); expect(done).not.toHaveBeenCalled();
   emit('end'); await pending; expect(done).toHaveBeenCalledWith('search town hall'); expect(ready).toHaveBeenCalledTimes(1);
-  expect(native.setCategoryIOS).toHaveBeenCalledWith({ category: 'playback', mode: 'default', categoryOptions: ['duckOthers'] });
+  expect(native.setCategoryIOS).toHaveBeenCalledWith({ category: 'playback', mode: 'default', categoryOptions: ['mixWithOthers'] });
   expect(native.start).toHaveBeenCalledWith(expect.objectContaining({ requiresOnDeviceRecognition: true, recordingOptions: { persist: false } }));
+  expect(native.start).toHaveBeenCalledWith(expect.objectContaining({ iosCategory: IOS_AUDIO_SESSION }));
 });
 test('cancel discards final results and waits for end before another turn', async () => {
   const input = new NativeSpeechInput(); await input.prepare(); const pending = input.listen(jest.fn()).catch(e => e.message);

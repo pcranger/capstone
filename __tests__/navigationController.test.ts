@@ -187,8 +187,8 @@ test('voice search does not start a route; selecting and saving preserve the sam
 test('multiple voice matches wait for a destination choice, never silently choose the first', async () => {
   c.stopNavigation(); (searchPlaces as jest.Mock).mockResolvedValueOnce([destination, { ...destination, id: 'second', name: 'Another Library' }]);
   const response = await (c as any).handleVoice('navigate to Library', () => true);
-  expect(response).toContain('Say first or second'); expect(c.journey.running).toBe(false);
-  await (c as any).handleVoice('second', () => true);
+  expect(response).toContain('Say one or two'); expect(c.journey.running).toBe(false);
+  await (c as any).handleVoice('two', () => true);
   expect(c.journey.state.value.destination?.id).toBe('second');
 });
 test('a cancelled voice search cannot start a route when its network result arrives', async () => {
@@ -217,14 +217,14 @@ test('ordinary route resumes after background recovery, explicit pause does not'
   AppState.currentState = original;
 });
 
-test('home entry silently arms voice; Settings cancels it and late speech is ignored', async () => {
+test('home entry announces listening; Settings cancels it and late speech is ignored', async () => {
   c.stopNavigation(); const original = AppState.currentState; AppState.currentState = 'active';
   let resolve!: (value: string) => void;
   const input = { prepare: jest.fn(async () => undefined), listen: jest.fn(ready => { ready(); return new Promise<string>(r => { resolve = r; }); }), cancel: jest.fn() };
   (c.voice as any).deps.input = input;
   c.setHomeVisible(true); for (let i = 0; i < 25; i++) await Promise.resolve();
-  expect((c as any).feedback.sayAndWait).not.toHaveBeenCalled();
-  expect(mockDispatch.mock.calls.flat(2).some((cue: any)=>cue.tone==='LISTENING')).toBe(true);
+  expect((c as any).feedback.sayAndWait).toHaveBeenCalledWith('Listening.');
+  expect(mockDispatch.mock.calls.flat(2).some((cue: any)=>cue.tone==='LISTENING')).toBe(false);
   expect(c.voice.state.value.phase).toBe('listening');
   c.setHomeVisible(false); resolve('navigate to Library');
   for (let i = 0; i < 25; i++) await Promise.resolve();
@@ -307,4 +307,69 @@ test('confirm starts a searched replacement destination while retaining an older
   expect(c.journey.state.value.phase).toBe('paused');
   expect(await handle('confirm')).toContain('Museum.');
   expect(c.journey.running).toBe(true);expect(c.journey.state.value.destination?.id).toBe('other');
+});
+
+test('long voice trip waits for yes; unrelated confirmation cannot bypass it', async () => {
+  c.stopNavigation(); (walkingRoute as jest.Mock).mockResolvedValue({ ...route, distanceMeters: 1500 });
+  c.voice.state.set({ phase: 'working', text: '' });
+  const response = await (c as any).handleVoice('navigate to Library', () => true);
+  expect(response).toContain('over 1 kilometre'); expect(c.journey.running).toBe(false);
+  expect(await (c as any).handleVoice('confirm', () => true)).toContain('over 1 kilometre');
+  expect(c.journey.running).toBe(false);
+  await (c as any).handleVoice('yes', () => true);
+  expect(c.journey.running).toBe(true);
+});
+test.each(['no', 'cancel search', 'stop navigation'])('%s discards long-trip confirmation', async answer => {
+  c.stopNavigation(); (walkingRoute as jest.Mock).mockResolvedValue({ ...route, distanceMeters: 1500 });
+  c.voice.state.set({ phase: 'working', text: '' });
+  await (c as any).handleVoice('navigate to Library', () => true);
+  await (c as any).handleVoice(answer, () => true);
+  expect(c.journey.running).toBe(false); expect(c.planner.state.value.awaitingLongTrip).toBe(false);
+  expect(await (c as any).handleVoice('yes', () => true)).toContain('No question pending');
+});
+test('backgrounding invalidates a long-trip answer', async () => {
+  c.stopNavigation(); (walkingRoute as jest.Mock).mockResolvedValue({ ...route, distanceMeters: 1500 });
+  c.voice.state.set({ phase: 'working', text: '' });
+  await (c as any).handleVoice('navigate to Library', () => true);
+  (c as any).onBackground();
+  expect(await (c as any).handleVoice('proceed', () => true)).toContain('No question pending');
+  expect(c.journey.running).toBe(false);
+});
+test('touch long-trip confirmation uses the same gate and cannot start twice', async () => {
+  c.stopNavigation(); (walkingRoute as jest.Mock).mockResolvedValue({ ...route, distanceMeters: 1500 });
+  const arm = jest.spyOn(c.voice, 'start').mockImplementation(() => undefined);
+  AppState.currentState = 'active';
+  c.planner.select(destination); await c.planner.confirm(destination.id);
+  expect(await c.startPlannedJourney()).toBe(false);
+  expect(arm).toHaveBeenCalledWith('The trip is over 1 kilometre. Do you want to proceed?');
+  expect(await c.startPlannedJourney(true)).toBe(true);
+  expect(await c.startPlannedJourney(true)).toBe(false);
+});
+test('slow planner search repeats progress and cancels further speech on completion', async () => {
+  c.stopNavigation(); AppState.currentState = 'active';
+  let resolve!: (value: typeof destination[]) => void;
+  (searchPlaces as jest.Mock).mockReturnValue(new Promise(r => { resolve = r; }));
+  const work = c.planner.search('Library');
+  await jest.advanceTimersByTimeAsync(10000);
+  const say = (c as any).feedback.sayAndWait as jest.Mock;
+  expect(say.mock.calls.filter(([text]) => text === 'Searching.')).toHaveLength(2);
+  resolve([destination]); await work; await jest.advanceTimersByTimeAsync(10000);
+  expect(say.mock.calls.filter(([text]) => text === 'Searching.')).toHaveLength(2);
+});
+
+test('legacy route start also gates long distances and exposes confirmation controls', async () => {
+  c.stopNavigation(); (walkingRoute as jest.Mock).mockResolvedValue({ ...route, distanceMeters: 1500 });
+  jest.spyOn(c.voice, 'start').mockImplementation(() => undefined);
+  await c.journey.select(destination);
+  expect(await c.startJourney()).toBe(false);
+  expect(c.planner.state.value.awaitingLongTrip).toBe(true);
+  expect(c.presentation.value).toMatchObject({ mapOpen: true, expanded: true });
+  expect(c.journey.running).toBe(false);
+});
+test('pending distance question clarifies an unrecognised answer instead of generic help', async () => {
+  c.stopNavigation(); (walkingRoute as jest.Mock).mockResolvedValue({ ...route, distanceMeters: 1500 });
+  c.voice.state.set({ phase: 'working', text: '' });
+  await (c as any).handleVoice('navigate to Library', () => true);
+  expect(await (c as any).handleVoice('maybe later', () => true)).toBe('Say yes to proceed, or no to cancel.');
+  expect(c.journey.running).toBe(false);
 });

@@ -22,8 +22,8 @@ describe('Tone synthesis', () => {
 
     const [left, right] = renderTone(ToneKind.ALERT, 1, 44_100);
     expect(peak(left)).toBeLessThan(1e-6); // fully right: nothing in the left ear
-    expect(peak(right)).toBeGreaterThan(0.8);
-    expect(peak(right)).toBeLessThanOrEqual(0.85 + 1e-6);
+    expect(peak(right)).toBeGreaterThan(0.44);
+    expect(peak(right)).toBeLessThanOrEqual(0.45 + 1e-6);
   });
 });
 
@@ -112,17 +112,18 @@ describe('Speaker policy', () => {
     Speech.stop.mockClear();
   });
 
-  test('route handoffs clear routine narration but cannot cut off a vehicle warning', () => {
+  test('route handoffs clear routine narration but cannot cut off a vehicle warning', async () => {
     const s = new Speaker();
     s.speak('Head north.', Priority.NORMAL, false);
     s.stopRoutine(); expect(Speech.stop).toHaveBeenCalledTimes(1);
     s.speak('Vehicle very close.', Priority.CRITICAL, true);
     s.stopRoutine(); expect(Speech.stop).toHaveBeenCalledTimes(1);
     s.speak('Next instruction.', Priority.NORMAL, false);
+    for (let i = 0; i < 5; i++) await Promise.resolve();
     expect(Speech.speak).toHaveBeenCalledTimes(2);
   });
 
-  test('urgent speech interrupts, stale low-priority speech is dropped', () => {
+  test('urgent speech interrupts, stale low-priority speech is dropped', async () => {
     const s = new Speaker();
     s.speak('Signal lost.', Priority.NORMAL, false);
     expect(Speech.speak).toHaveBeenCalledTimes(1);
@@ -134,6 +135,7 @@ describe('Speaker policy', () => {
 
     // HIGH with interrupt: flushes what is playing.
     s.speak('Vehicle approaching, left.', Priority.HIGH, true);
+    for (let i = 0; i < 5; i++) await Promise.resolve();
     expect(Speech.stop).toHaveBeenCalledTimes(1);
     expect(Speech.speak).toHaveBeenCalledTimes(2);
 

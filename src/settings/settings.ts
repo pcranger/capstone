@@ -57,7 +57,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   speech: true,
   tones: true,
   haptics: true,
-  speechRate: 1.1,
+  speechRate: 0.85,
   verbosity: Verbosity.NORMAL,
   aimSonar: true,
   veerGuidance: true,

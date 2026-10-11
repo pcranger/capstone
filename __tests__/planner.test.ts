@@ -39,3 +39,26 @@ test('cancelling replacement does not have an end-journey dependency; cancelling
   const starting = p.start(p.state.value.revision); p.cancel(); pending.resolve(false);
   expect(await starting).toBe(false); expect(deps.cancelStart).toHaveBeenCalledTimes(1);
 });
+
+test.each([999, 1000, 1001])('distance %s metres gates only trips over one kilometre', async distanceMeters => {
+  const { p, deps } = fixture(); deps.route.mockResolvedValue({ ...route, distanceMeters });
+  p.select(place); await p.confirm(place.id);
+  const revision = p.state.value.revision;
+  expect(await p.start(revision)).toBe(distanceMeters <= 1000);
+  if (distanceMeters > 1000) {
+    expect(deps.start).not.toHaveBeenCalled(); expect(p.state.value.awaitingLongTrip).toBe(true);
+    expect(await p.start(revision, true)).toBe(false); // stale UI cannot approve
+    expect(await p.start(p.state.value.revision, true)).toBe(true);
+    expect(deps.start).toHaveBeenCalledTimes(1);
+  }
+});
+test('cancellation and replacement invalidate long-trip approval', async () => {
+  const { p, deps } = fixture(); deps.route.mockResolvedValue({ ...route, distanceMeters: 1500 });
+  p.select(place); await p.confirm(place.id); await p.start(p.state.value.revision);
+  p.cancel(); expect(p.state.value.awaitingLongTrip).toBe(false);
+  expect(await p.start(p.state.value.revision, true)).toBe(false);
+  expect(deps.start).not.toHaveBeenCalled();
+  p.select({ ...place, id: 'b' }); await p.confirm('b');
+  expect(await p.start(p.state.value.revision, true)).toBe(false);
+  expect(deps.start).not.toHaveBeenCalled();
+});

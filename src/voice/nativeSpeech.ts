@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import { IOS_AUDIO_SESSION } from '../feedback/audioPolicy';
 import type { ExpoSpeechRecognitionModule as RecognitionModule } from 'expo-speech-recognition';
 import CrossWiseNative from '../../modules/crosswise-native';
 import { ENGLISH_LOCALES, reportSpeechStatus, selectEnglishLocale, SPEECH_RECOVERY, speechStatus, type SpeechCapability } from './speechStatus';
@@ -136,7 +137,7 @@ export class NativeSpeechInput implements SpeechInput {
           recordingOptions: { persist: false },
           contextualStrings: ['Navigate to', 'Search for', 'Save as Home', 'Confirm', 'Start journey', 'Pause', 'Resume', 'Repeat',
             'End journey', 'Stop navigation', 'Help', 'Voice help', 'Manual', 'Man', 'Next instruction', 'Arrived', 'Finish crossing', 'Cancel', 'Retry', 'First', 'Second', 'Third', 'Stop listening', 'Sydney Town Hall'],
-          iosCategory: { category: 'playAndRecord', mode: 'measurement', categoryOptions: ['defaultToSpeaker', 'allowBluetooth', 'mixWithOthers', 'duckOthers'] } });
+          iosCategory: IOS_AUDIO_SESSION });
       } catch { abort(new Error('Microphone unavailable. Use Retry voice.')); }
     });
     this.pending = turn;

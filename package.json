@@ -56,7 +56,7 @@
     "lint": "expo lint",
     "android": "expo run:android",
     "android:preview": "node scripts/build-android-preview.cjs",
-    "postinstall": "node scripts/patch-tflite-lifetime.cjs"
+    "postinstall": "node scripts/patch-tflite-lifetime.cjs && node scripts/patch-speech-media.cjs"
   },
   "private": true,
   "jest": {

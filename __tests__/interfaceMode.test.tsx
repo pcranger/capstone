@@ -45,7 +45,7 @@ jest.mock('../src/state/controller', () => {
     planner: { state: new Store({ replacing: false }), cancel: jest.fn() },
     openMap: () => c.presentation.update((s: any) => ({ ...s, mapOpen: true })),
     closeMap: () => c.presentation.update((s: any) => ({ ...s, mapOpen: false })),
-    journey: { state: new Store({ phase: 'idle', crossing: false }), running: false },
+    journey: { state: new Store({ phase: 'idle', crossing: false }), location: new Store(null), running: false },
     ui: new Store({ snapshot: EMPTY_SNAPSHOT, fps: 30, inferenceMs: 20, frameBrightness: 0.5, frameAspect: 0.56, caption: null }),
     notice: new Store(null), model: new Store({ kind: 'ready', info: { format: 'END_TO_END', labels: ['car'], hasPedestrianSignalClasses: true, displayName: 'test', inputWidth: 640, backend: 'CPU' } }),
     cameraStatus: new Store('running'), pipeline:new Store({receivedAt:0,latencyMs:0,slowFrames:0,error:null}),cameraDetail:new Store(null), hasRecentFrame: true, repeatGuidance: jest.fn(), crossingAction: jest.fn(),
@@ -297,7 +297,7 @@ test('in-app help teaches exact voice turns, search versus start, fallback and r
   expect(renderedText()).not.toContain('Navigate to Sydney Town Hall');
   await press('Voice manual');
   const text = renderedText();
-  for (const phrase of ['MANUAL', 'Navigate to Sydney Town Hall', 'Save as Home', 'cannot hear commands', 'finish crossing', 'Enable Dictation']) expect(text).toContain(phrase);
+  for (const phrase of ['MANUAL', 'Navigate to Sydney Town Hall', 'Save as Home', 'Questions and place choices keep listening on', 'finish crossing', 'Enable Dictation']) expect(text).toContain(phrase);
   expect(button('Read voice instructions')).toBeDefined(); expect(button('Open app settings')).toBeDefined();
   await press('Read voice instructions'); expect(controller.sayNavigation).toHaveBeenCalledWith(expect.stringContaining('Navigate to Town Hall'));
 });

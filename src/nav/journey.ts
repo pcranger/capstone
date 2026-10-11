@@ -1,4 +1,5 @@
 import { spokenError } from '../voice/speechCatalog';
+import { spokenWalkingDirection, upcomingDirection } from './spokenDirection';
 import { P } from '../strings';
 import { Store } from '../state/store';
 import { distanceMeters, type LocationFix, type PlaceCandidate, type WalkingRoute, stepPosition, usableFix } from './navigation';
@@ -161,13 +162,22 @@ export class Journey {
       this.boundaryAnnounced = true;
       this.deps.say(s.stepIndex === s.route.steps.length - 1
         ? P.nearDestination
-        : P.stepEnd);
+        : upcomingDirection(s.route.steps[s.stepIndex + 1], position.remaining) ?? P.stepEnd);
     }
   }
   repeat(): void {
     const s = this.state.value;
     if (!this.running || s.crossing || !s.route) return;
-    this.deps.say(P.instruction(s.stepIndex, s.route.steps[s.stepIndex].instruction, s.remaining));
+    this.deps.say(this.guidanceText());
+  }
+  guidanceText(): string {
+    const s = this.state.value;
+    if (!s.route) return '';
+    const fix = this.location.value;
+    const reliable = s.locationStatus === 'good' && fix && usableFix(fix, this.deps.now());
+    const step = s.route.steps[s.stepIndex];
+    if (s.crossing || !reliable) return step.instruction;
+    return spokenWalkingDirection(step, s.remaining, fix);
   }
   next(expectedStep: number): void {
     const s = this.state.value;

@@ -1,11 +1,13 @@
 import { Store } from '../state/store';
 import type { PlaceCandidate, WalkingRoute } from './navigation';
+import { ProgressPrompt } from '../voice/progressPrompt';
 
 export interface PlannerState {
   query: string; page: 'entry' | 'results' | 'place' | 'route' | 'saved';
   candidates: PlaceCandidate[]; selected: PlaceCandidate | null; route: WalkingRoute | null;
   busy: 'searching' | 'details' | 'routing' | 'starting' | null; error: string | null;
   revision: number; replacing: boolean; allSaved: boolean;
+  awaitingLongTrip: boolean;
 }
 interface Dependencies {
   search: (query: string, signal: AbortSignal) => Promise<PlaceCandidate[]>;
@@ -13,17 +15,27 @@ interface Dependencies {
   route: (place: PlaceCandidate, signal: AbortSignal) => Promise<WalkingRoute>;
   start: (plan: { destination: PlaceCandidate; route: WalkingRoute }) => Promise<boolean>;
   cancelStart: () => void;
+  progress?: (text: string) => Promise<unknown>;
+  silenceProgress?: () => void;
 }
 const initial = (): PlannerState => ({ query: '', page: 'entry', candidates: [], selected: null, route: null, busy: null,
-  error: null, revision: 0, replacing: false, allSaved: false });
+  error: null, revision: 0, replacing: false, allSaved: false, awaitingLongTrip: false });
 /** Draft navigation never replaces a paused live journey until the new start succeeds. */
 export class DestinationPlanner {
   readonly state = new Store<PlannerState>(initial());
   private request: AbortController | null = null;
   private generation = 0;
-  constructor(private deps: Dependencies) {}
-  private update(patch: Partial<PlannerState>): void { this.state.update(s => ({ ...s, ...patch, revision: s.revision + 1 })); }
+  private progress: ProgressPrompt;
+  constructor(private deps: Dependencies) {
+    this.progress = new ProgressPrompt(deps.progress ?? (async () => undefined), deps.silenceProgress ?? (() => {}));
+  }
+  private update(patch: Partial<PlannerState>): void {
+    if (patch.busy === null) this.progress.stop();
+    this.state.update(s => ({ ...s, ...patch, revision: s.revision + 1 }));
+  }
   private abort(): void {
+    this.progress.stop();
+    if (this.state.value.awaitingLongTrip) this.update({ awaitingLongTrip: false });
     ++this.generation; this.request?.abort(); this.request = null;
     if (this.state.value.busy === 'starting') this.deps.cancelStart();
   }
@@ -39,6 +51,7 @@ export class DestinationPlanner {
   replace(): void { this.reset(); this.update({ replacing: true }); }
   private begin(busy: PlannerState['busy']): { id: number; signal: AbortSignal } {
     this.abort(); this.request = new AbortController(); this.update({ busy, error: null });
+    this.progress.start(busy === 'routing' ? 'Finding route.' : busy === 'searching' ? 'Searching.' : busy === 'details' ? 'Checking place.' : 'Checking location.');
     return { id: this.generation, signal: this.request.signal };
   }
   private fail(error: unknown, id: number): void {
@@ -56,6 +69,9 @@ export class DestinationPlanner {
   }
   select(place: PlaceCandidate): void {
     this.abort(); this.update({ selected: place, route: null, page: 'place', busy: null, error: null });
+  }
+  review(destination: PlaceCandidate, route: WalkingRoute): void {
+    this.abort(); this.update({ selected: destination, route, page: 'route', busy: null, error: null });
   }
   async resolve(placeId: string): Promise<void> {
     const { id, signal } = this.begin('details');
@@ -75,9 +91,13 @@ export class DestinationPlanner {
       if (id === this.generation) this.update({ route, page: 'route', busy: null });
     } catch (e) { this.fail(e, id); }
   }
-  async start(expectedRevision: number): Promise<boolean> {
+  async start(expectedRevision: number, longTripConfirmed = false): Promise<boolean> {
     const s = this.state.value;
     if (s.revision !== expectedRevision || s.busy || s.page !== 'route' || !s.selected || !s.route) return false;
+    if (s.route.distanceMeters > 1000 && !(longTripConfirmed && s.awaitingLongTrip)) {
+      this.update({ awaitingLongTrip: true });
+      return false;
+    }
     const { id } = this.begin('starting');
     try {
       const started = await this.deps.start({ destination: s.selected, route: s.route });

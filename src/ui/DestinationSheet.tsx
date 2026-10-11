@@ -7,6 +7,7 @@ import { type PlaceCandidate, WALKING_WARNING } from '../nav/navigation';
 import { Text } from './ScaledText';
 import { BigButton, styles, TextButton } from './components';
 import { Colors, useType } from './theme';
+import { V } from '../voice/speechCatalog';
 
 export function PlaceRow({ place, index, saved, busy, onSelect, onSave }: {
   place: Pick<PlaceCandidate, 'id' | 'name' | 'address'>; index?: number; saved: boolean; busy: boolean; onSelect?: () => void; onSave: () => void;
@@ -89,7 +90,11 @@ export function DestinationSheet({ visible }: { visible: boolean }) {
     {s.page === 'route' && s.route && <>
       <Text style={type.titleLarge}>{s.route.destination}</Text><Text style={type.bodyMedium}>{s.route.destinationAddress}</Text>
       <Text style={type.bodyLarge}>{Math.round(s.route.distanceMeters)} metres · About {Math.max(1, Math.round(s.route.durationSeconds / 60))} {s.route.durationSeconds < 90 ? 'minute' : 'minutes'}</Text>
-      {button('Start journey', () => { Keyboard.dismiss(); void controller.startPlannedJourney(); }, !s.busy)}
+      {s.awaitingLongTrip ? <>
+        <Text accessibilityRole="alert" style={type.bodyLarge}>{V.longTrip}</Text>
+        <BigButton text="Yes, proceed" color={Colors.Crossing} onPress={() => { void controller.startPlannedJourney(true); }} enabled={!s.busy} />
+        <TextButton label="No, cancel" onPress={() => { controller.stopVoice(); controller.cancelPlanning(); controller.sayNavigation(V.cancelled); }} />
+      </> : button('Start journey', () => { Keyboard.dismiss(); void controller.startPlannedJourney(); }, !s.busy)}
       <Text style={type.bodyMedium}>{WALKING_WARNING}</Text>
       {s.route.warnings.map((w, i) => <Text key={i} style={type.bodyMedium}>{w}</Text>)}
       <TextButton label={showSteps ? 'Hide route instructions' : 'Review all instructions'} onPress={() => setShowSteps(v => !v)} />

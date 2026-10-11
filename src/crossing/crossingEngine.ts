@@ -276,7 +276,8 @@ export class CrossingEngine {
     this.lastTrafficFrameMs=now;
     this.trafficUsable = this.vehicleMotion.reliable && (frame.brightness ?? 0)>.12;
     const looming = this.hazardMonitor.assess(tracks, now, frameAspect, this.mode === AssistMode.CROSSING);
-    this.hazards = this.settings.vehicleAlerts ? tracks.filter(t => t.group === TrackGroup.VEHICLE && t.isSeenAt(now) && (motion.get(t.id)?.state === 'MOVING' || !motion.get(t.id)?.supported)).map(t => {
+    // Speak only for supported motion. Unclassified vehicles still block scan completion below.
+    this.hazards = this.settings.vehicleAlerts ? tracks.filter(t => t.group === TrackGroup.VEHICLE && t.isSeenAt(now) && motion.get(t.id)?.state === 'MOVING' && motion.get(t.id)?.supported).map(t => {
       const estimate = motion.get(t.id);
       const urgent = looming.find(h => h.trackId === t.id);
       // Direction is camera-relative. During a scan or stale orientation, do not claim a body-relative side.

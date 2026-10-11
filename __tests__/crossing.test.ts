@@ -10,6 +10,16 @@ import { Phrase } from '../src/feedback/cue';
 import { type Detection, ObjectCategory } from '../src/perception/detection';
 import { det, frame } from './fixtures';
 import { SignalPhase } from '../src/signal/signalPhaseTracker';
+import { VehicleMotion } from '../src/tracking/vehicleMotion';
+
+afterEach(() => jest.restoreAllMocks());
+
+// These scenario tests exercise crossing state and continued warnings; optical flow
+// evidence itself is covered by vehicleMotion.test.ts.
+function confirmedMotion() {
+  jest.spyOn(VehicleMotion.prototype, 'update').mockImplementation(tracks =>
+    new Map(tracks.map(t => [t.id, { state: 'MOVING' as const, direction: 'UNKNOWN' as const, supported: true }])));
+}
 
 describe('CrossingEngine', () => {
   let engine: CrossingEngine;
@@ -69,13 +79,14 @@ describe('CrossingEngine', () => {
     expect(phrases()).not.toContain(Phrase.SIGNAL_LOST);
 
     // A car on the left approaches fast (contact in ~2.5 s).
+    confirmedMotion();
     const carStart = now;
     run(1_500, (t) => {
       const remaining = 3.0 - (t - carStart) / 1000;
       const h = (0.08 * 3.0) / remaining;
       return [det(ObjectCategory.CAR, BoxF.fromCenter(0.2, 0.6, h * 0.8, h), 0.9)];
     });
-    expect(phrases().some((p) => p === Phrase.VEHICLE_DETECTED || p === Phrase.VEHICLE_CLOSE_AHEAD)).toBe(true);
+    expect(phrases()).toContain(Phrase.VEHICLE_MOVING);
 
     // A pause could be on a refuge: stillness alone cannot finish crossing mode.
     walking = false;
@@ -107,12 +118,13 @@ describe('CrossingEngine', () => {
     expect(engine.snapshot.veer).not.toBeNull();
     expect(phrases()).not.toContain(Phrase.CROSSING_ENDED);
     // Hazards are still processed while the crossing is paused or unusually long.
+    confirmedMotion();
     const carStart = now;
     run(1_500, (t) => {
       const h = 0.24 / (3 - (t - carStart) / 1000);
       return [det(ObjectCategory.CAR, BoxF.fromCenter(0.2, 0.6, h * 0.8, h), 0.9)];
     });
-    expect(phrases().some((p) => p === Phrase.VEHICLE_DETECTED || p === Phrase.VEHICLE_CLOSE_AHEAD)).toBe(true);
+    expect(phrases()).toContain(Phrase.VEHICLE_MOVING);
   });
 
   test('a sensor gap without heading does not complete a crossing, but the explicit shortcut does', () => {
@@ -148,14 +160,15 @@ describe('CrossingEngine', () => {
     expect(engine.mode).toBe(AssistMode.WAITING);
   });
 
-  test('passing vehicle without pixel evidence still triggers a detection alert', () => {
+  test('image displacement without pixel evidence does not prove vehicle motion', () => {
     engine.command(UserCommand.START_ASSIST, now);
     const start = now;
     run(3_000, (t) => {
       const x = 0.1 + (0.25 * (t - start)) / 1000; // crosses the view at constant size
       return [det(ObjectCategory.CAR, BoxF.fromCenter(x, 0.5, 0.12, 0.1))];
     });
-    expect(phrases()).toContain(Phrase.VEHICLE_DETECTED);
+    expect(phrases()).not.toContain(Phrase.VEHICLE_DETECTED);
+    expect(engine.snapshot.hazards).toHaveLength(0);
   });
 
   test('repeat status describes signal age', () => {

@@ -1,4 +1,5 @@
 import { ToneKind } from './cue';
+import { TONE_GAIN } from './audioPolicy';
 
 interface Note {
   frequencyHz: number;
@@ -13,23 +14,23 @@ const repeat = (n: number, notes: Note[]): Note[] => Array.from({ length: n }, (
 export function notesFor(kind: ToneKind): [Note[], number] {
   switch (kind) {
     case ToneKind.LISTENING:
-      return [[note(1100, 45, 40), note(1100, 45)], 0.45];
+      return [[note(1100, 45, 40), note(1100, 45)], TONE_GAIN];
     case ToneKind.SONAR:
-      return [[note(1400, 35)], 0.45];
+      return [[note(1400, 35)], TONE_GAIN];
     case ToneKind.CENTERED:
-      return [[note(1760, 60), note(2349, 90)], 0.55];
+      return [[note(1760, 60), note(2349, 90)], TONE_GAIN];
     case ToneKind.WALK_CHIME:
-      return [[note(880, 90), note(1175, 90), note(1568, 160)], 0.7];
+      return [[note(880, 90), note(1175, 90), note(1568, 160)], TONE_GAIN];
     case ToneKind.STOP:
-      return [[note(440, 260)], 0.6];
+      return [[note(440, 260)], TONE_GAIN];
     case ToneKind.ALERT:
-      return [repeat(3, [note(2000, 70, 10), note(1500, 70, 10)]), 0.85];
+      return [repeat(3, [note(2000, 70, 10), note(1500, 70, 10)]), TONE_GAIN];
     case ToneKind.CRITICAL:
-      return [repeat(5, [note(2500, 55, 5), note(1800, 55, 5)]), 1.0];
+      return [repeat(5, [note(2500, 55, 5), note(1800, 55, 5)]), TONE_GAIN];
     case ToneKind.VEER:
-      return [[note(660, 120)], 0.6];
+      return [[note(660, 120)], TONE_GAIN];
     case ToneKind.LOST:
-      return [[note(700, 100), note(500, 140)], 0.5];
+      return [[note(700, 100), note(500, 140)], TONE_GAIN];
   }
 }
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { MaterialIcons } from '@expo/vector-icons';
 import { DeveloperTelemetry } from './DeveloperTelemetry';
 import { VehicleVisibilityControls } from './VehicleVisibilityControls';
@@ -35,6 +35,14 @@ export function MainScreen({ height, topInset = 0, bottomInset = 0, hidden = fal
   const [attempt, setAttempt] = useState(0);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [, tick] = useState(0);
+  const lastTap = useRef(0);
+  const onCameraTap = () => {
+    const now = Date.now();
+    if (now - lastTap.current < 420) {
+      lastTap.current = 0;
+      controller.toggleVoiceFromGesture();
+    } else lastTap.current = now;
+  };
   useEffect(() => { const timer = setInterval(() => tick(v => v + 1), 1_000); return () => clearInterval(timer); }, []);
   const developer = settings.interfaceMode === InterfaceMode.DEVELOPER;
   const assistOn = ui.snapshot.mode !== AssistMode.IDLE;
@@ -73,6 +81,7 @@ export function MainScreen({ height, topInset = 0, bottomInset = 0, hidden = fal
       {developer && fresh && settings.showPreview && settings.showOverlay &&
         <DetectionOverlay snapshot={ui.snapshot} frameAspect={ui.frameAspect} resizeMode="cover" visibility={settings} />}
     </View>
+    <Pressable accessible={false} pointerEvents="box-only" style={StyleSheet.absoluteFill} onPress={onCameraTap} />
     {developer && <View style={[styles.strip, { top: topInset + 8 }]}>
       <Pressable accessibilityRole="button" accessibilityLabel={message + '. Show details'}
         onPress={() => setDetailsOpen(v => !v)} style={styles.iconButton}>
