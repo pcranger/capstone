@@ -155,7 +155,9 @@ export class CheckSession {
 
     if (event.kind === 'DONE') {
       const r = this.check.result();
-      this.finish(now, r?.summary ?? 'NOT_CHECKED', CHECK_RESULT_TEXT[r?.summary ?? 'NOT_CHECKED']);
+      const summary = r?.summary ?? 'NOT_CHECKED';
+      // The fallback note repeats after the result, so the user knows the left look was aimed at a guessed angle.
+      this.finish(now, summary, r?.fallbackNote ? `${CHECK_RESULT_TEXT[summary]} ${CHECK_TEXT.fallbackResult}` : CHECK_RESULT_TEXT[summary]);
       step.urgent = this.resultText ?? undefined;
       return step;
     }

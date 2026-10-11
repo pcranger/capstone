@@ -44,7 +44,7 @@ import {
   SettingsRepository,
   InterfaceMode,
 } from '../settings/settings';
-import { cueText, phraseText, P, S } from '../strings';
+import { cueText, P, S } from '../strings';
 import { Store } from './store';
 
 export type ModelState =

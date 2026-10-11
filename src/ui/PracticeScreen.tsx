@@ -1,4 +1,5 @@
 import { VoiceCheck } from './VoiceCheck';
+import { PracticeCheck } from './PracticeCheck';
 import { ScrollView } from 'react-native';
 import { Text } from './ScaledText';
 import { controller } from '../state/controller';
@@ -26,6 +27,8 @@ export function PracticeScreen({ onBack }: { onBack?: () => void }) {
       <Hint>{S.practiceIntro}</Hint>
 
       <SectionCard title="Voice check"><VoiceCheck /></SectionCard>
+
+      <SectionCard title="Practise the check"><PracticeCheck /></SectionCard>
 
       <SectionCard title={S.practiceSignals}>
         <Hint>Demonstration sounds. Live pedestrian signal recognition requires a suitable model.</Hint>

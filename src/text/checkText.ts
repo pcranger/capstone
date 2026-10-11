@@ -9,6 +9,7 @@ export const CHECK_TEXT = {
   holdUpright: 'Hold the phone upright and still.',
   start: 'Facing the road. Turn right until the phone points up the road, toward the traffic.',
   fallbackNote: 'Couldn’t see the road’s angle, using straight left.',
+  fallbackResult: 'Road angle not found; left side checked at a right angle.',
   vehicleStopRight: 'Vehicle on your right. Wait. Check again.',
   vehicleStopLeft: 'Vehicle on your left. Wait. Check again.',
   expired: 'Check expired. Check again.',
