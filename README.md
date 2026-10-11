@@ -1,7 +1,7 @@
 # CrossWise Android
 
 This repository contains the React Native Android app. The source, screens,
-navigation, voice commands, vehicle model and crossing logic are now checked
+voice commands, vehicle model and crossing logic are now checked
 into this repository; it no longer depends on a symlink to the iOS checkout.
 The former Kotlin/Compose implementation is retained in `android-legacy/` for
 reference only.
@@ -9,10 +9,7 @@ reference only.
 ## Current interface
 
 - Full-screen camera. User mode has compact status and optional controls; Developer mode adds labelled boxes, counts and expandable diagnostics.
-- The bottom arrow opens an interactive Google map. Its destination panel expands from the bottom; the bottom-right close icon returns to the camera.
-- Place search, explicit result selection, walking-route review, saved-place stars, aliases, three recent saved places, remove and undo.
-- Foreground GPS continues while a journey is paused. Route steps and far-footpath arrival require explicit confirmation; the app does not infer the pavement side from GPS.
-- On-device voice commands: `manual`, `man`, `navigate to …`, `search …`, `first/second/third`, `save as …`, `confirm`, `repeat`, `pause`, `resume`, `stop navigation`. Offline English recognition must be available on the device.
+- On-device voice commands: `manual`, `man`, `start`, `repeat`, `retry`, `pause`, `resume`, `cancel`, `finish crossing`, `stop listening`. Offline English recognition must be available on the device.
 - Settings contains mode selection, the manual, precautions, practice cues and developer controls. Volume keys retain normal volume behavior.
 
 The custom CrossWise model (crosswise.tflite: pedestrian signals, crosswalks, people and vehicles) is bundled and selected by default; the YOLO26n BDD100K vehicle model is also bundled and selectable in Developer mode. Detection does not establish that crossing is safe. Models and optical motion estimates still require outdoor evaluation.
@@ -22,11 +19,6 @@ The custom CrossWise model (crosswise.tflite: pedestrian signals, crosswalks, pe
 JDK 17 and Android SDK 36 are required. Android 8+ is supported; on-device
 voice requires Android 12+ and an installed recognizer.
 
-Build configuration reads `GOOGLE_MAP_API_KEY` and `GEMINI_API_KEY` from environment variables or this repository's local `.env` file. Keys are not entered on the phone. The Google project must enable Maps SDK for Android, Places API and Routes API; Android key restrictions must match the installed package and signing certificate. Keys compiled into a mobile app are not secrets and need provider restrictions.
-
-The Android Maps key never lives in `android/`. The manifest holds only the placeholder `${googleMapsApiKey}`, and
-Gradle fills it at build time from `GOOGLE_MAPS_ANDROID_API_KEY` (or `GOOGLE_MAP_API_KEY`) in the environment or in the
-repo-root `.env`. Put the key in `.env`, never in a tracked file; `expo prebuild` keeps the placeholder in place.
 
 ```bash
 npm install

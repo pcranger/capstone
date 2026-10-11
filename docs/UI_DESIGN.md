@@ -69,8 +69,7 @@ elevation is surface lightness.
 
 ## Screens
 
-There is no tab bar and no router. `CrossWiseApp` owns one **Journey** screen: a full-size camera with a directly
-reachable full-screen Google map. Settings and Help open over it so the one camera stays mounted.
+There is no tab bar and no router. `CrossWiseApp` owns one **Journey** screen: a full-size camera. Settings and Help open over it so the one camera stays mounted.
 
 * **Hazard banner.** A yellow (`Hazard`) banner with black text for a vehicle warning. It is the only place that
   colour is used.
@@ -78,12 +77,10 @@ reachable full-screen Google map. Settings and Help open over it so the one came
   camera is off a card says so and names the way to start it.
 * **One primary dock button**, 56 dp, which cycles by state: **Start camera help**, then **I'm crossing**, then
   **I'm on the footpath**. Secondary actions sit under More controls.
-* **Map.** The bottom destination sheet holds search, saved places and route review; Start journey is pinned at its
-  foot.
 * **Settings.** Cards in a fixed order: Feedback, Display, Help, Manual, Precautions, Advanced (Developer mode asks
   for confirmation). Manual and Precautions expand and collapse.
 * **Guide.** Opened from Settings. Each section is a collapsible heading (button, `expanded` state, expand-more or
-  expand-less icon); Voice help starts open, the rest closed. About holds the Google Maps note and links.
+  expand-less icon); Voice help starts open, the rest closed. About holds the version, the model and the licences.
 * **Voice help.** Heading "Say", one command per line, then a collapsed "If voice fails" with the recovery steps.
 
 ## Accessibility behaviour

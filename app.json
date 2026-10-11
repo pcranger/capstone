@@ -13,7 +13,6 @@
       "requireFullScreen": true,
       "infoPlist": {
         "NSCameraUsageDescription": "CrossWise uses the camera to see pedestrian signals and traffic. Detection runs on the phone. Optional scene descriptions send requested images to Google Gemini.",
-        "NSLocationWhenInUseUsageDescription": "CrossWise uses your location only for walking navigation, when you ask for a route.",
         "UIFileSharingEnabled": true,
         "LSSupportsOpeningDocumentsInPlace": true,
         "UIRequiredDeviceCapabilities": [
@@ -48,15 +47,6 @@
         {
           "iosBackgroundMode": false,
           "disableFFmpeg": true
-        }
-      ],
-      [
-        "expo-location",
-        {
-          "locationWhenInUsePermission": "CrossWise uses your location only for walking navigation, when you ask for a route.",
-          "locationAlwaysAndWhenInUsePermission": false,
-          "locationAlwaysPermission": false,
-          "isIosBackgroundLocationEnabled": false
         }
       ],
       [
