@@ -1,5 +1,5 @@
 /** Shared speech used by commands, recovery and Developer preview. */
-export const VOICE_MANUAL = 'Start. Pause. Resume. Repeat. Retry. Finish crossing. Cancel. Stop listening.';
+export const VOICE_MANUAL = 'Start. Pause. Resume. Repeat. Retry. Finish crossing. Cancel. Stop listening. Double-tap the camera to start or stop listening.';
 export const V = {
   unknown: 'Command not recognised.',
   unknownHelp: 'Command not recognised. Say manual for commands.',
@@ -20,6 +20,10 @@ export const V = {
   trafficRestored: 'Vehicle detection restored.',
   heard: (text: string) => `Heard: ${text}.`,
 };
+/** Follow-ups that keep the microphone armed so the next command needs no second tap. Keep this explicit. */
+export function expectsVoiceAnswer(text: string): boolean {
+  return [V.unknown, V.unknownHelp].includes(text);
+}
 /** Internal errors stay available to diagnostics; speech gives a short recovery action. */
 export function spokenError(error: unknown, _context: 'voice' = 'voice'): string {
   const message = error instanceof Error ? error.message : String(error ?? '');

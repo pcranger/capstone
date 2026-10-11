@@ -25,7 +25,7 @@ Run lint and typecheck before declaring any task done.
 
 ## App structure
 
-This is the shared iOS/Android React Native app. `../capstone_android/mobile` links to this directory; its older Kotlin app is retained only as a reference. There is no Expo Router: `src/ui/CrossWiseApp.tsx` owns a single Journey screen with a full-size camera and a directly accessible full-screen Google map.
+This is the Android React Native app, ported from the separate `../capstone_ios` directory. These are separate copies, not symlinks; edits here do not automatically update iOS. The older Kotlin app is retained in `android-legacy` only as a reference. The local Expo module in `modules/crosswise-native/android` must be included in Android builds for orientation and haptics. There is no Expo Router: `src/ui/CrossWiseApp.tsx` owns a single Journey screen with a full-size camera and a directly accessible full-screen Google map.
 The map owns a bottom destination sheet with saved places and route review. Settings and Help open over the journey so one camera stays mounted. Interface mode lives in Settings. Platform-free logic in `src/core`, `perception`, `tracking`, `signal`, `crossing` and
 `sensors` is shared by both platforms; change it here once and keep `npm test` green. Do not duplicate new UI or navigation work in the legacy Kotlin app.
 

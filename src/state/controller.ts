@@ -18,7 +18,7 @@ import {
   type EngineSnapshot,
   UserCommand,
 } from '../crossing/crossingEngine';
-import { type Cue, Cues, Phrase, Priority, ToneKind } from '../feedback/cue';
+import { type Cue, Cues, Phrase, Priority } from '../feedback/cue';
 import { FeedbackEngine } from '../feedback/feedbackEngine';
 import { SessionLogger } from '../logging/sessionLogger';
 import type { Detection, FrameDetections, ObjectCategory, SignalColor } from '../perception/detection';
@@ -78,6 +78,7 @@ export interface RawDetection {
 
 export interface FrameResult {
   capturedWallMs?: number;
+  motionWorkerMs?: number;
   motionImage?: import("../tracking/vehicleMotion").GrayFrame;
   detections: RawDetection[];
   frameWidth: number;
@@ -137,6 +138,8 @@ export class CrossWiseController {
   private assistStartedAt=0;
   private trafficFailure:string|null=null;
   private voiceMuted = false;
+  /** Prevents a recurring native/service error from talking over itself while it remains unresolved. */
+  private announcedErrors = new Map<string, string>();
   private voiceAudioGeneration = 0;
   readonly voice = new NavigationVoice({
     input: new NativeSpeechInput(),
@@ -144,13 +147,18 @@ export class CrossWiseController {
       this.ui.update(s => ({ ...s, caption: text }));
       return this.feedback.sayAndWait(text);
     },
-    ready: () => this.feedback.dispatch([Cues.tone(ToneKind.LISTENING), Cues.haptic(HapticPattern.CENTERED_TICK)]),
+    ready: () => this.feedback.dispatch([Cues.haptic(HapticPattern.CENTERED_TICK)]),
     handle: (text, current) => this.handleVoice(text, current),
     cancel: () => undefined,
+    stopSpeech: () => this.feedback.stopForInterruption(),
+    announceListening: () => this.feedback.sayAndWait('Listening.'),
   });
   setHomeVisible(visible: boolean): void {
     this.homeVisible = visible;
-    if (visible) this.startVoice();
+    if (visible) {
+      this.announceDetectionError();
+      this.startVoice();
+    }
     else { ++this.voiceAudioGeneration; this.voice.stop(); this.feedback.silenceRoutine(); }
   }
   startVoice(force = false): void {
@@ -168,7 +176,16 @@ export class CrossWiseController {
     this.voiceMuted = true;
     ++this.voiceAudioGeneration; this.voice.stop(); this.feedback.silenceRoutine();
   }
-  private async handleVoice(text: string, _current: () => boolean): Promise<string | null> {
+  toggleVoiceFromGesture(): void {
+    if (this.voice.active) {
+      this.stopVoice();
+      void this.feedback.sayAndWait('Listening stopped.');
+    } else {
+      this.startVoice(true);
+    }
+  }
+  private async handleVoice(text: string, current: () => boolean): Promise<string | null> {
+    if (!current()) return null;
     const intent = voiceIntent(text);
     if (!intent) return ++this.unknownCommands >= 2 ? V.unknownHelp : V.unknown;
     this.unknownCommands = 0;
@@ -217,6 +234,7 @@ export class CrossWiseController {
     if (this.started) return;
     this.started = true;
     this.settingsRepository.subscribe((s) => this.onSettings(s));
+    this.model.subscribe(() => this.announceDetectionError());
     this.settingsRepository
       .load()
       .catch(() => undefined)
@@ -236,6 +254,24 @@ export class CrossWiseController {
     }, 2_000);
     AppState.addEventListener('change', (s) => this.onAppState(s));
     if (AppState.currentState === 'active') this.onForeground();
+  }
+
+  /** Put a model-load failure through the same audio queue as normal guidance. */
+  private announceDetectionError(): void {
+    const state = this.model.value;
+    const error = state.kind === 'failed' ? state.message : null;
+    if (!error) {
+      this.announcedErrors.delete('detection');
+      return;
+    }
+    // Keep the state error for the next foreground turn; do not consume it while
+    // the app is hidden and unable to deliver audio.
+    if (!this.homeVisible || AppState.currentState !== 'active') return;
+    if (this.announcedErrors.get('detection') === error) return;
+    this.announcedErrors.set('detection', error);
+    // A voice command receives its own concise response; do not talk over it.
+    if (this.voice.processing) return;
+    this.deliver([Cues.speakText(P.detectionUnavailable, Priority.HIGH)]);
   }
 
   // ---- Settings & models ------------------------------------------------------------------------
@@ -295,7 +331,6 @@ export class CrossWiseController {
       this.loadedModel.set(null);
       this.model.set({ kind: 'failed', message: e instanceof Error ? e.message : String(e) });
       this.notice.set(P.detectionUnavailable);
-      if (this.assistOn) this.speakNow(P.detectionUnavailable);
     }
   }
 
@@ -342,6 +377,7 @@ export class CrossWiseController {
 
   private onForeground(): void {
     this.sensors.start();
+    this.announceDetectionError();
     this.startVoice();
     // A conf file edited in the Files app while we were away takes effect now.
     if (this.settingsLoaded.value) void this.settingsRepository.load();
@@ -367,7 +403,8 @@ export class CrossWiseController {
     if (!loaded) return;
     // Time the frame was captured, as closely as the JS thread can know it.
     const age = result.capturedWallMs === undefined ? result.inferenceMs : Date.now()-result.capturedWallMs;
-    this.pipeline.update(p=>({receivedAt:nowMs(),latencyMs:age,slowFrames:p.slowFrames+(age>350?1:0),error:null}));
+    if (nowMs() - this.pipeline.value.receivedAt >= 500 || this.pipeline.value.error !== null)
+      this.pipeline.update(p=>({receivedAt:nowMs(),latencyMs:age,slowFrames:p.slowFrames+(age>350?1:0),error:null,processingMs:result.inferenceMs,motionWorkerMs:result.motionWorkerMs}));
     const timestampMs = nowMs() - age;
     const labels = loaded.info.labels;
     const categories = loaded.categories;
@@ -389,8 +426,9 @@ export class CrossWiseController {
       inferenceMs: result.inferenceMs,
     };
     if (result.debug) this.writeDebugCapture(result, loaded, detections);
-    // Preserve requested diagnostics even when inference is too old for live guidance.
-    if(age < 0 || age > 350) return;
+    // Accept completed detections regardless of processing latency. Keep capture time
+    // for motion calculations; invalid clock values are not usable measurements.
+    if (!Number.isFinite(age) || age < 0) return;
     this.brightness = 0.8 * this.brightness + 0.2 * result.brightness;
     if (result.mask) this.mask.set(result.mask);
     else if (this.mask.value !== null) this.mask.set(null);
@@ -424,7 +462,7 @@ export class CrossWiseController {
       const request = new File(Paths.document, 'capture.request');
       if (!request.exists) return;
       request.delete();
-      new File(Paths.document, 'capture-status.json').write(JSON.stringify({checkedAt:new Date().toISOString(),motionClassifier:"local-background-binary-v1",model:this.model.value,camera:this.cameraStatus.value,recentFrame:this.hasRecentFrame,pipeline:this.pipeline.value,cameraDetail:this.cameraDetail.value,mode:this.engine.mode}));
+      new File(Paths.document, 'capture-status.json').write(JSON.stringify({checkedAt:new Date().toISOString(),motionClassifier:"local-background-binary-v1",model:this.model.value,camera:this.cameraStatus.value,recentFrame:this.hasRecentFrame,pipeline:this.pipeline.value,cameraDetail:this.cameraDetail.value,mode:this.engine.mode,orientation:this.sensors.latestOrientation,walking:this.sensors.isWalking,vehicleHazards:this.engine.snapshot.hazards.length,voice:this.voice.state.value.phase}));
       this.debugCapture.set(true);
     } catch {
       // No file system (tests): nothing to capture.
@@ -647,7 +685,6 @@ export class CrossWiseController {
       const text=phraseText(instruction.phrase);
       this.ui.update(s=>({...s,caption:text}));
       if(await this.feedback.sayAndWait(text))this.engine.acknowledgeScan(instruction.token);
-      this.startVoice();
     } finally {
       if(this.speakingScanToken===instruction.token)this.speakingScanToken=null;
       if(this.engine.scanInstruction?.token===instruction.token)this.queuedScanToken=-1;
@@ -680,12 +717,11 @@ export class CrossWiseController {
       // Commands narrate their own result; routine model/route speech cannot feed their recognizer.
       if (this.voice.processing && !urgent) cues = cues.filter(c => c.kind === 'haptic');
       else {
-        const id = ++this.voiceAudioGeneration;
+        ++this.voiceAudioGeneration;
         this.voice.stop();
         this.feedback.dispatch(cues);
-        void this.feedback.whenIdle().then(idle => {
-          if (idle && id === this.voiceAudioGeneration) this.startVoice();
-        });
+        // A spoken direction or warning ends this listening turn. The user can
+        // deliberately double-tap the camera to start another turn.
         for (const cue of cues) { const text = cueText(cue); if (text) this.ui.update(s => ({ ...s, caption: text })); }
         return;
       }

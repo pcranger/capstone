@@ -3,7 +3,7 @@ import { PHRASES, P, phraseText } from '../strings';
 import { V, VOICE_MANUAL } from './speechCatalog';
 export interface SpeechSample { id: string; text: string; trigger: string; extras: Cue[] }
 const triggers: Partial<Record<Phrase,string>> = {
-  [Phrase.VEHICLE_DETECTED]: 'Vehicle observed before motion is established.',
+  [Phrase.VEHICLE_DETECTED]: 'Legacy preview only; unconfirmed and stationary vehicles do not trigger live warnings.',
   [Phrase.VEHICLE_MOVING]: 'Movement confirmed; approach and direction unknown.',
   [Phrase.VEHICLE_AHEAD]: 'Vehicle movement with optical approach evidence.',
   [Phrase.VEHICLE_LEFT]: 'Supported left-to-right motion with the phone facing forward.',

@@ -1,5 +1,7 @@
 import * as Speech from 'expo-speech';
+import { Platform } from 'react-native';
 import { Priority } from './cue';
+import { SPEECH_GAIN } from './audioPolicy';
 
 /**
  * Text-to-speech with priorities: urgent messages interrupt less important ones, stale low-priority
@@ -11,11 +13,13 @@ import { Priority } from './cue';
 export class Speaker {
   private ids = 0;
   private stopping: Promise<void> = Promise.resolve();
+  private stoppingNative = false;
+  private stopAtBoundary: (() => void) | null = null;
   private readonly completions = new Map<string, (completed: boolean) => void>();
   private readonly pending = new Map<string, Priority>();
   private readonly idleListeners = new Set<() => void>();
-  /** 1.0 is the system's normal speaking rate. */
-  speechRate = 1.0;
+  /** Slightly slower than the system default for clear outdoor instructions. */
+  speechRate = 0.85;
 
   /**
    * @param interrupt allow this message to cut off what is being said (only honored if nothing more
@@ -36,7 +40,7 @@ export class Speaker {
     if (flush) {
       this.cancelCompletions();
       this.pending.clear();
-      this.stopping = Speech.stop().catch(() => undefined);
+      this.stopNative();
     }
     this.pending.set(id, priority);
     if (complete) this.completions.set(id, complete);
@@ -45,14 +49,21 @@ export class Speaker {
       this.completions.get(id)?.(completed); this.completions.delete(id);
       if (this.pending.size === 0) for (const listener of this.idleListeners) listener();
     };
-    try { Speech.speak(text, {
+    const play = () => {
+      if (!this.pending.has(id)) return;
+      try { Speech.speak(text, {
       rate: this.speechRate,
+      volume: SPEECH_GAIN,
       // Use the app's playback session, so speech is heard with the ring/silent switch on silent.
       useApplicationAudioSession: true,
       onDone: () => finished(true),
       onStopped: () => finished(false),
       onError: () => finished(false),
-    }); } catch { finished(false); }
+      onBoundary: () => this.stopAtBoundary?.(),
+      }); } catch { finished(false); }
+    };
+    if (this.stoppingNative) void this.stopping.then(play);
+    else play();
   }
 
   /** Clear route/search narration during a handoff without interrupting a vehicle warning. */
@@ -60,6 +71,32 @@ export class Speaker {
     if ([...this.pending.values()].some(priority => priority >= Priority.HIGH)) return;
     this.stop();
   }
+  /** Wait for a word boundary when Android's TTS engine supplies range events. */
+  async stopForInterruption(): Promise<void> {
+    this.stop();
+    await this.stopping;
+  }
+  private stopNative(): void {
+    if (this.stoppingNative) return;
+    this.stoppingNative = true;
+    const stop = () => Speech.stop().catch(() => undefined);
+    if (Platform.OS === 'android') {
+      this.stopping = new Promise<void>(resolve => {
+        let used = false;
+        const finish = () => {
+          if (used) return;
+          used = true;
+          clearTimeout(timer);
+          this.stopAtBoundary = null;
+          void stop().then(resolve);
+        };
+        // Some engines omit range events. Never delay a vehicle warning indefinitely.
+        const timer = setTimeout(finish, 180);
+        this.stopAtBoundary = finish;
+      }).then(() => { this.stoppingNative = false; });
+    } else this.stopping = stop().then(() => { this.stoppingNative = false; });
+  }
+  get busy(): boolean { return this.pending.size > 0; }
 
   private cancelCompletions(): void {
     for (const callback of this.completions.values()) callback(false);
@@ -74,9 +111,10 @@ export class Speaker {
   }
 
   stop(): void {
+    const hadSpeech = this.pending.size > 0;
     this.cancelCompletions();
     this.pending.clear();
-    this.stopping = Speech.stop().catch(() => undefined);
+    if (hadSpeech) this.stopNative();
     for (const listener of this.idleListeners) listener();
   }
 

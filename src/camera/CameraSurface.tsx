@@ -1,18 +1,21 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, Platform, type StyleProp, View, type ViewStyle } from 'react-native';
 import type { TfliteModel } from 'react-native-fast-tflite';
 import {
   Camera,
   type CameraDevice,
+  type CameraRef,
   CommonResolutions,
   type Constraint,
   type Frame,
   useCamera,
   useCameraDevice,
+  useAsyncRunner,
   useFrameOutput,
 } from 'react-native-vision-camera';
 import { useResizer } from 'react-native-vision-camera-resizer';
-import { scheduleOnRN } from 'react-native-worklets';
+import { createSynchronizable, scheduleOnRN } from 'react-native-worklets';
+import { NativeVehicleFlow } from './nativeVehicleFlow';
 import CrossWiseNative from '../../modules/crosswise-native';
 import { controller, type FrameResult, type RawDetection } from '../state/controller';
 import { useStore } from '../state/store';
@@ -60,6 +63,11 @@ export function CameraSurface({ showPreview, style, resizeMode = 'cover' }: {
   showPreview: boolean; style?: StyleProp<ViewStyle>; resizeMode?: 'cover' | 'contain';
 }) {
   const loaded = useStore(controller.loadedModel);
+  const cameraRef = useRef<CameraRef>(null);
+  const runner = useAsyncRunner();
+  // This gate stays locked through native motion AND JS delivery, so neither queue grows.
+  const frameBusy = useMemo(() => createSynchronizable(false), []);
+  const nativeFlow = useMemo(() => new NativeVehicleFlow(), []);
   const settings = useStore(controller.settings);
   const debugCapture = useStore(controller.debugCapture);
   const device = useCameraDevice('back', Platform.OS === 'android' ? undefined : { physicalDevices: ['wide-angle'] });
@@ -96,23 +104,41 @@ export function CameraSurface({ showPreview, style, resizeMode = 'cover' }: {
       protoHeight: loaded.protoShape[1] ?? 0,
       protoWidth: loaded.protoShape[2] ?? 0,
       vehicleClasses: loaded.categories.map(c => ['CAR','TRUCK','BUS','MOTORCYCLE','BICYCLE'].includes(c)),
-      colorCheck: loaded.categories.map((c) => !i.hasPedestrianSignalClasses && c === 'TRAFFIC_LIGHT'),
+      colorCheck: loaded.categories.map((c) => Platform.OS !== 'android' && !i.hasPedestrianSignalClasses && c === 'TRAFFIC_LIGHT'),
       scoreThreshold: settings.scoreThreshold,
       iouThreshold: 0.5,
       debugCapture,
     };
   }, [loaded, settings.scoreThreshold, debugCapture]);
 
-  const deliver = useCallback((result: FrameResult) => controller.onFrame(result), []);
+  useEffect(() => { nativeFlow.reset(); }, [active, loaded, nativeFlow]);
+  const deliver = useCallback(async (result: FrameResult) => {
+    try {
+      if (!active || controller.loadedModel.value !== loaded) return;
+      if (Platform.OS === 'android' && result.motionImage) {
+        if (!CrossWiseNative?.trackVehicleFlow) throw new Error('Native vehicle motion is unavailable. Reinstall the Android build.');
+        const regions = result.detections.filter(d => loaded && ['CAR','TRUCK','BUS','MOTORCYCLE','BICYCLE'].includes(loaded.categories[d.classIndex]))
+          .map(d => [d.left, d.top, d.right, d.bottom]);
+        const prepared = await nativeFlow.prepare(result.motionImage, regions, result.capturedWallMs ?? Date.now(),
+          (...args) => CrossWiseNative!.trackVehicleFlow!(...args));
+        result = { ...result, motionImage: prepared.image, motionWorkerMs: prepared.workerMs };
+      }
+      if (AppState.currentState === 'active' && controller.loadedModel.value === loaded) controller.onFrame(result);
+    } catch (error) {
+      nativeFlow.reset();
+      controller.inferenceFailed(`Motion: ${String(error)}`);
+    } finally { frameBusy.setBlocking(false); }
+  }, [active, loaded, nativeFlow, frameBusy]);
 
   const inferenceError = useCallback((message:string)=>controller.inferenceFailed(message),[]);
   const diagnostic = useCallback((stage: string) => controller.cameraDiagnostic(stage), []);
-  const onFrame = useCallback(
-    (frame: Frame) => {
+  const processFrame = useCallback(
+    (frame: Frame, capturedWallMs: number) => {
       'worklet';
       if (plan === null || resizer == null) {
         if(debugCapture) scheduleOnRN(diagnostic, `waiting: model=${plan!==null}, resizer=${resizer!=null}`);
         frame.dispose();
+        frameBusy.setBlocking(false);
         return;
       }
       const trace = globalThis as unknown as { __cwDebugTraced?: boolean };
@@ -120,13 +146,10 @@ export function CameraSurface({ showPreview, style, resizeMode = 'cover' }: {
       const tracing=plan.debugCapture && !trace.__cwDebugTraced;
       if(tracing) { trace.__cwDebugTraced=true;scheduleOnRN(diagnostic, 'frame received'); }
       let frameReleased=false;
+      let resizedFrame: { dispose: () => void } | null = null;
       try {
-      const throttle = globalThis as unknown as { __crosswiseLastMotionFrame?: number };
-      if (Date.now() - (throttle.__crosswiseLastMotionFrame ?? 0) < 100) { frame.dispose(); return; }
-      throttle.__crosswiseLastMotionFrame = Date.now();
       const clock = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
       const start = clock();
-      const capturedWallMs = Date.now();
       const orientation = frame.orientation;
       const sideways = orientation === 'left' || orientation === 'right';
       const frameWidth = sideways ? frame.height : frame.width;
@@ -135,23 +158,21 @@ export function CameraSurface({ showPreview, style, resizeMode = 'cover' }: {
       const W = plan.inputWidth;
       const H = plan.inputHeight;
       const resized = resizer.resize(frame);
+      resizedFrame = resized;
       frame.dispose();frameReleased=true;
       if(tracing) scheduleOnRN(diagnostic, `resized ${resized.width}x${resized.height}, expected ${W}x${H}`);
       if (resized.width !== W || resized.height !== H) {
         // The resizer for a newly selected model is still being created.
-        resized.dispose();
+        frameBusy.setBlocking(false);
         return;
       }
       const n = W * H * 3;
-      const g = globalThis as unknown as { __crosswiseInput?: Float32Array };
-      let input = g.__crosswiseInput;
-      if (input === undefined || input.length !== n) {
-        input = new Float32Array(n);
-        g.__crosswiseInput = input;
-      }
-      // Copy out of the GPU buffer: the interpreter needs a buffer of exactly the tensor's size.
-      try { input.set(new Float32Array(resized.getPixelBuffer(), 0, n)); }
-      finally { resized.dispose(); }
+      const pixelBuffer = resized.getPixelBuffer();
+      // TFLite already copies its input. Avoid a second 4.9 MB copy when the GPU buffer
+      // has the exact tensor size; retain the GPUFrame until all reads have finished.
+      const input = pixelBuffer.byteLength === n * 4
+        ? new Float32Array(pixelBuffer)
+        : new Float32Array(new Float32Array(pixelBuffer, 0, n));
 
       let lb: Letterbox;
       if (plan.segmentation) {
@@ -248,17 +269,42 @@ export function CameraSurface({ showPreview, style, resizeMode = 'cover' }: {
           : null,
       });
       } catch(e) {
+        frameBusy.setBlocking(false);
         if(!frameReleased){try{frame.dispose();}catch{/* Native frame may already be released. */}}
         const state=globalThis as unknown as {__cwLastError?:number};
         if(Date.now()-(state.__cwLastError??0)>1000){state.__cwLastError=Date.now();scheduleOnRN(inferenceError,`Inference: ${String(e)}`);}
-      }
+      } finally { resizedFrame?.dispose(); }
     },
-    [plan, resizer, deliver, diagnostic, debugCapture, inferenceError],
+    [plan, resizer, deliver, diagnostic, debugCapture, inferenceError, frameBusy],
   );
+
+  // Create the worker task on RN, rather than reserializing a worklet through
+  // the camera runtime first (VisionCamera 5's nested transfer is not callable).
+  const dispatch = useCallback((frame: Frame, capturedWallMs: number) => {
+    try {
+      const accepted = runner.runAsync(() => {
+        'worklet';
+        processFrame(frame, capturedWallMs);
+      });
+      if (!accepted) { frameBusy.setBlocking(false); frame.dispose(); }
+    } catch (error) {
+      frameBusy.setBlocking(false); frame.dispose();
+      inferenceError(`Frame worker: ${String(error)}`);
+    }
+  }, [runner, processFrame, frameBusy, inferenceError]);
+  const onFrame = useCallback((frame: Frame) => {
+    'worklet';
+    if (frameBusy.getBlocking()) { frame.dispose(); return; }
+    frameBusy.setBlocking(true);
+    scheduleOnRN(dispatch, frame, Date.now());
+  }, [frameBusy, dispatch]);
 
   const frameOutput = useFrameOutput({
     pixelFormat: 'yuv',
-    targetResolution: CommonResolutions.HD_16_9,
+    // 854px on the long axis still exceeds the 640px model input, while
+    // cutting Android rotation/conversion bandwidth versus a 1280px stream.
+    targetResolution: Platform.OS === 'android' && (info?.inputWidth ?? 640) <= 640
+      ? CommonResolutions.VGA_16_9 : CommonResolutions.HD_16_9,
     // Let the camera output apply the same orientation as the preview. In resizer 5.2.3,
     // the left/right shader rotation produces a 180-degree mismatch on portrait iOS
     // frames. Upright buffers bypass that rotation before inference, so both model
@@ -282,6 +328,7 @@ export function CameraSurface({ showPreview, style, resizeMode = 'cover' }: {
   if (device == null) return <View style={style} />;
   return showPreview ? (
     <Camera
+      ref={cameraRef}
       style={style}
       device={device}
       isActive={active}

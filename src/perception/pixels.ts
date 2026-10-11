@@ -184,12 +184,12 @@ export function paintLetterboxBars(
 }
 
 /** Upright, unletterboxed luma for the motion classifier; bounded bridge payload. */
-export function motionLuma(input: Float32Array, width: number, height: number, planar: boolean, lb: Letterbox): { width: number; height: number; pixels: number[] } {
+export function motionLuma(input: Float32Array, width: number, height: number, planar: boolean, lb: Letterbox): { width: number; height: number; pixels: Uint8Array } {
   'worklet';
   const scale = 384 / Math.max(lb.srcWidth, lb.srcHeight);
   const w = Math.max(32, Math.round(lb.srcWidth * scale));
   const h = Math.max(32, Math.round(lb.srcHeight * scale));
-  const pixels = new Array<number>(w * h);
+  const pixels = new Uint8Array(w * h);
   const rgb = [0, 0, 0];
   for (let y=0;y<h;y++) for(let x=0;x<w;x++) {
     const px=Math.min(width-1,Math.floor(lb.padX+(x+.5)/w*lb.scaledWidth));

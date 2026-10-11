@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { MaterialIcons } from '@expo/vector-icons';
 import { deviceWarnings, useDeviceState } from './AssistPanels';
 import { DeveloperTelemetry } from './DeveloperTelemetry';
@@ -13,7 +13,7 @@ import { Side } from '../crossing/hazardMonitor';
 import { SignalPhase } from '../signal/signalPhaseTracker';
 import { InterfaceMode } from '../settings/settings';
 import { controller } from '../state/controller';
-import { useStore } from '../state/store';
+import { useStore, useSampledStore } from '../state/store';
 import { S } from '../strings';
 import { askForCamera } from './askForCamera';
 import { BigButton, TextButton } from './components';
@@ -28,6 +28,7 @@ export function MainScreen({ height, topInset = 0, bottomInset = 0, hasPermissio
   const window = useWindowDimensions();
   const settings = useStore(controller.settings);
   const ui = useStore(controller.ui);
+  const telemetry = useSampledStore(controller.ui);
   const model = useStore(controller.model);
   const mask = useStore(controller.mask);
   const camera = useStore(controller.cameraStatus);
@@ -37,6 +38,14 @@ export function MainScreen({ height, topInset = 0, bottomInset = 0, hasPermissio
   const [attempt, setAttempt] = useState(0);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [, tick] = useState(0);
+  const lastTap = useRef(0);
+  const onCameraTap = () => {
+    const now = Date.now();
+    if (now - lastTap.current < 420) {
+      lastTap.current = 0;
+      controller.toggleVoiceFromGesture();
+    } else lastTap.current = now;
+  };
   useEffect(() => { const timer = setInterval(() => tick(v => v + 1), 1_000); return () => clearInterval(timer); }, []);
   const developer = settings.interfaceMode === InterfaceMode.DEVELOPER;
   const assistOn = ui.snapshot.mode !== AssistMode.IDLE;
@@ -87,6 +96,7 @@ export function MainScreen({ height, topInset = 0, bottomInset = 0, hasPermissio
       {developer && fresh && settings.showPreview && settings.showOverlay &&
         <DetectionOverlay snapshot={ui.snapshot} frameAspect={ui.frameAspect} resizeMode="cover" visibility={settings} />}
     </View>
+    <Pressable accessible={false} pointerEvents="box-only" style={StyleSheet.absoluteFill} onPress={onCameraTap} />
     {developer && <View style={[styles.strip, { top: topInset + 8 }]}>
       <Pressable accessibilityRole="button" accessibilityLabel={message + '. Show details'}
         onPress={() => setDetailsOpen(v => !v)} style={styles.iconButton}>
@@ -126,9 +136,9 @@ export function MainScreen({ height, topInset = 0, bottomInset = 0, hasPermissio
         {!settings.showPreview && <Text style={type.bodyMedium}>Preview hidden.</Text>}
         {hasPermission && camera === 'unavailable' &&
           <TextButton size="large" label="Retry camera" onPress={() => setAttempt(a => a + 1)} />}
-        {developer && <Text style={type.labelMedium}>Camera: {camera}{cameraDetail?` · ${cameraDetail}`:''}. Inference: {Math.round(pipeline.latencyMs)} ms · stale frames rejected: {pipeline.slowFrames}{pipeline.error?` · ${pipeline.error}`:''}</Text>}
-        {developer && <DeveloperTelemetry snapshot={ui.snapshot} fresh={fresh} fps={ui.fps} inferenceMs={ui.inferenceMs}
-          brightness={ui.frameBrightness} model={model.kind === 'ready' ? `${model.info.displayName} · ${model.info.backend} · ${model.info.inputWidth}px` : 'Model unavailable'} />}
+        {developer && <Text style={type.labelMedium}>Camera: {camera}{cameraDetail?` · ${cameraDetail}`:''}. Frame latency: {Math.round(pipeline.latencyMs)} ms · Processing: {Math.round(pipeline.processingMs ?? 0)} ms · Motion: {Math.round(pipeline.motionWorkerMs ?? 0)} ms{pipeline.error?` · ${pipeline.error}`:''}</Text>}
+        {developer && <DeveloperTelemetry snapshot={telemetry.snapshot} fresh={fresh} fps={telemetry.fps} inferenceMs={telemetry.inferenceMs}
+          brightness={telemetry.frameBrightness} model={model.kind === 'ready' ? `${model.info.displayName} · ${model.info.backend} · ${model.info.inputWidth}px` : 'Model unavailable'} />}
       </View>}
     </ScrollView>}
   </View>;

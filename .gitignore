@@ -47,6 +47,8 @@ yarn-error.*
 /android/local.properties
 /android/app/debug.keystore
 /android-legacy/build/
+/modules/*/android/build/
+/modules/*/android/.gradle/
 
 # Build-time service credentials
 .env

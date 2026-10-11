@@ -22,9 +22,10 @@ test('a STATIONARY track without motion evidence is shown with default settings'
   expect(visibleVehicle(car(false))).toBe(true);
   expect(visibleVehicle(car(true))).toBe(false);
 });
-test('slow detection is not reported as camera failure, and stale measurements do not revive a stream',()=>{
+test('latency alone does not cause a warning; unavailable streams still report failure',()=>{
   const slow={...EMPTY_PIPELINE,receivedAt:1000,latencyMs:900,slowFrames:4};
-  expect(perceptionMessage('running',false,slow,1200)).toBe(P.detectionTooSlow);
+  expect(perceptionMessage('running',true,slow,1200)).toBeNull();
+  expect(perceptionMessage('running',false,slow,1200)).toBe(P.detectionUnavailable);
   expect(perceptionMessage('running',false,slow,7000)).toBe(P.detectionUnavailable);
   expect(perceptionMessage('unavailable',false,slow,1200)).toBe(P.cameraUnavailable);
   expect(perceptionMessage('starting',false,slow,1200)).toBe(P.cameraStarting);

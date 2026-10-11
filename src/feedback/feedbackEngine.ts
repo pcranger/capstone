@@ -4,6 +4,7 @@ import { Haptics } from './haptics';
 import { Speaker } from './speaker';
 import { TonePlayer } from './tonePlayer';
 import { cueText } from '../strings';
+import { IOS_AUDIO_SESSION } from './audioPolicy';
 
 export interface FeedbackConfig {
   speech: boolean;
@@ -22,12 +23,13 @@ export class FeedbackEngine {
 
   constructor() {
     try {
-      // Playback, not ambient: a blind traveler must hear the app even with the silent switch on. Other audio
-      // (a podcast, music) keeps playing, ducked under the cues.
+      // Share one output configuration with recognition to avoid mid-speech mode/route changes.
       AudioManager.setAudioSessionOptions({
-        iosCategory: 'playback',
-        iosMode: 'default',
-        iosOptions: ['mixWithOthers', 'duckOthers'],
+        iosCategory: IOS_AUDIO_SESSION.category,
+        iosMode: IOS_AUDIO_SESSION.mode,
+        // Do not duck or boost any stream: CrossWise follows the system output volume.
+        // Audio API uses the newer name for the same Bluetooth HFP option.
+        iosOptions: IOS_AUDIO_SESSION.categoryOptions.map(option => option === 'allowBluetooth' ? 'allowBluetoothHFP' : option),
         iosAllowHaptics: true,
       });
       AudioManager.setAudioSessionActivity(true).catch(() => undefined);
@@ -74,6 +76,8 @@ export class FeedbackEngine {
     return this._config.speech ? this.speaker.speakAndWait(text) : Promise.resolve(true);
   }
   whenIdle(): Promise<boolean> { return this.speaker.whenIdle(); }
+  get busy(): boolean { return this.speaker.busy; }
+  async stopForInterruption(): Promise<void> { await this.speaker.stopForInterruption(); }
 
   silenceRoutine(): void {
     this.speaker.stopRoutine();

@@ -36,7 +36,8 @@ export function VoiceHelp() {
     <Text style={type.titleMedium} accessibilityRole="header">{S.voiceSayHeading}</Text>
     {S.voiceSayLines.map(say)}
     <Collapsible title={S.voiceFailsHeading}>
-      <Hint>A short double beep means the microphone is ready. Say “manual” or “man” for commands.</Hint>
+      <Hint>A light vibration means the microphone is ready. “Listening” is spoken once per voice session. Say “manual” or “man” for commands.</Hint>
+      <Hint>Double-tap the camera to start a voice turn. CrossWise says “Listening.” Double-tap again to stop it.</Hint>
       <Hint>The app cannot hear commands while it is speaking. “Stop listening” turns voice off; tap Voice to restart. Settings and backgrounding stop listening.</Hint>
       <Hint>{status.error ?? (status.locale ? `Recognition: ${status.locale}, on this phone.` : 'Recognition is checked when voice starts.')}</Hint>
       <Hint>{Platform.OS === 'android' ? 'Allow Microphone in Android app settings. Install offline English in your speech recognition service, then reopen CrossWise. Offline language checks require Android 13 or later.' : 'If voice fails: allow Microphone and Speech Recognition for CrossWise in iPhone Settings. If offline English remains unavailable, check General → Keyboard → Enable Dictation and an English keyboard, connect to Wi-Fi, use English dictation once, then reopen CrossWise. Availability is checked again; downloading a speaking voice does not install a recognizer.'}</Hint>

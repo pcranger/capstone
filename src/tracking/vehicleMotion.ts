@@ -1,10 +1,10 @@
-import { pixelFlow } from './pixelFlow';
+import { pixelFlow, type FlowPoint } from './pixelFlow';
 import type { Detection } from '../perception/detection';
 import { isVehicle, ObjectCategory } from '../perception/detection';
 import type { Track } from './objectTracker';
 export type MotionState='MOVING'|'STATIONARY';
 export type MotionDirection='LEFT_TO_RIGHT'|'RIGHT_TO_LEFT'|'UNKNOWN';
-export interface GrayFrame {width:number;height:number;pixels:number[]}
+export interface GrayFrame {width:number;height:number;pixels:number[]|Uint8Array;flow?:FlowPoint[];sourceWallMs?:number;flowFromWallMs?:number}
 export interface MotionEstimate {state:MotionState;direction:MotionDirection;supported:boolean}
 const median=(a:number[])=>[...a].sort((a,b)=>a-b)[Math.floor(a.length/2)]??0;
 export class VehicleMotion {
@@ -15,11 +15,12 @@ export class VehicleMotion {
  update(tracks:readonly Track[],detections:Detection[],image:GrayFrame|undefined,t:number,cameraTranslating=false):Map<number,MotionEstimate>{
   const result=new Map<number,MotionEstimate>();this.diagnostics.clear();this.reliable=false;
   for(const tr of tracks)if(isVehicle(tr.category))result.set(tr.id,{state:'STATIONARY',direction:'UNKNOWN',supported:false});
-  if(!image||image.pixels.length!==image.width*image.height){this.reset();return result;}
+  if(!image||(image.flow===undefined&&image.pixels.length!==image.width*image.height)){this.reset();return result;}
   const prev=this.previous,dt=(t-this.lastTime)/1000;this.previous=image;this.lastTime=t;
-  if(!prev||prev.width!==image.width||prev.height!==image.height||dt<.04||dt>.35){this.histories.clear();return result;}
+  if(!prev||prev.width!==image.width||prev.height!==image.height||!Number.isFinite(dt)||dt<.04){this.histories.clear();return result;}
+  if(image.flow!==undefined&&image.flowFromWallMs!==prev.sourceWallMs){this.histories.clear();return result;}
   const w=image.width,h=image.height;
-  const points=pixelFlow(prev,image,detections.filter(d=>isVehicle(d.category)).map(d=>d.box));
+  const points=image.flow??pixelFlow(prev,image,detections.filter(d=>isVehicle(d.category)).map(d=>d.box));
   const inside=(x:number,y:number,b:{left:number;right:number;top:number;bottom:number},margin=0)=>x>b.left-margin&&x<b.right+margin&&y>b.top-margin&&y<b.bottom+margin;
   const bg=points.filter(p=>!detections.some(d=>(isVehicle(d.category)||d.category===ObjectCategory.PERSON)&&inside(p.x,p.y,d.box,.01)));
   this.reliable=bg.length>=20;
@@ -37,7 +38,7 @@ export class VehicleMotion {
    const dx=fx-cx,dy=fy-cy,residual=Math.hypot(dx,dy),diagonal=Math.max(12,Math.hypot(b.width*w,b.height*h));
    const quality=local.length>=3&&nearby.length>=10&&noise<1.5;
    const moving=residual>Math.max(.3,noise*2)&&residual/dt/diagonal>.10;
-   history.push({t,moving,dx,quality});while(history.length&&t-history[0].t>700)history.shift();this.histories.set(tr.id,history);
+   history.push({t,moving,dx,quality});while(history.length>3&&t-history[0].t>700)history.shift();this.histories.set(tr.id,history);
    const votes=history.filter(s=>s.quality),ratio=votes.length?votes.filter(s=>s.moving).length/votes.length:0;
    const state=ratio>=.5&&votes.length?'MOVING':'STATIONARY';
    const supported=quality&&votes.length>=3&&!cameraTranslating;

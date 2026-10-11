@@ -278,7 +278,8 @@ export class CrossingEngine {
     this.lastTrafficFrameMs=now;
     this.trafficUsable = this.vehicleMotion.reliable && (frame.brightness ?? 0)>.12;
     const looming = this.hazardMonitor.assess(tracks, now, frameAspect, this.mode === AssistMode.CROSSING);
-    this.hazards = this.settings.vehicleAlerts ? tracks.filter(t => t.group === TrackGroup.VEHICLE && t.isSeenAt(now) && (motion.get(t.id)?.state === 'MOVING' || !motion.get(t.id)?.supported || looming.some(h => h.trackId === t.id))).map(t => {
+    // Speak only for supported motion (or a sustained-looming track). Unclassified vehicles still block scan completion below.
+    this.hazards = this.settings.vehicleAlerts ? tracks.filter(t => t.group === TrackGroup.VEHICLE && t.isSeenAt(now) && ((motion.get(t.id)?.state === 'MOVING' && motion.get(t.id)?.supported) || looming.some(h => h.trackId === t.id))).map(t => {
       const estimate = motion.get(t.id);
       const growing = looming.find(h => h.trackId === t.id);
       // CW-14: growth must hold for a few frames in a row. A 1-2 frame jump (sway, walking jolt, box jitter) is not "approaching".

@@ -1,0 +1,81 @@
+{
+  "date": "2026-10-11",
+  "device": "Samsung SM-S906E / Android 16",
+  "scope": "Android; 640px YOLO model unchanged; no latency rejection limit",
+  "changes": [
+    "Dedicated inference worker with one in-flight frame through delivery",
+    "Native OpenCV LK optical flow; up to 20 points per vehicle and 160 background points, capped at 400",
+    "384px motion luma retained; transferred as Uint8Array to native-owned ByteArray",
+    "Avoid duplicate 4.9MB tensor copy; GPUFrame retained through processing",
+    "No attached photo output while preview visible; on-demand preview snapshot",
+    "Generic signal colour heuristic skipped on Android; default BDD detector does not run segmentation",
+    "Developer telemetry sampled at 1Hz; pipeline timings at 2Hz"
+  ],
+  "observations": {
+    "before": {
+      "frame_latency_ms": 501,
+      "detection_fps": 2
+    },
+    "after": {
+      "frame_latency_ms": 225,
+      "processing_ms": 210,
+      "native_motion_ms": 8,
+      "detection_fps": 5
+    },
+    "camera_streams_after_resume": [
+      {
+        "frames": 155,
+        "fps": 30.0
+      },
+      {
+        "frames": 155,
+        "fps": 30.0
+      }
+    ],
+    "method": "Individual on-device readings, different ordinary indoor scenes; not a controlled traffic benchmark."
+  },
+  "validation": {
+    "typescript": "passed",
+    "lint": "passed",
+    "javascript_tests": 308,
+    "native_tests": 3,
+    "native_cases": [
+      "stationary texture",
+      "foreground movement left/right",
+      "camera translation without independent movement"
+    ],
+    "pause_resume": "successful"
+  },
+  "video_evidence": {
+    "note": "No manual ground truth; per-frame evidence coverage, not alert accuracy. Desktop worker timing excludes model and bridge.",
+    "clips": [
+      {
+        "video": "/Users/hieu/Desktop/capstone/road_test/IMG_8501.MOV",
+        "frames": 30,
+        "vehicle_pairs": 30,
+        "supported_pairs": 2,
+        "moving_evidence_pairs": 0,
+        "stationary_evidence_pairs": 2,
+        "left_to_right": 0,
+        "right_to_left": 0,
+        "desktop_flow_median_ms": 2.22
+      },
+      {
+        "video": "/Users/hieu/Desktop/capstone/road_test/IMG_8505.MOV",
+        "frames": 30,
+        "vehicle_pairs": 121,
+        "supported_pairs": 71,
+        "moving_evidence_pairs": 27,
+        "stationary_evidence_pairs": 44,
+        "left_to_right": 27,
+        "right_to_left": 0,
+        "desktop_flow_median_ms": 3.81
+      }
+    ]
+  },
+  "limitations": [
+    "Replay uses BDD PyTorch weights at 640px, not the exact TFLite runtime",
+    "Video evidence counts have no manual labels; they are not accuracy scores",
+    "IMG_8501 night footage produced very little supported motion evidence; field validation remains necessary"
+  ]
+}

@@ -20,6 +20,7 @@ export interface CameraFieldOfView {
 }
 
 interface CrossWiseNativeModule {
+  trackVehicleFlow?(previous: Uint8Array, current: Uint8Array, width: number, height: number, regions: number[][]): Promise<{points: {x:number;y:number;dx:number;dy:number}[]; workerMs:number}>;
   speechCapabilities(locales: string[]): { locale: string; supported: boolean; available: boolean; onDevice: boolean }[];
   onDeviceSpeechAvailable(locale: string): boolean;
   isMotionAvailable(): boolean;
