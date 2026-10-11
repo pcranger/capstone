@@ -11,3 +11,10 @@ if (!source.includes('auto ownedModelData =')) {
   source = source.replace('std::make_shared<HybridTfliteModel>(interpreter, modelData, delegates)', 'std::make_shared<HybridTfliteModel>(interpreter, ownedModelData, delegates)');
   fs.writeFileSync(file, source);
 }
+// CW-21: the CPU path ran on TFLite's default thread count. The old Kotlin app used 4 threads.
+if (!source.includes('TfLiteInterpreterOptionsSetNumThreads')) {
+  const optionsNeedle = '  TfLiteInterpreterOptions* options = TfLiteInterpreterOptionsCreate();';
+  if (!source.includes(optionsNeedle)) throw new Error('TFLite options creation changed; review thread patch.');
+  source = source.replace(optionsNeedle, optionsNeedle + '\n#ifdef __ANDROID__\n  TfLiteInterpreterOptionsSetNumThreads(options, 4);\n#endif');
+  fs.writeFileSync(file, source);
+}
