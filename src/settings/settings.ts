@@ -3,6 +3,7 @@ import { File, Paths } from 'expo-file-system';
 import { DEFAULT_ENGINE_SETTINGS, type EngineSettings } from '../crossing/crossingEngine';
 import { Verbosity } from '../feedback/cue';
 import type { FeedbackConfig } from '../feedback/feedbackEngine';
+import { clamp } from '../core/geometry';
 
 export enum InterfaceMode {
   USER = 'USER',
@@ -49,6 +50,10 @@ export interface AppSettings {
    */
   customModelPath: string | null;
   acceptedSafetyNotice: boolean;
+  /** How long each side of the crossing check is held, in seconds (3-8). */
+  holdSeconds: number;
+  /** Road width for the step count, in lanes (1-4, about 6 steps per lane). */
+  roadLanes: number;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -76,6 +81,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   largeStatus: false,
   customModelPath: null,
   acceptedSafetyNotice: false,
+  holdSeconds: 5,
+  roadLanes: 2,
 };
 
 export function engineSettingsOf(s: AppSettings): EngineSettings {
@@ -102,6 +109,7 @@ const FILE_KEYS: (keyof AppSettings)[] = [
   'showMovingVehicles', 'showStationaryVehicles',
   'showModelLine', 'showPreview', 'showOverlay', 'aimSonar', 'veerGuidance', 'vehicleAlerts', 'autoDetectCrossing',
   'useGpu', 'scoreThreshold', 'logSessions', 'customModelPath', 'interfaceMode',
+  'holdSeconds', 'roadLanes',
 ];
 
 /** Allowlisted preferences only. Legacy credentials and volume shortcuts are intentionally discarded. */
@@ -120,6 +128,10 @@ export function mergeSettings(current: AppSettings, raw: Record<string, unknown>
       if (Object.values(InterfaceMode).includes(value as InterfaceMode)) target[key] = value;
     } else if (key === 'appFont') {
       if (Object.values(AppFont).includes(value as AppFont)) target[key] = value;
+    } else if (key === 'holdSeconds') {
+      if (typeof value === 'number' && Number.isFinite(value)) target[key] = clamp(value, 3, 8);
+    } else if (key === 'roadLanes') {
+      if (typeof value === 'number' && Number.isFinite(value)) target[key] = clamp(Math.round(value), 1, 4);
     } else if (typeof value === typeof def) {
       target[key] = value;
     }
