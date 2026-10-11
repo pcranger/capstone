@@ -49,6 +49,7 @@ import {
 import { cueText, P, S } from '../strings';
 import { Store } from './store';
 import { T } from '../text/safetyText';
+import { LowLightMonitor, TOO_DARK_BELOW } from '../crossing/lowLightMonitor';
 import { cameraAccess } from './cameraAccess';
 
 /** While the camera cannot see, say so this often, so silence never passes for "no cars". */
@@ -172,6 +173,7 @@ export class CrossWiseController {
   private unknownCommands = 0;
   private queuedScanToken=-1;
   private assistStartedAt=0;
+  private readonly lowLight = new LowLightMonitor();
   private trafficFailure:string|null=null;
   private voiceMuted = false;
   /** What the user chose: true until Stop listening or the Voice commands button switches it off. Drives the toggle's label. */
@@ -767,7 +769,7 @@ export class CrossWiseController {
     const output = this.engine.command(command, nowMs());
     const extra: Cue[] = [];
     if (command === UserCommand.START_ASSIST) {
-      this.assistStartedAt=nowMs();this.trafficFailure=null;
+      this.assistStartedAt=nowMs();this.trafficFailure=null;this.lowLight.reset();
       if (this.settings.value.logSessions) this.logger.start();
       const m = this.model.value;
       if (m.kind === 'missing' || m.kind === 'failed') extra.push(Cues.speak(Phrase.MODEL_MISSING, Priority.HIGH));
@@ -853,10 +855,19 @@ export class CrossWiseController {
     else deactivateKeepAwake('assist').catch(() => undefined);
   }
 
+  /** Dim but not too dark: one warning after 2 s of dim frames, then at most every 60 s. It waits while any speech is playing, so a vehicle warning is never cut. */
+  private speakLowLight(failure:string|null):void {
+    if(failure){this.lowLight.due(nowMs(),0);return;} // keeps the 2 s clock reset while the other warning owns the screen
+    if(!this.lowLight.due(nowMs(),this.brightness) || this.feedback.busy)return;
+    this.lowLight.spoke(nowMs());
+    this.feedback.dispatch([Cues.speakText(T.lowLight,Priority.HIGH)]);
+  }
+
   private checkTrafficAvailability():void {
     if(!this.assistOn || AppState.currentState!=='active' || nowMs()-this.assistStartedAt<3000)return;
     const failure=this.model.value.kind!=='ready'?P.detectionUnavailable:
-      !this.hasRecentFrame || nowMs()-this.lastFrameMs>2000?V.trafficUnavailable:this.brightness<.12?V.cameraBlocked:null;
+      !this.hasRecentFrame || nowMs()-this.lastFrameMs>2000?V.trafficUnavailable:this.brightness<TOO_DARK_BELOW?V.cameraBlocked:null;
+    this.speakLowLight(failure);
     if(failure===this.trafficFailure){
       // Speech once per change is not enough: silence must not pass for "no cars". Repeat while it still cannot see, even with Settings open.
       // dispatch, not deliver: this repeat must not stop the microphone every 10 s.

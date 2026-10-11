@@ -11,6 +11,7 @@ import { controller } from '../src/state/controller';
 import { pressBack, pressStop, refreshConfirm } from '../src/state/safetyGuards';
 import { P } from '../src/strings';
 import { T } from '../src/text/safetyText';
+import { V } from '../src/voice/speechCatalog';
 
 let mockNow = 100_000;
 jest.mock('../src/core/geometry', () => ({ ...jest.requireActual('../src/core/geometry'), nowMs: () => mockNow }));
@@ -248,6 +249,51 @@ describe('13 - silence never passes for "no cars"', () => {
     mockNow += 12_000; c.lastFrameMs = mockNow;
     c.checkTrafficAvailability();
     expect(cues().some(q => q.kind === 'speakText' && q.text === T.stillCantSee)).toBe(false);
+  });
+});
+
+describe('14 - low light is spoken, once, and never cuts other speech', () => {
+  const lowLight = () => cues().filter(q => q.kind === 'speakText' && q.text === T.lowLight);
+  /** Camera help on, camera healthy; the clock moves in steps (the app checks 10 times a second; the rules only need the clock). */
+  const startWith = (brightness: number) => {
+    c.model.set({ kind: 'ready', info: {} });
+    controller.command(UserCommand.START_ASSIST, true);
+    c.brightness = brightness;
+    mockNow += 4_000; c.lastFrameMs = mockNow; c.checkTrafficAvailability();
+  };
+  const tick = (ms: number) => { mockNow += ms; c.lastFrameMs = mockNow; c.checkTrafficAvailability(); };
+
+  test('dim: spoken at High priority after 2 s of dim frames, then at most once a minute', () => {
+    startWith(0.2);
+    expect(lowLight()).toHaveLength(0);
+    tick(2_000);
+    expect(lowLight()).toHaveLength(1);
+    expect(lowLight()[0]).toMatchObject({ text: 'Low light. I may miss vehicles. Take extra care.', priority: Priority.HIGH });
+    tick(30_000); expect(lowLight()).toHaveLength(1);
+    tick(30_000); expect(lowLight()).toHaveLength(2);
+  });
+
+  test('too dark: the old message, never the low-light one', () => {
+    startWith(0.05);
+    tick(2_000); tick(10_000);
+    expect(lowLight()).toHaveLength(0);
+    expect(said(V.cameraBlocked)).toBe(true);
+  });
+
+  test('daylight: nothing', () => {
+    startWith(0.5);
+    tick(2_000); tick(70_000);
+    expect(lowLight()).toHaveLength(0);
+  });
+
+  test('while another line is playing it waits, and is spoken when the speaker is free', () => {
+    const busy = jest.spyOn(fb, 'busy', 'get').mockReturnValue(true);
+    startWith(0.2);
+    tick(2_000); tick(5_000);
+    expect(lowLight()).toHaveLength(0);
+    busy.mockReturnValue(false);
+    tick(100);
+    expect(lowLight()).toHaveLength(1);
   });
 });
 

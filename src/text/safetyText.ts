@@ -17,6 +17,8 @@ export const T = {
   cameraOff: 'Camera is off. Press Allow camera at the bottom, or say Allow camera.',
   askingCamera: 'Asking for the camera.',
   stillCantSee: 'Still can’t see. No vehicle warnings.',
+  /** Dim but not too dark (see src/crossing/lowLightMonitor.ts). */
+  lowLight: 'Low light. I may miss vehicles. Take extra care.',
   /** The big button changed meaning: say what it does now. */
   nextButton: (label: string, lead = '') => `${lead}Next button: ${label}`,
   cameraHelpOnLead: 'Camera help on. ',

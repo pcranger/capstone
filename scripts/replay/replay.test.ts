@@ -13,7 +13,11 @@ import { BoxF } from '../../src/core/geometry';
 import type { Detection, FrameDetections } from '../../src/perception/detection';
 import { isVehicle } from '../../src/perception/detection';
 import { categoryFor } from '../../src/perception/labelMapper';
+import { LowLightMonitor, TOO_DARK_BELOW } from '../../src/crossing/lowLightMonitor';
+import { Priority } from '../../src/feedback/cue';
 import { cueText } from '../../src/strings';
+import { T } from '../../src/text/safetyText';
+import { V } from '../../src/voice/speechCatalog';
 
 // The project has no Node type definitions (and tsconfig stays as is), so describe the two calls we need.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -57,10 +61,32 @@ const jsonPaths = given.flatMap((p: string) => (p.endsWith('/') ? fs.readdirSync
   ];
   const fmt = (ms: number) => (ms / 1000).toFixed(1).padStart(5) + 's';
   const spoken: string[] = [];
+  // The controller's 10 Hz availability check, replayed with the same classes and numbers (controller.ts checkTrafficAvailability):
+  // smoothed brightness, 3 s start-up guard, "too dark" below TOO_DARK_BELOW, otherwise the low-light monitor.
+  // "Busy" is approximated as: any other line was spoken in the last 2 s.
+  const monitor = new LowLightMonitor();
+  let ema = 0.5, nowT = 0, lastSpeechMs = -Infinity, wasDark = false;
+  const fired: number[] = [];
+  let firstDark: number | null = null;
+  const availability = (t: number) => {
+    nowT = t;
+    if (t < 3000) return;
+    const dark = ema < TOO_DARK_BELOW;
+    if (dark !== wasDark) {
+      wasDark = dark;
+      if (dark) { firstDark ??= t; spoken.push(`[!] "${V.cameraBlocked}"  (too dark: the old message)`); }
+    }
+    if (dark) { monitor.due(t, 0); return; }
+    if (!monitor.due(t, ema) || t - lastSpeechMs < 2000) return;
+    monitor.spoke(t);
+    fired.push(t);
+    lastSpeechMs = t;
+    spoken.push(`[LOW LIGHT] "${T.lowLight}"`);
+  };
   const collect = (cues: Parameters<typeof cueText>[0][]) => {
     for (const c of cues) {
       const text = cueText(c);
-      if (text) spoken.push(`${(c as { priority?: string }).priority === 'CRITICAL' ? '[!] ' : ''}"${text}"`);
+      if (text) { lastSpeechMs = nowT; spoken.push(`${(c as { priority?: Priority }).priority === Priority.CRITICAL ? '[!] ' : ''}"${text}"`); }
     }
   };
 
@@ -72,8 +98,10 @@ const jsonPaths = given.flatMap((p: string) => (p.endsWith('/') ? fs.readdirSync
   const sensors = (until: number) => {
     while (sensorT + SENSOR_STEP_MS <= until) {
       sensorT += SENSOR_STEP_MS;
+      nowT = sensorT;
       collect(engine.onSensors(sensorT, { timestampMs: sensorT, headingDeg: heading(sensorT), pitchDeg: 5 }, false).cues);
       const s = engine.scanInstruction;
+      availability(sensorT);
       if (s && s.token !== lastToken) { lastToken = s.token; spoken.push(`(prompt) "${s.text}"`); }
       if (cycleStart !== null && sensorT - cycleStart >= LOOK_TOTAL && nextCycleAt === Infinity) nextCycleAt = sensorT + CYCLE_GAP_MS;
     }
@@ -98,6 +126,8 @@ const jsonPaths = given.flatMap((p: string) => (p.endsWith('/') ? fs.readdirSync
       motionImage: { width: f.motionWidth, height: f.motionHeight, pixels: [], flow: f.flow, sourceWallMs: f.t_ms,
         flowFromWallMs: f.flowFromMs ?? undefined },
     };
+    ema = 0.8 * ema + 0.2 * f.brightness;
+    nowT = f.t_ms;
     const out = engine.onFrame(frame, GEOMETRY);
     collect(out.cues);
     const cars = out.snapshot.tracks.filter((t) => isVehicle(t.category)).map((t) => {
@@ -112,5 +142,11 @@ const jsonPaths = given.flatMap((p: string) => (p.endsWith('/') ? fs.readdirSync
     prevT = f.t_ms;
   }
   expect(prevT).toBeGreaterThan(0);
+  const sorted = data.frames.map((f) => f.brightness).sort((a, b) => a - b);
+  const q = (x: number) => sorted[Math.min(sorted.length - 1, Math.floor(x * sorted.length))].toFixed(3);
+  const name = jsonPath.replace(/\.json$/, '').split('/').pop();
+  fs.writeFileSync(jsonPath.replace(/\.json$/, '.lowlight.txt'), [name, q(0.5), q(0.1), q(0.9),
+    fired.length ? 'yes' : 'no', fired.length ? (fired[0] / 1000).toFixed(1) + 's' : '-', fired.length,
+    firstDark === null ? '-' : (firstDark / 1000).toFixed(1) + 's'].join('\t') + '\n');
   fs.writeFileSync(jsonPath.replace(/\.json$/, '.timeline.txt'), lines.join('\n') + '\n');
 })));

@@ -15,3 +15,4 @@ Known differences from the phone: bilinear resize in OpenCV vs the camera's GPU 
 the phone feeds upright portrait frames; fps defaults to 5 (what `scripts/benchmark_vehicle_flow.py` uses; the phone runs 3-17);
 the heading sensor is faked: fixed at 0 except the scripted left/right looks of each check (the video cannot show what a real look
 would see, so car warnings during the looks are about the same road view); camera field of view is assumed 65 x 50 degrees.
+5. Each run also writes `<name>.lowlight.txt` (median/p10/p90 brightness, whether the low-light warning fired, when); `cat *.lowlight.txt` gives the calibration table. The replay runs the real `LowLightMonitor` on the same smoothed brightness the controller uses.
