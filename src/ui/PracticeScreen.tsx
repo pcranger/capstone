@@ -4,6 +4,7 @@ import { Text } from './ScaledText';
 import { controller } from '../state/controller';
 import { type Cue, Cues, HapticPattern, Phrase, Priority, ToneKind } from '../feedback/cue';
 import { S } from '../strings';
+import { STEER } from '../text/steerText';
 import { BackButton, BigButton, Hint, SectionCard } from './components';
 import { Colors, Dimens, useType } from './theme';
 
@@ -84,7 +85,7 @@ export function PracticeScreen({ onBack }: { onBack?: () => void }) {
             Cues.haptic(HapticPattern.CENTERED_TICK),
           ]}
         </Practice>
-        <Hint>Turning the phone does not establish walking drift. Steering cues are disabled.</Hint>
+        <Hint>{STEER.practiceNote}</Hint>
         <Practice label={S.practiceCrossing} color={Colors.Crossing}>
           {[Cues.speak(Phrase.CROSSING_STARTED, Priority.HIGH)]}
         </Practice>

@@ -19,6 +19,7 @@ import { askForCamera } from './askForCamera';
 import { BigButton, TextButton } from './components';
 import { DetectionOverlay, SegmentationOverlay } from './Overlays';
 import { Colors, Dimens, useType } from './theme';
+import { STEER } from '../text/steerText';
 
 /** One full-screen camera surface. UI overlays never resize the camera or its box coordinate space. */
 export function MainScreen({ height, topInset = 0, bottomInset = 0, hasPermission, canRequestPermission, requestPermission }: {
@@ -65,7 +66,7 @@ export function MainScreen({ height, topInset = 0, bottomInset = 0, hasPermissio
   if (hazard && assistOn) status = S.hazardBanner(hazard.side === Side.LEFT ? S.sideLeft : hazard.side === Side.RIGHT ? S.sideRight : S.sideAhead);
   let unavailable: string | null = null;
   if (!hasPermission) unavailable = 'Camera permission is off. Camera help needs it.';
-  else if (model.kind !== 'ready') unavailable = model.kind === 'loading' ? 'Loading detection…' : 'Detection unavailable. Check the model in Settings → Developer.';
+  else if (model.kind !== 'ready') unavailable = model.kind === 'loading' ? 'Loading detection…' : (developer ? 'Detection unavailable. Check the model in Settings → Developer.' : STEER.detectionUnavailableUser);
   else if (camera !== 'running' || !fresh) unavailable = perceptionMessage(camera,fresh,pipeline,nowMs());
   else if (assistOn && ui.frameBrightness < 0.04) unavailable = 'Camera blocked or too dark. Check the lens.';
   else if (assistOn && ui.frameBrightness < 0.12) unavailable = 'Too dark. Improve the camera view.';
@@ -147,7 +148,7 @@ export function MainScreen({ height, topInset = 0, bottomInset = 0, hasPermissio
 const styles = StyleSheet.create({
   panel: { backgroundColor: '#000' },
   strip: { position: 'absolute', right: 12, flexDirection: 'row', backgroundColor: Colors.Glass, borderRadius: Dimens.radiusPill, paddingHorizontal: 4 },
-  iconButton: { minWidth: 44, minHeight: 44, paddingHorizontal: 5, flexDirection: 'row', gap: 3, alignItems: 'center', justifyContent: 'center' },
+  iconButton: { minWidth: 48, minHeight: 48, paddingHorizontal: 5, flexDirection: 'row', gap: 3, alignItems: 'center', justifyContent: 'center' },
   banner: { flexDirection: 'row', alignItems: 'center', gap: Dimens.gapMedium, minHeight: Dimens.touchTarget, paddingHorizontal: Dimens.gutter, paddingVertical: 10 },
   warnLine: { flexDirection: 'row', alignItems: 'center', gap: Dimens.gapMedium, minHeight: 40, paddingHorizontal: Dimens.gutter, paddingVertical: Dimens.gapSmall, backgroundColor: Colors.Glass },
   extras: { padding: Dimens.gapMedium, gap: Dimens.gapSmall, backgroundColor: Colors.Glass },

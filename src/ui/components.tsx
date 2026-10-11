@@ -421,7 +421,7 @@ export const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   togglePill: {
-    minHeight: 44,
+    minHeight: 48,
     borderRadius: Dimens.radiusPill,
     borderWidth: 1,
     flexDirection: 'row',

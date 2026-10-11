@@ -8,3 +8,5 @@ export const IOS_AUDIO_SESSION = {
 };
 export const SPEECH_GAIN = 1;
 export const TONE_GAIN = 0.45;
+/** Urgent vehicle tones (ALERT and CRITICAL) play louder so they are not lost under traffic noise. */
+export const URGENT_TONE_GAIN = 0.8;

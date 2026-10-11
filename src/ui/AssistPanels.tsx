@@ -26,17 +26,19 @@ function usePolled<T>(initial: T, read: () => T | Promise<T>, intervalMs: number
   return value;
 }
 
-const readHeadphones = () => CrossWiseNative?.headphonesConnected() ?? true;
+// Unknown (no native module) counts as not connected, so the earbud advice is never shown without evidence.
+const readHeadphones = () => CrossWiseNative?.headphonesConnected() ?? false;
 const readBattery = () => CrossWiseNative?.batteryPercent() ?? Promise.resolve(100);
 
 /** Headphones and battery, polled. Shared by the full WarningsPanel and the slim line on the camera screen (UI P3e J16). */
 export function useDeviceState() {
-  return { headphones: usePolled(true, readHeadphones, 4_000), battery: usePolled(100, readBattery, 60_000) };
+  return { headphones: usePolled(false, readHeadphones, 4_000), battery: usePolled(100, readBattery, 60_000) };
 }
 
 export function deviceWarnings({ headphones, battery }: { headphones: boolean; battery: number }): [string, string][] {
   const out: [string, string][] = [];
-  if (!headphones) out.push(['headphones', S.warnNoHeadphones]);
+  // Full headphones hide traffic sound, so the advice shows only while some are connected.
+  if (headphones) out.push(['headphones', S.warnNoHeadphones]);
   if (battery <= 20) out.push(['battery', S.warnBattery(battery)]);
   return out;
 }
