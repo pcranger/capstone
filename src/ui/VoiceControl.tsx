@@ -43,12 +43,14 @@ export function VoiceStatus({ onHelp }: { onHelp: () => void }) {
   const state = useStore(controller.voice.state);
   const settings = useStore(controller.settings);
   const type = useType();
-  // The app speaks "Listening." itself; with a screen reader on, the text stays readable by swipe but is not announced a second time.
-  const live = liveRegionFor(useScreenReaderEnabled());
+  const screenReaderOn = useScreenReaderEnabled();
   // The line appears only when there is something to say: listening, working, an error, or speech switched off.
   if (settings.speech && !['listening', 'working', 'error'].includes(state.phase)) return null;
   const text = !settings.speech ? 'Voice commands are off. Enable Speech in Settings.' : state.phase === 'listening' ? 'Listening…' : state.phase === 'working' ? 'Working…'
     : state.text;
+  // The app speaks "Listening." and its errors itself, so with a screen reader on they are not announced twice. "Voice commands are
+  // off" is never spoken (speech is off), so it stays polite.
+  const live = liveRegionFor(screenReaderOn && settings.speech);
   return <View style={{ paddingHorizontal: 12, paddingBottom: 8, gap: 4 }}>
     <Text style={type.bodyMedium} accessibilityLiveRegion={live}>{text}</Text>
     {(state.phase === 'error' || !settings.speech) && <TextButton label="Voice help" onPress={onHelp} />}
