@@ -83,6 +83,28 @@ describe('D1 and the late-car evidence', () => {
     expect(unknown.canCross(1000)).toBe(false);
   });
 
+  const parkedResult = () => {
+    const s = new CheckSession();
+    s.begin(0);
+    Object.assign(s, { stage: 'result', summary: 'UNSURE', unknownSeen: false, resultAt: 0, resultText: CHECK_TEXT.stationaryResult });
+    return s;
+  };
+
+  test('a stationary-only (parked) result allows Cross, and a parked car in view later keeps it', () => {
+    const s = parkedResult();
+    expect(s.canCross(1000)).toBe(true);
+    expect(s.frame(1000, frame([car({ moving: false, supported: true })])).urgent).toBeUndefined();
+    expect(s.canCross(1000)).toBe(true);
+  });
+
+  test('a stationary-only result is withdrawn when a car in view starts moving', () => {
+    const s = parkedResult();
+    expect(s.canCross(500)).toBe(true);
+    expect(s.frame(1000, frame([car({ bearingDeg: 20, moving: true })])).urgent).toBe(CHECK_RESULT_TEXT.MOVING_RIGHT);
+    expect(s.summary).toBe('MOVING_RIGHT');
+    expect(s.canCross(1000)).toBe(false);
+  });
+
   test('Cross is gated in the engine itself: START_CROSSING and TOGGLE_CROSSING need a fresh clear result', () => {
     const e = new CrossingEngine();
     e.command(UserCommand.START_ASSIST, 0);
