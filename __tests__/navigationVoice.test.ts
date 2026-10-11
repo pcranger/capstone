@@ -54,7 +54,7 @@ test.each([
 
 test('removed navigation phrases and acknowledgements are never commands', () => {
   for (const text of ['Navigate to Central Library.', 'Search for Central Library', 'Central Library', 'Save as Home', 'second', 'Next instruction',
-    'Arrived', 'Stop navigation', 'End journey', 'Confirm', 'Start journey', 'yes', 'no', 'okay', 'stop', 'cross now', 'I am across', 'Held',
+    'Arrived', 'Stop navigation', 'End journey', 'Confirm', 'Start journey', 'yes', 'no', 'okay', 'cross now', 'I am across', 'Held',
     'And journey', 'where am I']) expect(voiceIntent(text)).toBeNull();
 });
 

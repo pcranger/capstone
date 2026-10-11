@@ -2,7 +2,7 @@ import { expectsVoiceAnswer, spokenError } from './speechCatalog';
 import { Store } from '../state/store';
 import type { SpeechInput } from './nativeSpeech';
 
-export type VoiceIntent = { kind: 'start' | 'retry' | 'repeat' | 'pause' | 'resume' | 'cancel' | 'help' | 'stopListening' | 'finishCrossing' };
+export type VoiceIntent = { kind: 'start' | 'retry' | 'repeat' | 'pause' | 'resume' | 'cancel' | 'help' | 'stopListening' | 'finishCrossing' | 'cross' | 'stop' };
 
 /** Only explicit commands may start an action. */
 export { VOICE_MANUAL as VOICE_QUICK_START } from './speechCatalog';
@@ -11,6 +11,7 @@ const COMMANDS: Record<string, VoiceIntent['kind']> = {
   start: 'start', retry: 'retry', repeat: 'repeat', pause: 'pause', resume: 'resume', cancel: 'cancel',
   'finish crossing': 'finishCrossing', help: 'help', 'voice help': 'help', manual: 'help', man: 'help',
   'show commands': 'help', 'stop listening': 'stopListening',
+  'check again': 'retry', cross: 'cross', stop: 'stop',
 };
 
 export function voiceIntent(text: string): VoiceIntent | null {
@@ -38,11 +39,12 @@ export class NavigationVoice {
   constructor(private deps: Dependencies) {}
   get active(): boolean { return this.enabled; }
   get processing(): boolean { return this.state.value.phase === 'working'; }
-  start(prompt: string | null): void {
+  /** `announce` false re-arms the microphone without saying "Listening." again. */
+  start(prompt: string | null, announce = true): void {
     if (this.enabled) return;
     this.enabled = true;
     const id = ++this.generation;
-    this.worker = this.worker.catch(() => undefined).then(() => this.run(id, prompt));
+    this.worker = this.worker.catch(() => undefined).then(() => this.run(id, prompt, !announce));
   }
   stop(): void {
     this.enabled = false; ++this.generation;
@@ -50,14 +52,14 @@ export class NavigationVoice {
     this.state.set({ phase: 'off', text: '' });
   }
   whenStopped(): Promise<void> { return this.worker; }
-  private async run(id: number, prompt: string | null): Promise<void> {
+  private async run(id: number, prompt: string | null, alreadyAnnounced = false): Promise<void> {
     const current = () => this.enabled && id === this.generation;
     if (!current()) return;
     try {
       this.state.set({ phase: 'preparing', text: 'Preparing voice…' });
       await this.deps.input.prepare();
       let signalReady = true;
-      let announcedListening = false;
+      let announcedListening = alreadyAnnounced;
       let listenAfterPrompt = prompt !== null;
       while (current()) {
         if (prompt) {

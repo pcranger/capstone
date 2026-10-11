@@ -1,5 +1,6 @@
+import { VT } from '../text/voiceText';
 /** Shared speech used by commands, recovery and Developer preview. */
-export const VOICE_MANUAL = 'Start. Pause. Resume. Repeat. Retry. Finish crossing. Cancel. Stop listening. Double-tap the camera to start or stop listening.';
+export const VOICE_MANUAL = VT.manual;
 export const V = {
   unknown: 'Command not recognised.',
   unknownHelp: 'Command not recognised. Say manual for commands.',

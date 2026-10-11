@@ -9,6 +9,7 @@ import { Hint, TextButton } from './components';
 import { VOICE_QUICK_START } from '../voice/navigationVoice';
 import { Colors, useType } from './theme';
 import { S } from '../strings';
+import { VT } from '../text/voiceText';
 
 /** A heading that expands and collapses its content; same pattern as the Settings "Manual" card. */
 export function Collapsible({ title, defaultOpen = false, children }: { title: string; defaultOpen?: boolean; children: ReactNode }) {
@@ -35,10 +36,11 @@ export function VoiceHelp() {
       : <TextButton label="Enable spoken guidance" onPress={() => controller.updateSettings(s => ({ ...s, speech: true }))} />}
     <Text style={type.titleMedium} accessibilityRole="header">{S.voiceSayHeading}</Text>
     {S.voiceSayLines.map(say)}
+    {VT.sayLines.map(say)}
     <Collapsible title={S.voiceFailsHeading}>
       <Hint>A light vibration means the microphone is ready. “Listening” is spoken once per voice session. Say “manual” or “man” for commands.</Hint>
-      <Hint>Double-tap the camera to start a voice turn. CrossWise says “Listening.” Double-tap again to stop it.</Hint>
-      <Hint>The app cannot hear commands while it is speaking. “Stop listening” turns voice off; tap Voice to restart. Settings and backgrounding stop listening.</Hint>
+      <Hint>{VT.toggleHelpHint} Double-tapping the camera does the same for people who do not use a screen reader.</Hint>
+      <Hint>The app cannot hear commands while it is speaking, and it listens again by itself when it stops. “Stop listening” turns voice off; use the Voice commands button to restart. Settings and backgrounding stop listening.</Hint>
       <Hint>{status.error ?? (status.locale ? `Recognition: ${status.locale}, on this phone.` : 'Recognition is checked when voice starts.')}</Hint>
       <Hint>{Platform.OS === 'android' ? 'Allow Microphone in Android app settings. Install offline English in your speech recognition service, then reopen CrossWise. Offline language checks require Android 13 or later.' : 'If voice fails: allow Microphone and Speech Recognition for CrossWise in iPhone Settings. If offline English remains unavailable, check General → Keyboard → Enable Dictation and an English keyboard, connect to Wi-Fi, use English dictation once, then reopen CrossWise. Availability is checked again; downloading a speaking voice does not install a recognizer.'}</Hint>
       <Hint>The app tries available offline English recognizers automatically. It does not upload audio or silently switch to online recognition. You can use the buttons and your screen reader if recognition remains unavailable.</Hint>

@@ -2,6 +2,7 @@ import { EMPTY_PIPELINE, perceptionMessage } from '../perception/pipelineHealth'
 import { NativeSpeechInput } from '../voice/nativeSpeech';
 import { VoiceAudioCheck } from '../voice/audioCheck';
 import { V } from '../voice/speechCatalog';
+import { CONFIRM_WINDOW_MS, VT } from '../text/voiceText';
 import { NavigationVoice, voiceIntent, VOICE_QUICK_START } from '../voice/navigationVoice';
 import { speechStatus } from '../voice/speechStatus';
 import { Haptics } from '../feedback/haptics';
@@ -149,6 +150,9 @@ export class CrossWiseController {
   private assistStartedAt=0;
   private trafficFailure:string|null=null;
   private voiceMuted = false;
+  /** What the user chose: true until Stop listening or the Voice commands button switches it off. Drives the toggle's label. */
+  readonly voiceMode = new Store<boolean>(true);
+  private pendingConfirm: { word: 'cancel' | 'stop'; at: number } | null = null;
   /** Prevents a recurring native/service error from talking over itself while it remains unresolved. */
   private announcedErrors = new Map<string, string>();
   private voiceAudioGeneration = 0;
@@ -172,28 +176,47 @@ export class CrossWiseController {
     }
     else { ++this.voiceAudioGeneration; this.voice.stop(); this.feedback.silenceRoutine(); }
   }
-  startVoice(force = false): void {
-    if (force) this.voiceMuted = false;
+  /** `announce` false is a re-arm between prompts: the microphone opens without saying "Listening." again. */
+  startVoice(force = false, announce = true): void {
+    if (force) { this.voiceMuted = false; this.voiceMode.set(true); }
     if (!this.homeVisible || AppState.currentState !== 'active' || this.voiceMuted || !this.settings.value.speech) return;
     if (this.voice.active) return;
     if (this.voiceCheck.active) this.voiceCheck.stop();
     const id = ++this.voiceAudioGeneration;
     void this.feedback.whenIdle().then(idle => {
       if (!idle || id !== this.voiceAudioGeneration || !this.homeVisible || this.voiceMuted || AppState.currentState !== 'active') return;
-      this.voice.start(null);
+      this.voice.start(null, announce);
+      // Each command ends its turn. When voice mode is still on, open the microphone again once the app has finished speaking.
+      void this.voice.whenStopped().then(() => this.rearmVoice(id));
     });
   }
+  /** Re-opens the microphone after a finished turn. Any stop, hidden screen or newer start bumps the generation and cancels this. */
+  private rearmVoice(id: number): void {
+    if (id !== this.voiceAudioGeneration || this.voice.state.value.phase === 'error') return;
+    // The 4 second confirm window starts when the question has been spoken, not when it was asked.
+    if (this.pendingConfirm) this.pendingConfirm.at = nowMs();
+    this.startVoice(false, false);
+  }
   stopVoice(): void {
-    this.voiceMuted = true;
+    this.voiceMuted = true; this.voiceMode.set(false);
     ++this.voiceAudioGeneration; this.voice.stop(); this.feedback.silenceRoutine();
   }
-  toggleVoiceFromGesture(): void {
-    if (this.voice.active) {
+  /** The large Voice commands button and the camera double-tap gesture. Works between prompts, when the microphone is briefly closed. */
+  toggleVoice(): void {
+    if (this.voiceMode.value) {
       this.stopVoice();
       void this.feedback.sayAndWait('Listening stopped.');
     } else {
       this.startVoice(true);
     }
+  }
+  toggleVoiceFromGesture(): void { this.toggleVoice(); }
+  /** True on the second matching word inside the window; otherwise records the first and the caller asks again. */
+  private confirmedTwice(word: 'cancel' | 'stop'): boolean {
+    const now = nowMs(), pending = this.pendingConfirm;
+    if (pending && pending.word === word && now - pending.at <= CONFIRM_WINDOW_MS) { this.pendingConfirm = null; return true; }
+    this.pendingConfirm = { word, at: now };
+    return false;
   }
   private async handleVoice(text: string, current: () => boolean): Promise<string | null> {
     if (!current()) return null;
@@ -204,9 +227,20 @@ export class CrossWiseController {
       return ++this.unknownCommands >= 2 ? V.unknownHelp : V.unknown;
     }
     this.unknownCommands = 0;
+    if (intent.kind !== 'cancel' && intent.kind !== 'stop') this.pendingConfirm = null;
     const crossing = this.engine.mode === AssistMode.CROSSING;
     switch (intent.kind) {
       case 'stopListening': this.stopVoice(); return null;
+      case 'cross':
+        if (!this.assistOn) return VT.crossNeedsHelp;
+        if (crossing) return VT.crossAlready;
+        // TODO(stage 2b): a dedicated controller method for "cross" once the crossing check lands; this is the Cross button's path.
+        this.crossingAction('start'); return null;
+      case 'stop':
+        if (!this.assistOn) return VT.alreadyOff;
+        // Same as the dock Stop. A wrong guess must not silence a crossing, so a crossing needs the word twice.
+        if (crossing && !this.confirmedTwice('stop')) return VT.confirmAgain('stop');
+        this.command(UserCommand.STOP_ASSIST, true); return V.paused;
       case 'help': return VOICE_QUICK_START;
       case 'start': case 'resume':
         if (this.assistOn) return V.running;
@@ -224,7 +258,10 @@ export class CrossWiseController {
         if (crossing) return V.finishCrossingFirst;
         { const wasOn = this.assistOn; this.command(UserCommand.STOP_ASSIST, true); return wasOn ? T.assistStopped : V.paused; }
       case 'cancel':
-        if (crossing) { this.command(UserCommand.END_CROSSING); return V.crossingEnded; }
+        if (crossing) {
+          if (!this.confirmedTwice('cancel')) return VT.confirmAgain('cancel');
+          this.command(UserCommand.END_CROSSING); return V.crossingEnded;
+        }
         if (this.assistOn) { this.command(UserCommand.STOP_ASSIST, true); return T.assistStopped; }
         return V.cancelled;
       case 'finishCrossing':
@@ -790,9 +827,10 @@ export class CrossWiseController {
         ++this.voiceAudioGeneration;
         this.voice.stop();
         this.feedback.dispatch(cues);
-        // A spoken direction or warning ends this listening turn. The user can
-        // deliberately double-tap the camera to start another turn.
+        // A spoken direction or warning ends this listening turn. The microphone re-opens by itself when the
+        // speech ends (startVoice waits for the speaker to go idle), unless the user switched voice off.
         for (const cue of cues) { const text = cueText(cue); if (text) this.ui.update(s => ({ ...s, caption: text })); }
+        this.startVoice(false, false);
         return;
       }
     }
