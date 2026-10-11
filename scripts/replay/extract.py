@@ -145,6 +145,25 @@ def flow(before, after, regions):
             for p, f in zip(xy[keep, 0], q[keep, 0])]
 
 
+def detect(tensor, lb):
+    interp.set_tensor(inp['index'], np.ascontiguousarray(tensor.transpose(2, 0, 1)[None]))
+    interp.invoke()
+    head = interp.get_tensor(outd['index'])[0]
+    found = []
+    for l, tp, r, b, c, s in decode(head, lb, min(.08, SCORE_THRESHOLD)):
+        if labels[c] not in VEHICLES and s < SCORE_THRESHOLD:
+            continue
+        found.append(dict(cls=c, label=labels[c], score=round(s, 4), box=[round(l, 5), round(tp, 5), round(r, 5), round(b, 5)]))
+    return found
+
+
+def shrink(bgr):
+    if max(bgr.shape[:2]) > 1280:  # 4K: the model sees 416 px anyway
+        k = 1280 / max(bgr.shape[:2])
+        return cv2.resize(bgr, None, fx=k, fy=k, interpolation=cv2.INTER_AREA)
+    return bgr
+
+
 def annotate(bgr, boxes):
     img = bgr.copy()
     h, w = img.shape[:2]
@@ -158,12 +177,15 @@ def annotate(bgr, boxes):
 
 
 def main():
+    global interp, inp, outd, labels
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('video')
     ap.add_argument('--out', required=True)
     ap.add_argument('--fps', type=float, default=5.0,
                     help='frames per second fed to the engine; 5 = scripts/benchmark_vehicle_flow.py (phone runs 3-17)')
     ap.add_argument('--png-at', default='', help='comma list of seconds; saves annotated frames (t-0.6, t, t+0.6 side by side)')
+    ap.add_argument('--png-busiest', action='store_true', help='also save a strip at the sampled frame with the most vehicle boxes')
+    ap.add_argument('--max-seconds', type=float, default=0, help='stop after this many seconds of video (0 = whole video)')
     args = ap.parse_args()
 
     names = json.loads(zipfile.ZipFile(MODEL).read('metadata.json'))['names']
@@ -188,6 +210,9 @@ def main():
         if not ok:
             break
         t = idx / src_fps
+        if args.max_seconds and t >= args.max_seconds:
+            break
+        bgr = shrink(bgr)
         take = t + 1e-9 >= next_t
         if not take and idx not in wanted_png:
             idx += 1
@@ -195,15 +220,7 @@ def main():
         h, w = bgr.shape[:2]
         lb = letterbox_of(w, h, 416, 416)
         tensor = preprocess(bgr, lb)
-        found = []
-        if take or idx in wanted_png:
-            interp.set_tensor(inp['index'], np.ascontiguousarray(tensor.transpose(2, 0, 1)[None]))
-            interp.invoke()
-            head = interp.get_tensor(outd['index'])[0]
-            for l, tp, r, b, c, s in decode(head, lb, min(.08, SCORE_THRESHOLD)):
-                if labels[c] not in VEHICLES and s < SCORE_THRESHOLD:
-                    continue
-                found.append(dict(cls=c, label=labels[c], score=round(s, 4), box=[round(l, 5), round(tp, 5), round(r, 5), round(b, 5)]))
+        found = detect(tensor, lb) if (take or idx in wanted_png) else []
         if idx in wanted_png:
             sec, k = wanted_png[idx]
             strips.setdefault(sec, {})[k] = annotate(bgr, found)
@@ -218,6 +235,19 @@ def main():
                                boxes=found, flow=fl))
             previous = gray
         idx += 1
+    if args.png_busiest and frames:
+        busiest = max(frames, key=lambda f: sum(b['label'] in VEHICLES for b in f['boxes']))
+        parts = []
+        for d in (-round(.6 * src_fps), 0, round(.6 * src_fps)):
+            cap.set(cv2.CAP_PROP_POS_FRAMES, max(0, round(busiest['t_ms'] / 1000 * src_fps) + d))
+            ok, bgr = cap.read()
+            if ok:
+                bgr = shrink(bgr)
+                lb = letterbox_of(bgr.shape[1], bgr.shape[0], 416, 416)
+                parts.append(cv2.resize(annotate(bgr, detect(preprocess(bgr, lb), lb)), (448, round(448 * bgr.shape[0] / bgr.shape[1]))))
+        if len(parts) == 3:
+            cv2.imwrite(str(out_path.with_name(f'{out_path.stem}.busiest-{busiest["t_ms"] / 1000:g}s.png')), cv2.hconcat(parts))
+        print(f'busiest moment: {busiest["t_ms"] / 1000:g}s')
     cap.release()
 
     out_path.write_text(json.dumps(dict(video=str(Path(args.video).resolve()), srcFps=src_fps, fps=args.fps,

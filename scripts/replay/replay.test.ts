@@ -2,7 +2,7 @@
  * Video replay: feeds the frames written by scripts/replay/extract.py through the REAL engine
  * (tracker, VehicleMotion, crossing check, hazard cues) and writes <json>.timeline.txt.
  *
- *   REPLAY_JSON=<file>.json npx jest -c scripts/replay/jest.config.js
+ *   REPLAY_JSON=<a>.json[,<b>.json...] (or a folder ending in /) npx jest -c scripts/replay/jest.config.js
  *
  * Optional: REPLAY_FIXED=1 keeps the heading fixed for the whole video (the check then never gets its left/right looks).
  * By default the heading is fixed at 0 (camera on the road) except during the scripted look turns of each check, and
@@ -17,7 +17,7 @@ import { cueText } from '../../src/strings';
 
 // The project has no Node type definitions (and tsconfig stays as is), so describe the two calls we need.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const fs = require('fs') as { readFileSync(p: string, enc: string): string; writeFileSync(p: string, data: string): void };
+const fs = require('fs') as { readFileSync(p: string, enc: string): string; writeFileSync(p: string, data: string): void; readdirSync(p: string): string[] };
 
 interface ReplayFrame {
   t_ms: number; frameWidth: number; frameHeight: number; brightness: number;
@@ -42,9 +42,11 @@ function headingAt(sinceStartMs: number): number {
   return 0;
 }
 
-const jsonPath = process.env.REPLAY_JSON;
-(jsonPath ? test : test.skip)('replay timeline', () => {
-  const data = JSON.parse(fs.readFileSync(jsonPath!, 'utf8')) as { video: string; fps: number; frames: ReplayFrame[] };
+const given = (process.env.REPLAY_JSON ?? '').split(',').filter(Boolean);
+// a value ending in / means every .json in that folder
+const jsonPaths = given.flatMap((p) => (p.endsWith('/') ? fs.readdirSync(p).filter((f) => f.endsWith('.json')).map((f) => p + f) : [p]));
+(jsonPaths.length ? describe : describe.skip)('replay', () => jsonPaths.forEach((jsonPath) => test(`timeline ${jsonPath}`, () => {
+  const data = JSON.parse(fs.readFileSync(jsonPath, 'utf8')) as { video: string; fps: number; frames: ReplayFrame[] };
   const fixed = process.env.REPLAY_FIXED === '1';
   const engine = new CrossingEngine();
   const lines: string[] = [
@@ -110,5 +112,5 @@ const jsonPath = process.env.REPLAY_JSON;
     prevT = f.t_ms;
   }
   expect(prevT).toBeGreaterThan(0);
-  fs.writeFileSync(jsonPath!.replace(/\.json$/, '.timeline.txt'), lines.join('\n') + '\n');
-});
+  fs.writeFileSync(jsonPath.replace(/\.json$/, '.timeline.txt'), lines.join('\n') + '\n');
+})));
