@@ -108,7 +108,7 @@ export function JourneyControls({ stacked, compact = false, permission }: { stac
     const lead = lastLabel.current === S.actionStartAssist && primaryLabel === S.actionStartCrossing ? T.cameraHelpOnLead : '';
     lastLabel.current = primaryLabel;
     noteLabelChange();
-    controller.speakNow(T.nextButton(primaryLabel, lead));
+    controller.speakHigh(T.nextButton(primaryLabel, lead));
   }, [primaryLabel]);
   const primary = button(primaryLabel, () => pressUnlessLabelJustChanged(primaryPress), Colors.Crossing, true, true);
   const extras = [

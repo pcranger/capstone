@@ -43,7 +43,7 @@ jest.mock('../src/state/controller', () => {
     cameraStatus: new Store('running'), pipeline:new Store({receivedAt:0,latencyMs:0,slowFrames:0,error:null}),cameraDetail:new Store(null), hasRecentFrame: true, repeatGuidance: jest.fn(), crossingAction: jest.fn(),
     mask: new Store(null), describing: new Store(false), modelLibrary: new Store([]),
     previewSpeech: jest.fn(async()=>true), stopSpeechPreview: jest.fn(),
-    speakNow: jest.fn(), setHomeVisible: jest.fn(), command: jest.fn(), clearNotice: jest.fn(),
+    speakNow: jest.fn(), speakHigh: jest.fn(), setHomeVisible: jest.fn(), command: jest.fn(), clearNotice: jest.fn(),
     logger: { sessions: () => [] },
     updateSettings: jest.fn((fn: (s: typeof DEFAULT_SETTINGS) => typeof DEFAULT_SETTINGS): void => { c.settings.set(fn(c.settings.value)); }),
   };
@@ -298,7 +298,7 @@ test('Android Back closes settings without unmounting the camera', async () => {
     expect(button(S.actionStartAssist)).toBeDefined();
     // cw-safety: Back at the home screen would close the app and its warnings, so the first Back only asks; a second within 3 s closes.
     expect(back()).toBe(true);
-    expect(controller.speakNow).toHaveBeenCalledWith(T.backConfirm);
+    expect(controller.speakHigh).toHaveBeenCalledWith(T.backConfirm, true);
     expect(back()).toBe(false);
     expect(mockCameraMount).toHaveBeenCalledTimes(1);
     expect(mockCameraUnmount).not.toHaveBeenCalled();

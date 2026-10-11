@@ -33,7 +33,7 @@ jest.mock('../src/state/controller', () => {
     notice: new Store(null), model: new Store({ kind: 'ready', info: { format: 'END_TO_END', labels: ['car'], hasPedestrianSignalClasses: true, displayName: 'test', inputWidth: 640, backend: 'CPU' } }),
     cameraStatus: new Store('running'), pipeline: new Store({ receivedAt: 0, latencyMs: 0, slowFrames: 0, error: null }), cameraDetail: new Store(null),
     hasRecentFrame: true, repeatGuidance: jest.fn(), crossingAction: jest.fn(), mask: new Store(null), modelLibrary: new Store([]),
-    speakNow: jest.fn(), setHomeVisible: jest.fn(), command: jest.fn(), clearNotice: jest.fn(), welcomeDone: Promise.resolve(),
+    speakNow: jest.fn(), speakHigh: jest.fn(), setHomeVisible: jest.fn(), command: jest.fn(), clearNotice: jest.fn(), welcomeDone: Promise.resolve(),
   } };
 });
 
@@ -48,7 +48,7 @@ beforeEach(() => {
   mockPermission = { hasPermission: true, canRequestPermission: false, requestPermission: jest.fn(async () => true) };
   (controller as any).welcomeDone = Promise.resolve();
   controller.ui.set({ ...controller.ui.value, snapshot: EMPTY_SNAPSHOT });
-  for (const f of ['command', 'speakNow', 'crossingAction']) ((controller as any)[f] as jest.Mock).mockClear();
+  for (const f of ['command', 'speakNow', 'speakHigh', 'crossingAction']) ((controller as any)[f] as jest.Mock).mockClear();
   cameraAccess.has = true;
 });
 afterEach(async () => { if (tree) await act(async () => tree.unmount()); tree = null; });
@@ -58,9 +58,9 @@ describe('4 - the big button changes meaning under the finger', () => {
     const dateNow = jest.spyOn(Date, 'now').mockReturnValue(5_000_000);
     await render(<JourneyControls stacked={false} />);
     expect(button('Start camera help')).toBeDefined();
-    expect(controller.speakNow).not.toHaveBeenCalled(); // nothing is announced for the first label
+    expect(controller.speakHigh).not.toHaveBeenCalled(); // nothing is announced for the first label
     await setMode(AssistMode.SEARCHING);
-    expect(controller.speakNow).toHaveBeenCalledWith('Camera help on. Next button: I’m crossing');
+    expect(controller.speakHigh).toHaveBeenCalledWith('Camera help on. Next button: I’m crossing');
     dateNow.mockReturnValue(5_000_900);
     await press('I’m crossing');
     expect(controller.crossingAction).not.toHaveBeenCalled(); // 0.9 s after the change: a late tap meant for "Start"
@@ -74,7 +74,7 @@ describe('4 - the big button changes meaning under the finger', () => {
     await render(<JourneyControls stacked={false} />);
     await setMode(AssistMode.SEARCHING);
     await setMode(AssistMode.CROSSING);
-    expect(controller.speakNow).toHaveBeenLastCalledWith(T.nextButton('I’m on the footpath'));
+    expect(controller.speakHigh).toHaveBeenLastCalledWith(T.nextButton('I’m on the footpath'));
   });
 });
 
@@ -84,7 +84,7 @@ describe('1 - the Stop button during a crossing', () => {
     await render(<JourneyControls stacked={false} />);
     await setMode(AssistMode.CROSSING);
     await press('Stop camera help');
-    expect(controller.speakNow).toHaveBeenCalledWith(T.stopConfirm);
+    expect(controller.speakHigh).toHaveBeenCalledWith(T.stopConfirm, true);
     expect(controller.command).not.toHaveBeenCalled();
     await press('Stop camera help');
     expect(controller.command).toHaveBeenCalledWith(UserCommand.STOP_ASSIST, true);
