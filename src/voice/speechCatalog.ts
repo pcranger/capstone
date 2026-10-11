@@ -1,4 +1,5 @@
 import { VT } from '../text/voiceText';
+import { T } from '../text/safetyText';
 /** Shared speech used by commands, recovery and Developer preview. */
 export const VOICE_MANUAL = VT.manual;
 export const V = {
@@ -8,6 +9,7 @@ export const V = {
   paused: 'Camera help paused.',
   running: 'Camera help already on.',
   cancelled: 'Cancelled.',
+  cameraAlready: 'Camera is already allowed.',
   crossingEnded: 'Crossing ended.',
   noCrossing: 'No crossing guidance is active.',
   finishCrossingFirst: 'Finish crossing first.',
@@ -23,7 +25,7 @@ export const V = {
 };
 /** Follow-ups that keep the microphone armed so the next command needs no second tap. Keep this explicit. */
 export function expectsVoiceAnswer(text: string): boolean {
-  return [V.unknown, V.unknownHelp].includes(text);
+  return [V.unknown, V.unknownHelp, T.stopConfirm, VT.confirmAgain('cancel')].includes(text);
 }
 /** Internal errors stay available to diagnostics; speech gives a short recovery action. */
 export function spokenError(error: unknown, _context: 'voice' = 'voice'): string {

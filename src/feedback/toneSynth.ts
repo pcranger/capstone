@@ -22,7 +22,8 @@ export function notesFor(kind: ToneKind): [Note[], number] {
     case ToneKind.WALK_CHIME:
       return [[note(880, 90), note(1175, 90), note(1568, 160)], TONE_GAIN];
     case ToneKind.READY:
-      return [[note(1047, 110, 60), note(1047, 110, 60), note(1568, 240)], TONE_GAIN];
+      // Low falling pair: must never sound like WALK_CHIME (880, 1175, 1568 rising), which means "you may go".
+      return [[note(784, 140, 60), note(523, 240)], TONE_GAIN];
     case ToneKind.STOP:
       return [[note(440, 260)], TONE_GAIN];
     case ToneKind.ALERT:

@@ -51,6 +51,11 @@ export const HAPTIC_PATTERNS: Record<HapticPattern, [number[], number[]]> = {
     [0, 400, 80, 400],
     [0, 255, 0, 255],
   ],
+  // Camera help off: one very long, lower buzz. Not CRITICAL's double buzz, so "off" never feels like "car".
+  [HapticPattern.STOPPED]: [
+    [0, 900],
+    [0, 150],
+  ],
 };
 
 export const Haptics = {

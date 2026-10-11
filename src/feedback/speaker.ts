@@ -73,7 +73,8 @@ export class Speaker {
   }
   /** Wait for a word boundary when Android's TTS engine supplies range events. */
   async stopForInterruption(): Promise<void> {
-    this.stop();
+    // A transcript arriving must not cut off an urgent line (vehicle warning, "camera help off") that is still pending.
+    this.stopRoutine();
     await this.stopping;
   }
   private stopNative(): void {

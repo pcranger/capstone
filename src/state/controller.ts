@@ -2,7 +2,8 @@ import { EMPTY_PIPELINE, perceptionMessage } from '../perception/pipelineHealth'
 import { NativeSpeechInput } from '../voice/nativeSpeech';
 import { VoiceAudioCheck } from '../voice/audioCheck';
 import { V } from '../voice/speechCatalog';
-import { CONFIRM_WINDOW_MS, VT } from '../text/voiceText';
+import { VT } from '../text/voiceText';
+import { clearConfirm, confirmTwice, refreshConfirm } from './safetyGuards';
 import { NavigationVoice, voiceIntent, VOICE_QUICK_START } from '../voice/navigationVoice';
 import { speechStatus } from '../voice/speechStatus';
 import { Haptics } from '../feedback/haptics';
@@ -52,6 +53,19 @@ import { cameraAccess } from './cameraAccess';
 
 /** While the camera cannot see, say so this often, so silence never passes for "no cars". */
 const CANT_SEE_REPEAT_MS = 10_000;
+/** The welcome note may hold the camera permission dialog back this long, no longer. */
+const WELCOME_CAP_MS = 12_000;
+/** "Getting ready" said, still not ready after this: say it again, kindly. */
+const STILL_READY_MS = 4_000;
+/** Not ready after this long with nothing else to blame: tell the user to reopen the app, once. */
+const NOT_WORKING_MS = 20_000;
+
+/** A timer that never keeps a test or the process alive. */
+const later = (ms: number, fn: () => void): ReturnType<typeof setTimeout> => {
+  const t = setTimeout(fn, ms);
+  (t as unknown as { unref?: () => void }).unref?.();
+  return t;
+};
 
 export type ModelState =
   | { kind: 'loading' }
@@ -135,6 +149,13 @@ export class CrossWiseController {
   readonly ready = new Store(false);
   /** Settles when the first-open safety note and "getting ready" have been spoken; the camera permission dialog waits for it. */
   welcomeDone: Promise<void> = Promise.resolve();
+  /** True once the safety note is over (or capped). "Ready" waits for it so the two never talk over each other. */
+  private welcomeFinished = true;
+  private notWorking = false;
+  private notWorkingTimer: ReturnType<typeof setTimeout> | null = null;
+  private readyTimer: ReturnType<typeof setTimeout> | null = null;
+  /** True when the user started this listening turn (double-tap, button, first open); false on a silent re-arm. */
+  private userTurn = true;
   private wasBackgrounded = false;
   private lastCantSeeMs = 0;
 
@@ -152,7 +173,6 @@ export class CrossWiseController {
   private voiceMuted = false;
   /** What the user chose: true until Stop listening or the Voice commands button switches it off. Drives the toggle's label. */
   readonly voiceMode = new Store<boolean>(true);
-  private pendingConfirm: { word: 'cancel' | 'stop'; at: number } | null = null;
   /** Prevents a recurring native/service error from talking over itself while it remains unresolved. */
   private announcedErrors = new Map<string, string>();
   private voiceAudioGeneration = 0;
@@ -160,8 +180,11 @@ export class CrossWiseController {
     input: new NativeSpeechInput(),
     say: async text => {
       this.ui.update(s => ({ ...s, caption: text }));
-      return this.feedback.sayAndWait(text);
+      const completed = await this.feedback.sayAndWait(text);
+      refreshConfirm(); // a question's 3 s window starts when it has been read out
+      return completed;
     },
+    bargeIn: text => text !== T.stopConfirm && text !== VT.confirmAgain('cancel'),
     ready: () => this.feedback.dispatch([Cues.haptic(HapticPattern.CENTERED_TICK)]),
     handle: (text, current) => this.handleVoice(text, current),
     cancel: () => undefined,
@@ -185,6 +208,7 @@ export class CrossWiseController {
     const id = ++this.voiceAudioGeneration;
     void this.feedback.whenIdle().then(idle => {
       if (!idle || id !== this.voiceAudioGeneration || !this.homeVisible || this.voiceMuted || AppState.currentState !== 'active') return;
+      this.userTurn = announce;
       this.voice.start(null, announce);
       // Each command ends its turn. When voice mode is still on, open the microphone again once the app has finished speaking.
       void this.voice.whenStopped().then(() => this.rearmVoice(id));
@@ -193,8 +217,7 @@ export class CrossWiseController {
   /** Re-opens the microphone after a finished turn. Any stop, hidden screen or newer start bumps the generation and cancels this. */
   private rearmVoice(id: number): void {
     if (id !== this.voiceAudioGeneration || this.voice.state.value.phase === 'error') return;
-    // The 4 second confirm window starts when the question has been spoken, not when it was asked.
-    if (this.pendingConfirm) this.pendingConfirm.at = nowMs();
+    refreshConfirm();
     this.startVoice(false, false);
   }
   stopVoice(): void {
@@ -203,7 +226,8 @@ export class CrossWiseController {
   }
   /** The large Voice commands button and the camera double-tap gesture. Works between prompts, when the microphone is briefly closed. */
   toggleVoice(): void {
-    if (this.voiceMode.value) {
+    // Mode on but the microphone is closed or in error: the press means "listen now", not "off".
+    if (this.voiceMode.value && this.voice.active && this.voice.state.value.phase !== 'error') {
       this.stopVoice();
       void this.feedback.sayAndWait('Listening stopped.');
     } else {
@@ -211,36 +235,37 @@ export class CrossWiseController {
     }
   }
   toggleVoiceFromGesture(): void { this.toggleVoice(); }
-  /** True on the second matching word inside the window; otherwise records the first and the caller asks again. */
-  private confirmedTwice(word: 'cancel' | 'stop'): boolean {
-    const now = nowMs(), pending = this.pendingConfirm;
-    if (pending && pending.word === word && now - pending.at <= CONFIRM_WINDOW_MS) { this.pendingConfirm = null; return true; }
-    this.pendingConfirm = { word, at: now };
-    return false;
-  }
   private async handleVoice(text: string, current: () => boolean): Promise<string | null> {
     if (!current()) return null;
     const intent = voiceIntent(text);
     if (!intent) {
-      // "Allow camera" is the way forward T.cameraOff promises when the camera permission is missing.
-      if (/\b(allow|grant|enable)\b.*\bcamera\b/i.test(text)) { cameraAccess.ask(); return T.askingCamera; }
+      // Between prompts the microphone re-opens by itself: noise or half a word is ignored silently. Only a turn the user
+      // started (double-tap, button, first open) is told "Command not recognised."
+      if (!this.userTurn) return null;
       return ++this.unknownCommands >= 2 ? V.unknownHelp : V.unknown;
     }
     this.unknownCommands = 0;
-    if (intent.kind !== 'cancel' && intent.kind !== 'stop') this.pendingConfirm = null;
+    if (intent.kind !== 'cancel' && intent.kind !== 'stop') clearConfirm();
     const crossing = this.engine.mode === AssistMode.CROSSING;
     switch (intent.kind) {
       case 'stopListening': this.stopVoice(); return null;
-      case 'cross':
+      case 'allowCamera':
+        // Exact phrase only, and only when the permission is really missing.
+        if (cameraAccess.has) return V.cameraAlready;
+        cameraAccess.ask(); return T.askingCamera;
+      case 'cross': {
         if (!this.assistOn) return VT.crossNeedsHelp;
         if (crossing) return VT.crossAlready;
-        // TODO(stage 2b): a dedicated controller method for "cross" once the crossing check lands; this is the Cross button's path.
+        // Same gate as the Cross button: a fresh check result that allows Cross.
+        const now = nowMs();
+        if (!this.engine.canCross(now)) return this.engine.crossRefusal(now);
         this.crossingAction('start'); return null;
+      }
       case 'stop':
         if (!this.assistOn) return VT.alreadyOff;
-        // Same as the dock Stop. A wrong guess must not silence a crossing, so a crossing needs the word twice.
-        if (crossing && !this.confirmedTwice('stop')) return VT.confirmAgain('stop');
-        this.command(UserCommand.STOP_ASSIST, true); return V.paused;
+        // A misheard word must not switch the vehicle warnings off: "stop" is asked twice whenever camera help is on.
+        if (!confirmTwice('stop')) return T.stopConfirm;
+        this.command(UserCommand.STOP_ASSIST, true); return null; // command() says "Camera help off." urgently
       case 'help': return VOICE_QUICK_START;
       case 'start': case 'resume':
         if (this.assistOn) return V.running;
@@ -252,17 +277,25 @@ export class CrossWiseController {
           this.command(UserCommand.START_ASSIST, true); return V.started;
         }
         this.repeatGuidance(); return null;
+      case 'checkAgain':
+        if (!this.assistOn) {
+          const refusal = this.startRefusal(); if (refusal) return refusal;
+          this.command(UserCommand.START_ASSIST, true); return V.started;
+        }
+        if (crossing) return V.finishCrossingFirst;
+        this.command(UserCommand.CHECK_AGAIN, true); return null;
       case 'repeat': this.repeatGuidance(); return null;
       case 'pause':
         // Never switch the traffic watch off in the middle of a crossing.
         if (crossing) return V.finishCrossingFirst;
-        { const wasOn = this.assistOn; this.command(UserCommand.STOP_ASSIST, true); return wasOn ? T.assistStopped : V.paused; }
+        if (!this.assistOn) return VT.alreadyOff;
+        this.command(UserCommand.STOP_ASSIST, true); return null;
       case 'cancel':
         if (crossing) {
-          if (!this.confirmedTwice('cancel')) return VT.confirmAgain('cancel');
+          if (!confirmTwice('cancel')) return VT.confirmAgain('cancel');
           this.command(UserCommand.END_CROSSING); return V.crossingEnded;
         }
-        if (this.assistOn) { this.command(UserCommand.STOP_ASSIST, true); return T.assistStopped; }
+        if (this.assistOn) { this.command(UserCommand.STOP_ASSIST, true); return null; }
         return V.cancelled;
       case 'finishCrossing':
         if (!crossing) return V.noCrossing;
@@ -294,7 +327,16 @@ export class CrossWiseController {
     this.settingsRepository
       .load()
       .catch(() => undefined)
-      .then(() => { this.settingsLoaded.set(true); return this.welcome().catch(() => undefined); });
+      .then(() => {
+        // Build the welcome first and publish it as welcomeDone BEFORE settingsLoaded flips, because the camera permission
+        // dialog starts waiting the moment settingsLoaded is true. The wait is capped, so a stuck speaker never blocks it.
+        const note = this.safetyNote().catch(() => undefined);
+        this.welcomeFinished = false;
+        this.welcomeDone = Promise.race([note, new Promise<void>(resolve => { later(WELCOME_CAP_MS, resolve); })]);
+        void this.welcomeDone.then(() => { this.welcomeFinished = true; });
+        this.settingsLoaded.set(true);
+        return note.then(() => this.gettingReadyLine()).catch(() => undefined);
+      });
     this.refreshModelLibrary();
     // Sensor-driven guidance (veer, tilt, auto crossing) runs at 10 Hz regardless of camera speed.
     this.sensorTimer = setInterval(() => {
@@ -312,25 +354,58 @@ export class CrossWiseController {
     if (AppState.currentState === 'active') this.onForeground();
   }
 
+  /** Whole welcome, in order: the first-open safety note, then the start-up line. */
+  private async welcome(): Promise<void> {
+    await this.safetyNote();
+    await this.gettingReadyLine();
+  }
+
   /**
-   * First open only: a two-sentence safety note, then how to start. Then, every launch, a note that start-up takes a moment.
+   * First open only: a two-sentence safety note, then how to start.
    * The flag is saved only after the note was heard to the end (or shown, when speech is off).
    */
-  private async welcome(): Promise<void> {
-    if (!this.settings.value.acceptedSafetyNotice) {
-      const text = `${T.welcomeSafety} ${T.welcomeStart}`;
-      this.ui.update(s => ({ ...s, caption: text }));
-      let heard = true;
-      if (this.settings.value.speech) heard = (await this.feedback.sayAndWait(T.welcomeSafety)) && (await this.feedback.sayAndWait(T.welcomeStart));
-      else this.notice.set(text);
-      if (heard) this.updateSettings(s => ({ ...s, acceptedSafetyNotice: true }));
-    }
-    if (!this.ready.value) await this.feedback.sayAndWait(T.gettingReady);
+  private async safetyNote(): Promise<void> {
+    if (this.settings.value.acceptedSafetyNotice) return;
+    const text = `${T.welcomeSafety} ${T.welcomeStart}`;
+    this.ui.update(s => ({ ...s, caption: text }));
+    let heard = true;
+    if (this.settings.value.speech) heard = (await this.feedback.sayAndWait(T.welcomeSafety)) && (await this.feedback.sayAndWait(T.welcomeStart));
+    else this.notice.set(text);
+    if (heard) this.updateSettings(s => ({ ...s, acceptedSafetyNotice: true }));
+  }
+
+  /** Every launch: "Getting ready." and, if that is still true 4 s later, a kinder second line. Not part of welcomeDone. */
+  private async gettingReadyLine(): Promise<void> {
+    if (this.ready.value) return;
+    await this.feedback.sayAndWait(T.gettingReady);
+    if (this.readyTimer) clearTimeout(this.readyTimer);
+    this.readyTimer = later(STILL_READY_MS, () => {
+      if (!this.ready.value && !this.notWorking && !this.assistOn) this.deliver([Cues.speakText(T.stillGettingReady, Priority.NORMAL)]);
+    });
+  }
+
+  /** The first analysed frame: a low falling tone and "Ready", after the welcome and never while camera help is already on. */
+  private announceReady(): void {
+    const go = () => { if (!this.assistOn) this.deliver([Cues.tone(ToneKind.READY), Cues.speakText(T.ready, Priority.NORMAL)]); };
+    if (this.welcomeFinished) go(); else void this.welcomeDone.then(go);
+  }
+
+  /** Not ready 20 s after the model started loading, with no other reason spoken: say so once and keep saying it on Start. */
+  private armNotWorking(): void {
+    if (this.notWorkingTimer) clearTimeout(this.notWorkingTimer);
+    this.notWorking = false;
+    this.notWorkingTimer = later(NOT_WORKING_MS, () => {
+      const kind = this.model.value.kind;
+      if (this.ready.value || !cameraAccess.has || kind === 'missing' || kind === 'failed' || this.cameraStatus.value === 'unavailable') return;
+      this.notWorking = true;
+      this.deliver([Cues.speakText(T.notWorking, Priority.HIGH)]);
+    });
   }
 
   /** Why Start must not run now (spoken to the user), or null when it may. */
   private startRefusal(): string | null {
     if (!cameraAccess.has) return T.cameraOff;
+    if (this.notWorking && !this.ready.value) return T.notWorking;
     const model = this.model.value.kind;
     // A missing or failed model, or a camera that reported an error, already speak their own reason on Start.
     if (!this.ready.value && model !== 'missing' && model !== 'failed' && this.cameraStatus.value !== 'unavailable') return T.notReady;
@@ -390,6 +465,7 @@ export class CrossWiseController {
   private async loadModelFor(s: AppSettings): Promise<void> {
     const generation = ++this.loadGeneration;
     this.ready.set(false);
+    this.armNotWorking();
     this.engine.invalidatePerception();
     this.model.set({ kind: 'loading' });
     this.refreshModelLibrary();
@@ -459,7 +535,7 @@ export class CrossWiseController {
 
   private onForeground(): void {
     this.sensors.start();
-    if (this.wasBackgrounded) { this.wasBackgrounded = false; this.speakNow(T.backInApp); }
+    if (this.wasBackgrounded) { this.wasBackgrounded = false; this.speakHigh(T.backInApp); }
     this.announceDetectionError();
     this.startVoice();
     // A conf file edited in the Files app while we were away takes effect now.
@@ -469,7 +545,8 @@ export class CrossWiseController {
 
   private onBackground(): void {
     // The camera stops in the background, so any signal state would go stale. command() says so, urgently, before it stops.
-    this.wasBackgrounded = true;
+    // Only when camera help was on does the user need to hear "press Start" on return.
+    if (this.engine.mode !== AssistMode.IDLE) this.wasBackgrounded = true;
     ++this.voiceAudioGeneration; this.voice.stop();
     if (this.engine.mode !== AssistMode.IDLE) this.command(UserCommand.STOP_ASSIST, true);
     this.sensors.stop();
@@ -519,7 +596,7 @@ export class CrossWiseController {
 
     const output = this.engine.onFrame(frame, this.geometry);
     this.deliverEngine(output.cues);
-    if (!this.ready.value) { this.ready.set(true); this.deliver([Cues.tone(ToneKind.READY), Cues.speakText(T.ready, Priority.NORMAL)]); }
+    if (!this.ready.value) { this.ready.set(true); this.notWorking = false; this.announceReady(); }
 
     const dt = timestampMs - this.lastFrameMs;
     this.lastFrameMs = timestampMs;
@@ -697,8 +774,9 @@ export class CrossWiseController {
       // Camera help stopped, for whatever reason (button, voice, background): never silently. A long buzz, and urgent words
       // (a voice command carries the words in its own reply, so only the buzz is added there).
       confirmations = confirmations.filter(c => c.kind !== 'speak' || c.phrase !== Phrase.ASSIST_STOPPED);
-      stopped.push(Cues.haptic(HapticPattern.CRITICAL));
-      if (!this.voice.processing) stopped.unshift(Cues.speakText(T.assistStopped, Priority.CRITICAL));
+      // Always spoken, always Critical, also from a voice command (whose reply is then empty). The buzz is not CRITICAL's.
+      stopped.push(Cues.haptic(HapticPattern.STOPPED));
+      stopped.unshift(Cues.speakText(T.assistStopped, Priority.CRITICAL));
     }
     this.deliverEngine([...stopped, ...confirmations, ...extra]);
     this.publish(output.snapshot, { force: true });
@@ -722,7 +800,8 @@ export class CrossWiseController {
 
   /** Plays cues on demand, for the Practice screen: the real sounds, with no traffic involved. */
   practice(cues: Cue[]): void {
-    this.deliver(cues);
+    if (this.assistOn) return; // a live check owns the speaker; rehearsal would sound like the real thing
+    this.deliver(cues.map(c => c.kind === 'speakText' ? { ...c, text: practiceText(c.text) } : c));
   }
 
   get assistOn(): boolean {
@@ -744,12 +823,8 @@ export class CrossWiseController {
     const actual = mode === AssistMode.CROSSING ? 'finish' : 'start';
     if (expected !== actual) return;
     if (expected === 'finish') this.command(UserCommand.END_CROSSING);
-    else if (mode !== AssistMode.IDLE) {
-      // Cross works only on a fresh NONE_SEEN or UNSURE result from the guided check.
-      const now = nowMs();
-      if (this.engine.canCross(now)) this.command(UserCommand.START_CROSSING);
-      else this.deliver([Cues.speakText(this.engine.crossRefusal(now), Priority.HIGH)]);
-    }
+    // The engine gates Cross (fresh NONE_SEEN or stationary-only UNSURE) and speaks the refusal itself.
+    else if (mode !== AssistMode.IDLE) this.command(UserCommand.START_CROSSING);
   }
 
   repeatGuidance(): void {
@@ -772,7 +847,8 @@ export class CrossWiseController {
       !this.hasRecentFrame || nowMs()-this.lastFrameMs>2000?V.trafficUnavailable:this.brightness<.12?V.cameraBlocked:null;
     if(failure===this.trafficFailure){
       // Speech once per change is not enough: silence must not pass for "no cars". Repeat while it still cannot see, even with Settings open.
-      if(failure && nowMs()-this.lastCantSeeMs>=CANT_SEE_REPEAT_MS){this.lastCantSeeMs=nowMs();this.deliver([Cues.speakText(T.stillCantSee,Priority.HIGH)]);}
+      // dispatch, not deliver: this repeat must not stop the microphone every 10 s.
+      if(failure && nowMs()-this.lastCantSeeMs>=CANT_SEE_REPEAT_MS){this.lastCantSeeMs=nowMs();this.feedback.dispatch([Cues.speakText(T.stillCantSee,Priority.HIGH)]);}
       return;
     }
     const wasFailed=!!this.trafficFailure;this.trafficFailure=failure;
@@ -808,6 +884,11 @@ export class CrossWiseController {
 
   speakNow(text: string): void {
     this.deliver([Cues.speakText(text, Priority.NORMAL)]);
+  }
+
+  /** Confirm questions and "Next button" lines: HIGH, so a routine line cannot cut them off. `tick` adds a short haptic tick on the arming press. */
+  speakHigh(text: string, tick = false): void {
+    this.deliver([...(tick ? [Cues.haptic(HapticPattern.CENTERED_TICK)] : []), Cues.speakText(text, Priority.HIGH)]);
   }
 
   private deliver(cues: Cue[]): void {
@@ -860,6 +941,11 @@ export class CrossWiseController {
       frameBrightness: this.brightness,
     }));
   }
+}
+
+/** Practice rehearses turns only; it must not announce a result the camera never produced. */
+function practiceText(text: string): string {
+  return /side checked/i.test(text) ? text.replace(/(Right|Left) side checked\.?/i, 'Practice: $1 turn done.') : text;
 }
 
 export const controller = new CrossWiseController();

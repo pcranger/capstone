@@ -18,7 +18,7 @@ import {
 import { ObjectTracker, type Track, TrackGroup } from '../tracking/objectTracker';
 import { AimGuide } from './aimGuide';
 import { HazardLevel, HazardMonitor, Side, type VehicleHazard } from './hazardMonitor';
-import { VeerMonitor, type VeerStatus } from './veerMonitor';
+import { createVeerCue, VeerMonitor, type VeerStatus } from './veerMonitor';
 
 /**
  * IDLE: camera may run, nothing is announced.
@@ -58,7 +58,7 @@ export interface EngineSettings {
 
 export const DEFAULT_ENGINE_SETTINGS: EngineSettings = {
   aimSonar: true,
-  veerGuidance: true,
+  veerGuidance: false, // off unless Settings says on (settings.ts DEFAULT_SETTINGS)
   vehicleAlerts: true,
   autoDetectCrossing: true,
   verbosity: Verbosity.NORMAL,
@@ -113,7 +113,7 @@ export interface EngineOutput {
 
 const HEADING_AVERAGE_MS = 1_000;
 /** Estimated pace while the walking detector says walking (it does not count steps). */
-const STEPS_PER_SECOND = 1.8;
+const STEPS_PER_SECOND = 1.4;
 const STEPS_PER_LANE = 6;
 
 export class CrossingEngine {
@@ -138,6 +138,8 @@ export class CrossingEngine {
   private readonly signal = new SignalPhaseTracker();
   private readonly hazardMonitor = new HazardMonitor();
   private readonly veer = new VeerMonitor();
+  private readonly veerHint = createVeerCue();
+  private veerAnchor: number | null = null;
   private readonly aim = new AimGuide();
   private readonly lastSpokenMs = new Map<Phrase, number>();
 
@@ -191,6 +193,7 @@ export class CrossingEngine {
           this.invalidatePerception(); this.directionAnchor=null;
           cues.push(Cues.speak(Phrase.ASSIST_STARTED, Priority.HIGH));
           this.beginCheck(nowMs, cues);
+          if (!this.settings.vehicleAlerts) cues.push(Cues.speakText(CHECK_TEXT.alertsOff, Priority.HIGH));
         }
         break;
       case UserCommand.STOP_ASSIST:
@@ -401,6 +404,12 @@ export class CrossingEngine {
 
   private startCrossing(nowMs: number, detected: boolean, cues: Cue[]): void {
     if (this.mode !== AssistMode.SEARCHING && this.mode !== AssistMode.WAITING) return;
+    // The one place Cross is gated: button, voice and Developer auto-detect all arrive here. Auto-detect refuses silently
+    // (it retries every tick); an explicit request says why.
+    if (!this.check.canCross(nowMs)) {
+      if (!detected) cues.push(Cues.speakText(this.check.refusal(nowMs), Priority.HIGH));
+      return;
+    }
     this.mode = AssistMode.CROSSING;
     this.check.reset();this.scanInstruction=null;this.scanSequence++;
     this.crossingStartMs = nowMs;
@@ -408,6 +417,8 @@ export class CrossingEngine {
     this.crossTarget = (this.settings.roadLanes ?? 2) * STEPS_PER_LANE;
     this.aim.reset();
     const heading = this.orientation;
+    this.veerHint.reset();
+    this.veerAnchor = heading !== null && this.settings.veerGuidance ? (this.averageHeading() ?? heading.headingDeg) : null;
     if (heading !== null && this.settings.veerGuidance) {
       // Average the last second: a single reading can sit at the extreme of walking sway.
       this.veer.lock(this.averageHeading() ?? heading.headingDeg, nowMs);
@@ -429,6 +440,8 @@ export class CrossingEngine {
 
   private endCrossingInternal(): void {
     this.veer.unlock();
+    this.veerHint.reset();
+    this.veerAnchor = null;
     this.veerStatus = null;
     this.crossingStartMs = null;
     this.aim.reset();
@@ -439,17 +452,21 @@ export class CrossingEngine {
     const sample = this.orientation;
     if (sample === null || !this.settings.veerGuidance) return;
     const status = this.veer.update(sample.headingDeg, nowMs);
-    if (status === null) return;
-    this.veerStatus = status;
-    // Phone heading remains diagnostic only. Camera scanning is not walking drift.
-    return;
+    if (status !== null) this.veerStatus = status;
+    // Steering hint: only with the Settings switch on (checked above). A missing heading gives no hint.
+    if (this.veerAnchor === null) return;
+    const hint = this.veerHint(this.veerAnchor, sample.headingDeg, this.walking, nowMs);
+    if (hint === null) return;
+    const left = hint === 'DRIFT_LEFT';
+    // Both the ear and the buzz pattern name the side the phone has drifted toward.
+    cues.push(Cues.tone(ToneKind.VEER, left ? -1 : 1), Cues.haptic(left ? HapticPattern.VEER_LEFT : HapticPattern.VEER_RIGHT));
   }
 
   /** Counts steps (estimated from the walking flag) and speaks halfway, "2 steps left" and the end. */
   private countSteps(nowMs: number, cues: Cue[]): void {
     if (this.walking) this.crossSteps += (Math.max(0, nowMs - this.crossTickMs) / 1000) * STEPS_PER_SECOND;
     this.crossTickMs = nowMs;
-    const say = (text: string) => cues.push(Cues.speakText(text, Priority.HIGH));
+    const say = (text: string) => cues.push(Cues.speakText(text, Priority.NORMAL));
     const half = Math.floor(this.crossTarget / 2);
     if (!this.crossHalfSaid && this.crossSteps >= half) { this.crossHalfSaid = true; say(crossingHalfText(this.crossTarget - half)); }
     if (!this.crossTwoSaid && this.crossSteps >= this.crossTarget - 2) { this.crossTwoSaid = true; say(CHECK_TEXT.twoLeft); }
@@ -632,6 +649,9 @@ export class CrossingEngine {
 
   private statusCues(nowMs: number): Cue[] {
     const cues: Cue[] = [];
+    // Repeat replays the check result first (while it is fresh), so the user hears again what Cross depends on.
+    const result = this.check.view(nowMs);
+    if (result?.stage === 'result' && result.text) cues.push(Cues.speakText(result.text, Priority.HIGH));
     const s = this.signal.snapshot;
     if (this.settings.pedestrianSignals === false) cues.push(Cues.speak(Phrase.SIGNAL_UNAVAILABLE, Priority.NORMAL));
     else if (s.phase === SignalPhase.UNKNOWN) cues.push(Cues.speak(Phrase.STATUS_NO_SIGNAL, Priority.HIGH));

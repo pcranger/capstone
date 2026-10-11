@@ -2,7 +2,7 @@ import { expectsVoiceAnswer, spokenError } from './speechCatalog';
 import { Store } from '../state/store';
 import type { SpeechInput } from './nativeSpeech';
 
-export type VoiceIntent = { kind: 'start' | 'retry' | 'repeat' | 'pause' | 'resume' | 'cancel' | 'help' | 'stopListening' | 'finishCrossing' | 'cross' | 'stop' };
+export type VoiceIntent = { kind: 'start' | 'retry' | 'repeat' | 'pause' | 'resume' | 'cancel' | 'help' | 'stopListening' | 'finishCrossing' | 'cross' | 'stop' | 'allowCamera' | 'checkAgain' };
 
 /** Only explicit commands may start an action. */
 export { VOICE_MANUAL as VOICE_QUICK_START } from './speechCatalog';
@@ -11,7 +11,7 @@ const COMMANDS: Record<string, VoiceIntent['kind']> = {
   start: 'start', retry: 'retry', repeat: 'repeat', pause: 'pause', resume: 'resume', cancel: 'cancel',
   'finish crossing': 'finishCrossing', help: 'help', 'voice help': 'help', manual: 'help', man: 'help',
   'show commands': 'help', 'stop listening': 'stopListening',
-  'check again': 'retry', cross: 'cross', stop: 'stop',
+  'check again': 'checkAgain', cross: 'cross', stop: 'stop', 'allow camera': 'allowCamera',
 };
 
 export function voiceIntent(text: string): VoiceIntent | null {
@@ -29,6 +29,8 @@ interface Dependencies {
   /** Stop current TTS when a spoken command arrives during a prompt. */
   stopSpeech?: () => Promise<void> | void;
   announceListening?: () => Promise<boolean>;
+  /** False for a confirm question: it is read to the end without listening, so the question's own echo is never taken as the answer. */
+  bargeIn?: (prompt: string) => boolean;
 }
 /** Questions accept replies through barge-in and after speech; directions finish the turn. */
 export class NavigationVoice {
@@ -69,7 +71,9 @@ export class NavigationVoice {
             if (!await this.deps.announceListening()) return;
             announcedListening = true;
           }
-          const spoken = await this.speakWithBargeIn(prompt, current);
+          const spoken = this.deps.bargeIn?.(prompt) === false
+            ? { completed: await this.deps.say(prompt), interrupted: undefined }
+            : await this.speakWithBargeIn(prompt, current);
           if (spoken.interrupted) {
             if (!current()) return;
             this.state.set({ phase: 'working', text: spoken.interrupted });

@@ -47,6 +47,8 @@ export class NativeSpeechInput implements SpeechInput {
   }
   async prepare(): Promise<void> {
     if (this.poisoned) throw new Error('Voice unavailable. Reopen the app to retry.');
+    // Locale already known from an earlier turn: do not re-check permission and capabilities before every command.
+    if (this.locale) return;
     const m = this.module();
     let permission = await m.getPermissionsAsync();
     if (!permission.granted && permission.canAskAgain) permission = await m.requestPermissionsAsync();
@@ -135,7 +137,7 @@ export class NativeSpeechInput implements SpeechInput {
           ...(this.audioSourceUri ? { audioSource: { uri: this.audioSourceUri } } : {}),
           interimResults: false, addsPunctuation: false, maxAlternatives: 1, iosTaskHint: 'dictation',
           recordingOptions: { persist: false },
-          contextualStrings: ['Start', 'Pause', 'Resume', 'Repeat', 'Help', 'Voice help', 'Manual', 'Man', 'Finish crossing', 'Cancel', 'Retry', 'Stop listening'],
+          contextualStrings: ['Start', 'Pause', 'Resume', 'Repeat', 'Help', 'Voice help', 'Manual', 'Man', 'Finish crossing', 'Cancel', 'Retry', 'Stop listening', 'Check again', 'Cross', 'Stop', 'Allow camera'],
           iosCategory: IOS_AUDIO_SESSION });
       } catch { abort(new Error('Microphone unavailable. Use Retry voice.')); }
     });

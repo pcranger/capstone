@@ -104,6 +104,7 @@ export function createVeerCue(): ((anchorDeg: number, headingDeg: number, walkin
   let offSide: VeerCue | null = null;
   let lastCueAt: number | null = null;
   const fn = (anchorDeg: number, headingDeg: number, walking: boolean, now: number): VeerCue | null => {
+    if (!Number.isFinite(anchorDeg) || !Number.isFinite(headingDeg)) { fn.reset(); return null; }
     const deviation = Angles.wrap180(headingDeg - anchorDeg);
     const side: VeerCue | null = !walking || Math.abs(deviation) <= VEER_CUE_THRESHOLD_DEG ? null : deviation < 0 ? 'DRIFT_LEFT' : 'DRIFT_RIGHT';
     if (side === null || side !== offSide) {

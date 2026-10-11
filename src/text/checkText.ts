@@ -5,7 +5,7 @@ import type { CheckEventKind, CheckSummary } from '../crossing/crossingCheck';
  * (Kept apart from strings.ts so the check can change without touching the shared text file.)
  */
 export const CHECK_TEXT = {
-  gettingReady: 'Getting ready',
+  gettingReady: 'Getting ready.',
   holdUpright: 'Hold the phone upright and still.',
   start: 'Facing the road. Turn right until the phone points up the road, toward the traffic.',
   fallbackNote: 'Couldn’t see the road’s angle, using straight left.',
@@ -14,10 +14,24 @@ export const CHECK_TEXT = {
   vehicleStopLeft: 'Vehicle on your left. Wait. Check again.',
   expired: 'Check expired. Check again.',
   stopped: 'Stopped. Press Start to try again.',
+  alertsOff: 'Vehicle alerts are off, so no check can run. Turn them on in Settings.',
+  stationaryResult: 'Vehicle seen, not moving. Check again.',
   notYet: 'Not yet. Check again.',
   practiceOnly: 'Practice only. No cars are checked.',
   crossingEnd: 'You should be near the far side. Use your cane to find the kerb. If the road is wider, keep walking until you feel the kerb.',
   twoLeft: '2 steps left',
+} as const;
+
+/** Why a check gave up after 30 s (kept out of CHECK_TEXT, which holds plain lines only). */
+export const CHECK_STOP = {
+  because: (reason: string) => `Stopped. ${reason} Press Start to try again.`,
+  reasons: {
+    compass: 'The compass is not working.',
+    camera: 'The camera could not see clearly.',
+    moving: 'You were moving.',
+    tilt: 'The phone was not upright.',
+    turn: 'The turn was not finished.',
+  },
 } as const;
 
 const EVENT_TEXT: Record<CheckEventKind, string> = {
@@ -41,7 +55,7 @@ export const CHECK_RESULT_TEXT: Record<CheckSummary, string> = {
   MOVING_RIGHT: 'Vehicle on your right, moving. Wait.',
   MOVING_LEFT: 'Vehicle on your left, moving. Wait.',
   MOVING_BOTH: 'Vehicles on both sides, moving. Wait.',
-  UNSURE: 'Vehicle seen, not moving. Check again.',
+  UNSURE: 'Vehicle seen, motion unclear. Check again.',
   NOT_CHECKED: 'Camera could not see clearly. Check again.',
 };
 

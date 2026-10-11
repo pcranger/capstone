@@ -52,6 +52,8 @@ export interface CheckResult {
   /** True when no car gave the road's angle, so the left target is plain straight left. */
   fallbackNote: boolean;
   summary: CheckSummary;
+  /** True when any seen car had unknown motion (D1: Cross stays off). UNSURE with this false means only parked cars. */
+  unknownMotion: boolean;
 }
 
 const TURN_HALF_WINDOW = 40; // accepted +-40 around a target; 90 +- 40 is the 50..130 wide window
@@ -174,7 +176,19 @@ export class CrossingCheck {
     else if (right.unsureVehicles + right.stationaryVehicles + left.unsureVehicles + left.stationaryVehicles > 0) {
       summary = 'UNSURE';
     } else summary = 'NONE_SEEN';
-    return { right, left, fallbackNote: this.roadBearingRight === null, summary };
+    const unknownMotion = right.unsureVehicles + left.unsureVehicles > 0;
+    return { right, left, fallbackNote: this.roadBearingRight === null, summary, unknownMotion };
+  }
+
+  /** A car seen while the user faces the road again (FACE_ROAD or the DONE frame) still counts, on the side of its bearing. */
+  private noteLate(vehicles: CheckVehicle[]): void {
+    for (const v of vehicles) {
+      const ev = Angles.wrap180(v.bearingDeg - this.anchor) >= 0 ? this.rightEv : this.leftEv;
+      if (!v.supported) this.leftEv.unsure.add(v.id);
+      else if (v.moving) ev.moving.add(v.id);
+      else this.leftEv.stationary.add(v.id);
+      if (v.approaching) ev.approaching = true;
+    }
   }
 
   update(input: CheckInput): CheckEvent | null {
@@ -187,6 +201,7 @@ export class CrossingCheck {
     const rel = heading === null ? null : Angles.wrap180(heading - this.anchor);
 
     if (phase === 'FACE_ROAD') {
+      this.noteLate(input.vehicles);
       return rel !== null && Math.abs(rel) <= FACE_ROAD_DEG ? this.go('DONE', 'DONE') : null;
     }
     if (rel === null || heading === null) {

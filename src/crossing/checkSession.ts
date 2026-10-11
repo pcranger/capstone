@@ -1,5 +1,5 @@
 import { Angles } from '../core/geometry';
-import { CHECK_RESULT_TEXT, CHECK_TEXT, checkEventText } from '../text/checkText';
+import { CHECK_RESULT_TEXT, CHECK_STOP, CHECK_TEXT, checkEventText } from '../text/checkText';
 import { CrossingCheck, type CheckPhase, type CheckSummary, type CheckVehicle } from './crossingCheck';
 
 /**
@@ -51,6 +51,10 @@ export class CheckSession {
   summary: CheckSummary | null = null;
   private resultText: string | null = null;
   private resultAt = 0;
+  /** False when a car of unknown motion was seen: Cross stays off (D1). */
+  private crossOk = false;
+  private stoppedText: string = CHECK_TEXT.stopped;
+  private blocked: keyof typeof CHECK_STOP.reasons = 'turn';
   private holdMs = 5000;
   private check = new CrossingCheck();
   private headings: { t: number; h: number }[] = [];
@@ -60,6 +64,7 @@ export class CheckSession {
   private lastKind: string | null = null;
   private lastPhase: CheckPhase | null = null;
   private tickN = 0;
+  private wasWaiting = true;
 
   /** (Re)start: the check itself starts when the phone is steady. */
   begin(now: number, holdSeconds = 5): void {
@@ -73,6 +78,8 @@ export class CheckSession {
     this.lastKind = null;
     this.lastPhase = null;
     this.tickN = 0;
+    this.wasWaiting = true;
+    this.blocked = 'camera';
   }
 
   reset(): void {
@@ -88,7 +95,7 @@ export class CheckSession {
   }
 
   canCross(now: number): boolean {
-    return this.stage === 'result' && (this.summary === 'NONE_SEEN' || this.summary === 'UNSURE') && now - this.resultAt < EXPIRE_MS;
+    return this.stage === 'result' && this.crossOk && (this.summary === 'NONE_SEEN' || this.summary === 'UNSURE') && now - this.resultAt < EXPIRE_MS;
   }
 
   /** What to say when "Cross" is refused. */
@@ -99,7 +106,7 @@ export class CheckSession {
   view(now: number): CheckView | undefined {
     if (this.stage === 'off') return undefined;
     const expired = this.stage === 'expired' || (this.stage === 'result' && now - this.resultAt >= EXPIRE_MS);
-    const text = expired ? CHECK_TEXT.expired : this.stage === 'stopped' ? CHECK_TEXT.stopped : this.stage === 'result' ? this.resultText : null;
+    const text = expired ? CHECK_TEXT.expired : this.stage === 'stopped' ? this.stoppedText : this.stage === 'result' ? this.resultText : null;
     return { stage: expired ? 'expired' : this.stage, summary: this.summary, text, canCross: this.canCross(now) };
   }
 
@@ -111,8 +118,10 @@ export class CheckSession {
     }
     if (this.stage !== 'waiting' && this.stage !== 'running') return EMPTY;
     if (now - this.progressAt >= STOP_MS) {
+      this.wasWaiting = this.stage === 'waiting';
       this.stage = 'stopped';
-      return { urgent: CHECK_TEXT.stopped };
+      this.stoppedText = CHECK_STOP.because(CHECK_STOP.reasons[this.wasWaiting ? this.blocked : 'turn']);
+      return { urgent: this.stoppedText };
     }
     if (now - this.progressAt >= REPROMPT_MS && now - this.promptAt >= REPROMPT_MS) {
       this.promptAt = now;
@@ -124,6 +133,7 @@ export class CheckSession {
   /** One analysed camera frame. */
   frame(now: number, f: CheckFrame): CheckStep {
     if (this.stage === 'waiting') return this.waitForSteady(now, f);
+    if (this.stage === 'result') return this.invalidateResult(now, f);
     if (this.stage !== 'running') return EMPTY;
     const before = this.check.phase;
     const event = this.check.update({ t: now, heading: f.heading, usable: f.usable, walking: f.walking, vehicles: f.vehicles });
@@ -133,7 +143,7 @@ export class CheckSession {
     const holdPhase = isHold(before) ? before : isHold(after) ? after : null;
     if (holdPhase !== null && f.vehicles.some(carNow)) {
       const right = holdPhase === 'RIGHT_HOLD';
-      this.finish(now, right ? 'MOVING_RIGHT' : 'MOVING_LEFT', right ? CHECK_TEXT.vehicleStopRight : CHECK_TEXT.vehicleStopLeft);
+      this.finish(now, right ? 'MOVING_RIGHT' : 'MOVING_LEFT', right ? CHECK_TEXT.vehicleStopRight : CHECK_TEXT.vehicleStopLeft, false);
       return { urgent: this.resultText ?? undefined };
     }
 
@@ -157,7 +167,8 @@ export class CheckSession {
       const r = this.check.result();
       const summary = r?.summary ?? 'NOT_CHECKED';
       // The fallback note repeats after the result, so the user knows the left look was aimed at a guessed angle.
-      this.finish(now, summary, r?.fallbackNote ? `${CHECK_RESULT_TEXT[summary]} ${CHECK_TEXT.fallbackResult}` : CHECK_RESULT_TEXT[summary]);
+      const base = summary === 'UNSURE' && r && !r.unknownMotion ? CHECK_TEXT.stationaryResult : CHECK_RESULT_TEXT[summary];
+      this.finish(now, summary, r?.fallbackNote ? `${base} ${CHECK_TEXT.fallbackResult}` : base, !r?.unknownMotion);
       step.urgent = this.resultText ?? undefined;
       return step;
     }
@@ -176,7 +187,28 @@ export class CheckSession {
     return step;
   }
 
-  private finish(now: number, summary: CheckSummary, text: string): void {
+  /**
+   * A fresh result that allowed Cross is withdrawn the moment a car shows up afterwards: a moving car makes it MOVING_x,
+   * a car of unknown motion makes it UNSURE. Cross is off in both cases and the user is told at once.
+   */
+  private invalidateResult(now: number, f: CheckFrame): CheckStep {
+    if (!this.canCross(now)) return EMPTY;
+    const moving = f.vehicles.find(carNow);
+    if (moving) {
+      const right = moving.bearingDeg - (f.heading ?? moving.bearingDeg) >= 0;
+      const text = right ? CHECK_RESULT_TEXT.MOVING_RIGHT : CHECK_RESULT_TEXT.MOVING_LEFT;
+      this.finish(now, right ? 'MOVING_RIGHT' : 'MOVING_LEFT', text, false);
+      return { urgent: text };
+    }
+    if (f.vehicles.some((v) => !v.supported)) {
+      this.finish(now, 'UNSURE', CHECK_RESULT_TEXT.UNSURE, false);
+      return { urgent: CHECK_RESULT_TEXT.UNSURE };
+    }
+    return EMPTY;
+  }
+
+  private finish(now: number, summary: CheckSummary, text: string, crossOk: boolean): void {
+    this.crossOk = crossOk;
     this.stage = 'result';
     this.summary = summary;
     this.resultText = text;
@@ -185,6 +217,7 @@ export class CheckSession {
 
   private waitForSteady(now: number, f: CheckFrame): CheckStep {
     if (f.heading === null || !f.usable || f.walking || f.pitch === null || Math.abs(f.pitch) > PITCH_MAX_DEG) {
+      this.blocked = f.heading === null || f.pitch === null ? 'compass' : !f.usable ? 'camera' : f.walking ? 'moving' : 'tilt';
       this.headings = [];
       return EMPTY;
     }
