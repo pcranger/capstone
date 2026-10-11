@@ -44,8 +44,8 @@ function headingAt(sinceStartMs: number): number {
 
 const given = (process.env.REPLAY_JSON ?? '').split(',').filter(Boolean);
 // a value ending in / means every .json in that folder
-const jsonPaths = given.flatMap((p) => (p.endsWith('/') ? fs.readdirSync(p).filter((f) => f.endsWith('.json')).map((f) => p + f) : [p]));
-(jsonPaths.length ? describe : describe.skip)('replay', () => jsonPaths.forEach((jsonPath) => test(`timeline ${jsonPath}`, () => {
+const jsonPaths = given.flatMap((p: string) => (p.endsWith('/') ? fs.readdirSync(p).filter((f: string) => f.endsWith('.json')).map((f: string) => p + f) : [p]));
+(jsonPaths.length ? describe : describe.skip)('replay', () => jsonPaths.forEach((jsonPath: string) => test(`timeline ${jsonPath}`, () => {
   const data = JSON.parse(fs.readFileSync(jsonPath, 'utf8')) as { video: string; fps: number; frames: ReplayFrame[] };
   const fixed = process.env.REPLAY_FIXED === '1';
   const engine = new CrossingEngine();
