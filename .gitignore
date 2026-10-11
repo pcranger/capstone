@@ -52,3 +52,4 @@ yarn-error.*
 
 # Build-time service credentials
 .env
+.replay-venv/
