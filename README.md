@@ -48,6 +48,17 @@ The separate package is labelled **CrossWise Preview**. It preserves the old Cro
 - `ml/`: datasets, training and exports.
 - `docs/`: research, plans and implementation records; older plans may describe superseded interfaces.
 
+## Development notes
+
+- Add packages with `npx expo install <package>` rather than `npm install <package>`, so versions stay compatible with the Expo SDK. Run `npx expo-doctor` to diagnose dependency or config issues and `npx expo install --fix` to correct incompatible versions.
+- Check the `expo` major version in `package.json` and use the matching versioned docs (`https://docs.expo.dev/versions/v<major>.0.0/`); Expo APIs change between SDK releases.
+- Run `npm run lint` and `npm run typecheck` before committing.
+- This app is ported from the separate `../capstone_ios` directory. They are separate copies, not symlinks, so edits here do not update iOS. Platform-free logic in `src/core`, `perception`, `tracking`, `signal`, `crossing` and `sensors` is shared by both platforms; change it once here and keep `npm test` green.
+- The local Expo module in `modules/crosswise-native/android` must be included in Android builds for orientation and haptics.
+- There is no Expo Router: `src/ui/CrossWiseApp.tsx` owns a single Journey screen with a full-size camera and a full-screen Google map. Settings and Help open over the journey so one camera stays mounted.
+- Code called from the camera frame callback must be a worklet (`'worklet'` directive, plain data, no classes).
+- Do not add new UI or navigation work to `android-legacy/`.
+
 ## Architecture in one picture
 
 ```mermaid
